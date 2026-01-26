@@ -1458,3 +1458,35 @@ textarea.form-control {
         width: 380px;
     }
 }
+
+.floating-wa {
+    position: fixed;
+    width: 60px;
+    height: 60px;
+    bottom: 20px;
+    right: 20px;
+    background-color: #25d366; /* Warna Hijau WA */
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    z-index: 99999; /* Sangat tinggi agar tidak tertutup */
+    transition: all 0.3s ease;
+    text-decoration: none;
+}
+
+.floating-wa:hover {
+    background-color: #128c7e;
+    transform: scale(1.1);
+}
+
+/* Responsif Mobile */
+@media screen and (max-width: 767px) {
+    .floating-wa {
+        width: 55px;
+        height: 55px;
+        bottom: 15px;
+        right: 15px;
+    }
+}

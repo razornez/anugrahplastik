@@ -803,3 +803,13 @@ textarea {
     justify-content: center;
   }
 }
+
+.template-shell {
+  width: 100%;
+}
+
+.template-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+}

@@ -813,3 +813,130 @@ textarea {
   width: 100%;
   border: 0;
 }
+
+.admin-shell {
+  min-height: 100vh;
+  padding: 32px;
+  background: #f4f7fb;
+  color: #0b1b2b;
+}
+
+.admin-header,
+.admin-card {
+  width: min(960px, 100%);
+  margin-inline: auto;
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 26px;
+  font-weight: 800;
+}
+
+.admin-header form,
+.admin-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-header button,
+.admin-actions button,
+.login-card button {
+  border: 0;
+  border-radius: 9px;
+  padding: 10px 14px;
+  cursor: pointer;
+  background: #1457c7;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+}
+
+.admin-card {
+  border: 1px solid #dce5f0;
+  border-radius: 16px;
+  background: #fff;
+  padding: 32px;
+  box-shadow: 0 18px 48px -36px rgba(8, 32, 59, 0.55);
+}
+
+.admin-card > p,
+.login-card > p {
+  margin: 0;
+  color: #1457c7;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.admin-card h1 {
+  margin: 10px 0 20px;
+  font-size: clamp(26px, 4vw, 38px);
+}
+
+.admin-card form,
+.admin-card label {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-card form {
+  gap: 18px;
+}
+
+.admin-card input,
+.admin-card textarea {
+  width: 100%;
+  border: 1px solid #cbd7e5;
+  border-radius: 9px;
+  padding: 12px;
+  color: #0b1b2b;
+  font: inherit;
+}
+
+.content-card textarea {
+  min-height: 560px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-status {
+  margin: 0 0 20px;
+  border-radius: 9px;
+  background: #eaf1fd;
+  padding: 12px;
+  color: #31527b;
+  font-size: 14px;
+}
+
+.login-card {
+  width: min(440px, 100%);
+  margin-top: 8vh;
+}
+
+@media (max-width: 600px) {
+  .admin-shell {
+    padding: 18px;
+  }
+  .admin-card {
+    padding: 22px;
+  }
+  .admin-header {
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .admin-header form {
+    align-items: flex-end;
+    flex-direction: column;
+  }
+  .admin-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

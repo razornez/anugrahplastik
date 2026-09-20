@@ -26,6 +26,8 @@ pnpm db:migrate
 
 Tanpa `DATABASE_URL`, halaman tetap dapat dibuka. Form permintaan memberi informasi jelas bahwa penyimpanan belum siap, sehingga tidak ada prospek yang dianggap berhasil tersimpan secara keliru.
 
+Setelah migrasi, isi `AUTH_SECRET`, `INITIAL_ADMIN_EMAIL`, dan `INITIAL_ADMIN_PASSWORD`. Masuk pertama kali dengan kredensial tersebut untuk membuat akun administrator, lalu hapus `INITIAL_ADMIN_PASSWORD` dari environment server.
+
 ## Pemeriksaan sebelum push
 
 ```bash

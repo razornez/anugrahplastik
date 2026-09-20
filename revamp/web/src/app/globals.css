@@ -21,7 +21,7 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: var(--font-sans), sans-serif;
+  font-family: var(--font-hanken), sans-serif;
 }
 a {
   color: inherit;

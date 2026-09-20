@@ -7,7 +7,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       ? "Database belum terhubung."
       : error === "credentials"
         ? "Email atau kata sandi tidak sesuai."
-        : null;
+        : error === "rate-limit"
+          ? "Terlalu banyak percobaan. Silakan tunggu beberapa saat."
+          : null;
 
   return (
     <section className="admin-card login-card">

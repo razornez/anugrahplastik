@@ -32,7 +32,7 @@
 ## Keamanan
 
 - Database hanya berada pada network internal container.
-- Password memakai Argon2id; cookie session HttpOnly, Secure, dan SameSite.
+- Password saat ini memakai bcrypt dengan cost factor 12; migrasi ke Argon2id dilakukan bersama proses rehash akun agar tidak menurunkan kompatibilitas sesi yang sudah ada.
 - Semua secret hanya di environment server.
 - Webhook diverifikasi, form dibatasi laju request, dan input tervalidasi di server.
 

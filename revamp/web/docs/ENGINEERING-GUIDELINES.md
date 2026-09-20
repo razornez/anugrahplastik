@@ -20,7 +20,7 @@
 - Query harus parameterized dan dibatasi pagination/limit.
 - Gunakan transaction untuk perubahan atomik.
 - Periksa authorization di server untuk setiap read/write sensitif.
-- Password memakai Argon2id; jangan pernah log token, secret, atau data personal.
+- Password memakai bcrypt dengan cost factor minimal 12 sampai migrasi Argon2id terjadwal; jangan pernah log token, secret, atau data personal.
 - Gunakan baseline OWASP ASVS untuk authentication, session, authorization, input, upload, logging, dan error handling.
 
 ## Typography and copy

@@ -12,6 +12,7 @@ export const leadFormSchema = z.object({
     .max(2000, "Pesan terlalu panjang."),
   landingPath: z.string().max(500).optional(),
   website: z.string().max(0).optional(),
+  attribution: z.record(z.string(), z.string()).optional(),
 });
 
 export type LeadFormValues = z.infer<typeof leadFormSchema>;

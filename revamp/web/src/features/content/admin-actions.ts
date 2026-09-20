@@ -2,11 +2,13 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath, updateTag } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { compare, hash } from "bcryptjs";
 import { getDatabase } from "@/lib/database/client";
 import { contentBlocks, contentRevisions, users } from "@/lib/database/schema";
 import { clearSession, createSession, getSession, type SessionUser } from "@/lib/auth/session";
+import { clientAddress, takeRateLimit } from "@/lib/security/rate-limit";
 import { LANDING_CONTENT_KEY, landingContentSchema, type LandingContent } from "./landing-content";
 
 function canManageContent(user: SessionUser | null): user is SessionUser {
@@ -24,6 +26,9 @@ export async function login(formData: FormData) {
     .trim()
     .toLowerCase();
   const password = String(formData.get("password") || "");
+  const requestHeaders = await headers();
+  const rate = takeRateLimit(`login:${clientAddress(requestHeaders)}`, 8, 15 * 60 * 1_000);
+  if (!rate.allowed) redirect("/admin/login?error=rate-limit");
   const database = getDatabase();
   if (!database) redirect("/admin/login?error=database");
 

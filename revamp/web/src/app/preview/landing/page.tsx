@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { LandingPage } from "@/components/landing-page";
+import { NativeLandingTemplate } from "@/components/native-landing-template";
 import { getSession } from "@/lib/auth/session";
 import { getDraftLandingContent } from "@/features/content/landing-service";
 
@@ -10,5 +10,5 @@ export default async function LandingPreviewPage() {
   if (!user || (user.role !== "admin" && user.role !== "content")) redirect("/admin/login");
 
   const content = await getDraftLandingContent();
-  return <LandingPage content={content} />;
+  return <NativeLandingTemplate content={content} />;
 }

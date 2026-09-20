@@ -1,13 +1,13 @@
 "use server";
 
 import { eq } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { compare, hash } from "bcryptjs";
 import { getDatabase } from "@/lib/database/client";
 import { contentBlocks, contentRevisions, users } from "@/lib/database/schema";
 import { clearSession, createSession, getSession, type SessionUser } from "@/lib/auth/session";
-import { LANDING_CONTENT_KEY, type LandingContent } from "./landing-content";
+import { LANDING_CONTENT_KEY, landingContentSchema, type LandingContent } from "./landing-content";
 
 function canManageContent(user: SessionUser | null): user is SessionUser {
   return user?.role === "admin" || user?.role === "content";
@@ -55,35 +55,71 @@ export async function saveLandingContent(formData: FormData) {
   const database = getDatabase();
   if (!database) redirect("/admin/content?error=database");
 
-  let content: LandingContent;
-  try {
-    content = JSON.parse(String(formData.get("content") || "{}")) as LandingContent;
-    if (!content.metadata?.title || !content.metadata?.description || !content.bindings) throw new Error("invalid");
-  } catch {
+  const parsed = landingContentSchema.safeParse({
+    metadata: { title: formData.get("metadata.title"), description: formData.get("metadata.description") },
+    topbar: { promise: formData.get("topbar.promise") },
+    hero: {
+      titleBefore: formData.get("hero.titleBefore"),
+      titleHighlight: formData.get("hero.titleHighlight"),
+      titleAfter: formData.get("hero.titleAfter"),
+      description: formData.get("hero.description"),
+      primaryCta: formData.get("hero.primaryCta"),
+      secondaryCta: formData.get("hero.secondaryCta"),
+    },
+    about: { title: formData.get("about.title"), body: formData.get("about.body") },
+    why: { title: formData.get("why.title") },
+    process: { title: formData.get("process.title") },
+    material: { title: formData.get("material.title"), primaryCta: formData.get("material.primaryCta") },
+    portfolio: { title: formData.get("portfolio.title") },
+    faq: {
+      title: formData.get("faq.title"),
+      description: formData.get("faq.description"),
+      primaryCta: formData.get("faq.primaryCta"),
+    },
+    contact: {
+      title: formData.get("contact.title"),
+      description: formData.get("contact.description"),
+      formTitle: formData.get("contact.formTitle"),
+      formDescription: formData.get("contact.formDescription"),
+      primaryCta: formData.get("contact.primaryCta"),
+    },
+    footer: { description: formData.get("footer.description") },
+  });
+
+  if (!parsed.success) {
     redirect("/admin/content?error=content");
   }
+  const content: LandingContent = parsed.data;
 
   const action = String(formData.get("action") || "draft") === "publish" ? "publish" : "draft";
   const [existing] = await database.select().from(contentBlocks).where(eq(contentBlocks.key, LANDING_CONTENT_KEY));
   const version = (existing?.version ?? 0) + 1;
-  const payload = {
-    content,
-    status: action === "publish" ? "published" : "draft",
-    version,
-    publishedAt: action === "publish" ? new Date() : (existing?.publishedAt ?? null),
-    updatedAt: new Date(),
-  };
+  const [block] = await database.transaction(async (transaction) => {
+    const payload = {
+      content,
+      draftContent: content,
+      ...(action === "publish"
+        ? { publishedContent: content, status: "published", publishedAt: new Date() }
+        : { status: existing?.publishedContent ? "published" : "draft", publishedAt: existing?.publishedAt ?? null }),
+      version,
+      updatedAt: new Date(),
+    };
+    const [saved] = existing
+      ? await transaction.update(contentBlocks).set(payload).where(eq(contentBlocks.id, existing.id)).returning()
+      : await transaction
+          .insert(contentBlocks)
+          .values({ key: LANDING_CONTENT_KEY, ...payload })
+          .returning();
 
-  const [block] = existing
-    ? await database.update(contentBlocks).set(payload).where(eq(contentBlocks.id, existing.id)).returning()
-    : await database
-        .insert(contentBlocks)
-        .values({ key: LANDING_CONTENT_KEY, ...payload })
-        .returning();
+    await transaction
+      .insert(contentRevisions)
+      .values({ contentBlockId: saved.id, content, version, action, actorId: user.id });
+    return [saved];
+  });
 
-  await database
-    .insert(contentRevisions)
-    .values({ contentBlockId: block.id, content, version, action, actorId: user.id });
-  revalidatePath("/");
+  if (action === "publish" && block) {
+    updateTag("landing.page");
+    revalidatePath("/");
+  }
   redirect(`/admin/content?status=${action}`);
 }

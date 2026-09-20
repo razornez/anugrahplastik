@@ -17,6 +17,7 @@ export const sessions = pgTable("sessions", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -24,6 +25,8 @@ export const contentBlocks = pgTable("content_blocks", {
   id: uuid("id").defaultRandom().primaryKey(),
   key: varchar("key", { length: 100 }).notNull().unique(),
   content: jsonb("content").notNull(),
+  draftContent: jsonb("draft_content"),
+  publishedContent: jsonb("published_content"),
   status: varchar("status", { length: 20 }).notNull().default("draft"),
   version: integer("version").notNull().default(1),
   publishedAt: timestamp("published_at", { withTimezone: true }),

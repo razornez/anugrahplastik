@@ -1,24 +1,46 @@
-import { and, eq } from "drizzle-orm";
+import { cacheLife, cacheTag } from "next/cache";
+import { eq } from "drizzle-orm";
 import { getDatabase } from "@/lib/database/client";
 import { contentBlocks } from "@/lib/database/schema";
-import { defaultLandingContent, LANDING_CONTENT_KEY, type LandingContent } from "./landing-content";
-
-function isLandingContent(value: unknown): value is LandingContent {
-  if (!value || typeof value !== "object") return false;
-
-  const candidate = value as Partial<LandingContent>;
-  return Boolean(candidate.metadata?.title && candidate.metadata?.description && candidate.bindings);
-}
+import {
+  defaultLandingContent,
+  LANDING_CONTENT_KEY,
+  landingContentSchema,
+  type LandingContent,
+} from "./landing-content";
 
 export async function getPublishedLandingContent(): Promise<LandingContent> {
-  const database = getDatabase();
+  "use cache";
+  cacheLife("days");
+  cacheTag("landing.page");
 
+  const database = getDatabase();
   if (!database) return defaultLandingContent;
 
   const [record] = await database
-    .select({ content: contentBlocks.content })
+    .select({ publishedContent: contentBlocks.publishedContent, legacyContent: contentBlocks.content })
     .from(contentBlocks)
-    .where(and(eq(contentBlocks.key, LANDING_CONTENT_KEY), eq(contentBlocks.status, "published")));
+    .where(eq(contentBlocks.key, LANDING_CONTENT_KEY));
 
-  return isLandingContent(record?.content) ? record.content : defaultLandingContent;
+  const parsed = landingContentSchema.safeParse(record?.publishedContent ?? record?.legacyContent);
+  return parsed.success ? parsed.data : defaultLandingContent;
+}
+
+export async function getDraftLandingContent(): Promise<LandingContent> {
+  const database = getDatabase();
+  if (!database) return defaultLandingContent;
+
+  const [record] = await database
+    .select({
+      draftContent: contentBlocks.draftContent,
+      publishedContent: contentBlocks.publishedContent,
+      legacyContent: contentBlocks.content,
+    })
+    .from(contentBlocks)
+    .where(eq(contentBlocks.key, LANDING_CONTENT_KEY));
+
+  const parsed = landingContentSchema.safeParse(
+    record?.draftContent ?? record?.publishedContent ?? record?.legacyContent,
+  );
+  return parsed.success ? parsed.data : defaultLandingContent;
 }

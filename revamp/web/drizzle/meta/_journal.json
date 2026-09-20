@@ -15,6 +15,13 @@
       "when": 1789903597055,
       "tag": "0001_strong_kinsey_walden",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789920000000,
+      "tag": "0002_content_release_state",
+      "breakpoints": true
     }
   ]
 }

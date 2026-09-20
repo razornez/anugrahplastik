@@ -804,14 +804,8 @@ textarea {
   }
 }
 
-.template-shell {
+.native-template-shell {
   width: 100%;
-}
-
-.template-frame {
-  display: block;
-  width: 100%;
-  border: 0;
 }
 
 .admin-shell {
@@ -898,11 +892,33 @@ textarea {
   font: inherit;
 }
 
-.content-card textarea {
-  min-height: 560px;
-  resize: vertical;
-  font-family: var(--font-mono);
+.content-editor {
+  gap: 24px !important;
+}
+
+.content-section {
+  min-width: 0;
+  margin: 0;
+  padding: 22px;
+  border: 1px solid #dce5f0;
+  border-radius: 12px;
+}
+
+.content-section legend {
+  padding-inline: 8px;
+  color: #1457c7;
   font-size: 13px;
+  font-weight: 800;
+}
+
+.content-fields {
+  display: grid;
+  gap: 16px;
+}
+
+.content-card textarea {
+  min-height: 112px;
+  resize: vertical;
   line-height: 1.5;
 }
 
@@ -913,6 +929,16 @@ textarea {
   padding: 12px;
   color: #31527b;
   font-size: 14px;
+}
+
+.content-preview-link {
+  margin: -8px 0 20px;
+}
+
+.content-preview-link a {
+  color: #1457c7;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .login-card {

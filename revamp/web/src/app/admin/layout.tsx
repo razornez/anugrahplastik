@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getSession } from "@/lib/auth/session";
 import { logout } from "@/features/content/admin-actions";
 
+export const instant = false;
+
 export default async function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const session = await getSession();
 

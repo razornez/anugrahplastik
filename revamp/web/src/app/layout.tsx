@@ -6,9 +6,10 @@ const sans = DM_Sans({ variable: "--font-sans", subsets: ["latin"], weight: ["40
 const mono = DM_Mono({ variable: "--font-mono", subsets: ["latin"], weight: "400" });
 
 export const metadata: Metadata = {
-  title: "Jasa Cetak Plastik Manual & Injection Bandung | CV. Anugrahplastik Mandiri",
+  metadataBase: new URL("https://anugrahplastik.com"),
+  title: "Cetak Plastik Custom Tanpa Minimum Order | Anugrah Plastik Bandung",
   description:
-    "Jasa cetak plastik manual dan injection custom untuk komponen, kemasan, dan sparepart mesin di Bandung.",
+    "Buat ulang spare part dan produk plastik custom dari sampel atau gambar. Free moulding tanpa syarat, tanpa minimum order.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

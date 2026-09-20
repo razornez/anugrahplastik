@@ -40,7 +40,9 @@ CREATE TABLE "users" (
 	CONSTRAINT "users_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
-ALTER TABLE "portfolio_items" ALTER COLUMN "is_published" SET DATA TYPE boolean;--> statement-breakpoint
+ALTER TABLE "portfolio_items" ALTER COLUMN "is_published" DROP DEFAULT;--> statement-breakpoint
+ALTER TABLE "portfolio_items" ALTER COLUMN "is_published" SET DATA TYPE boolean USING ("is_published" <> 0);--> statement-breakpoint
+ALTER TABLE "portfolio_items" ALTER COLUMN "is_published" SET DEFAULT false;--> statement-breakpoint
 ALTER TABLE "content_blocks" ADD COLUMN "status" varchar(20) DEFAULT 'draft' NOT NULL;--> statement-breakpoint
 ALTER TABLE "content_blocks" ADD COLUMN "version" integer DEFAULT 1 NOT NULL;--> statement-breakpoint
 ALTER TABLE "content_blocks" ADD COLUMN "published_at" timestamp with time zone;--> statement-breakpoint

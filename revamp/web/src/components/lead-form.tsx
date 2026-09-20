@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { submitLead, type LeadFormState } from "@/features/leads/actions";
 
 const initialLeadFormState: LeadFormState = {
@@ -10,6 +10,10 @@ const initialLeadFormState: LeadFormState = {
 
 export function LeadForm() {
   const [state, formAction, isPending] = useActionState(submitLead, initialLeadFormState);
+
+  useEffect(() => {
+    if (state.whatsappUrl) window.open(state.whatsappUrl, "_blank", "noopener,noreferrer");
+  }, [state.whatsappUrl]);
 
   return (
     <form className="contact-form" action={formAction} noValidate>
@@ -44,8 +48,8 @@ export function LeadForm() {
         />
         {state.fieldErrors?.message ? <em id="message-error">{state.fieldErrors.message}</em> : null}
       </label>
-      <button className="button primary" type="submit" disabled={isPending}>
-        {isPending ? "Mengirim..." : "Kirim permintaan"} <span>→</span>
+      <button className="ap-wa" type="submit" disabled={isPending}>
+        {isPending ? "Menyimpan..." : "Kirim via WhatsApp"} <span>→</span>
       </button>
       <p className={`form-message ${state.status}`} aria-live="polite">
         {state.message}

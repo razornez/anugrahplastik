@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { NativeLandingTemplate } from "@/components/native-landing-template";
+import { LandingPage } from "@/components/landing-page";
 import { getPublishedLandingContent } from "@/features/content/landing-service";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -14,5 +14,5 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function Home() {
   const content = await getPublishedLandingContent();
-  return <NativeLandingTemplate content={content} />;
+  return <LandingPage content={content} />;
 }

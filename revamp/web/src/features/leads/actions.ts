@@ -9,6 +9,7 @@ export type LeadFormState = {
   status: "idle" | "success" | "error";
   message: string;
   fieldErrors?: Partial<Record<"name" | "phone" | "message", string>>;
+  whatsappUrl?: string;
 };
 
 export async function submitLead(_previousState: LeadFormState, formData: FormData): Promise<LeadFormState> {
@@ -61,9 +62,17 @@ export async function submitLead(_previousState: LeadFormState, formData: FormDa
       referrer: requestHeaders.get("referer"),
     });
 
+    const whatsappMessage = [
+      "Halo Anugrah Plastik, saya baru mengirim permintaan dari website.",
+      `Nama: ${parsed.data.name}`,
+      `Kontak: ${parsed.data.phone}`,
+      `Kebutuhan: ${parsed.data.message}`,
+    ].join("\n");
+
     return {
       status: "success",
-      message: "Terima kasih. Kebutuhan Anda sudah kami terima. Tim kami akan menghubungi Anda melalui WhatsApp.",
+      message: "Data tersimpan. WhatsApp akan dibuka untuk melanjutkan percakapan.",
+      whatsappUrl: `https://wa.me/628122339587?text=${encodeURIComponent(whatsappMessage)}`,
     };
   } catch (error) {
     console.error("Lead submission failed", error);

@@ -81,7 +81,7 @@ export async function getWorkspaceOverview(period: WorkspacePeriod) {
     database
       .select({ total: count() })
       .from(analyticsSessions)
-      .where(and(gte(analyticsSessions.createdAt, prior), eq(analyticsSessions.createdAt, start))),
+      .where(and(gte(analyticsSessions.createdAt, prior), lt(analyticsSessions.createdAt, start))),
     eventCount("form_submit", prior, start),
   ]);
 

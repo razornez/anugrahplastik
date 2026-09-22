@@ -9,6 +9,7 @@
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:seed:demo": "psql -h 127.0.0.1 -U postgres -d anugrahplastik_revamp -f scripts/seed-demo.sql",
     "db:studio": "drizzle-kit studio",
     "format:check": "prettier --check .",
     "format": "prettier --write ."

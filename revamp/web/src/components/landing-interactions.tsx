@@ -192,6 +192,11 @@ export function LandingInteractions() {
         `Kebutuhan: ${need || "-"}`,
         `Pesan: ${inquiry}`,
       ].join("\n");
+      window.dispatchEvent(
+        new CustomEvent("ap:analytics-track", {
+          detail: { name: "form_submit", sectionKey: "ap-contact", elementKey: "request-form" },
+        }),
+      );
       window.open(whatsappUrl(message), "_blank", "noopener,noreferrer");
     };
     form?.addEventListener("submit", submitForm);

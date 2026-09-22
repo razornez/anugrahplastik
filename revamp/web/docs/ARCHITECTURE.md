@@ -21,6 +21,7 @@
 - Migration versioned adalah satu-satunya cara mengubah schema.
 - Media berada di volume server dan direferensikan oleh `media_assets`.
 - Lead dan aktivitas tidak boleh dihapus dari UI biasa; gunakan status, archive, atau audit trail.
+- Event analitik menyimpan sesi anonim, nama event, halaman, section, elemen, dan metadata terbatas; tidak menyimpan nilai input formulir.
 
 ## Cache
 
@@ -35,6 +36,7 @@
 - Password saat ini memakai bcrypt dengan cost factor 12; migrasi ke Argon2id dilakukan bersama proses rehash akun agar tidak menurunkan kompatibilitas sesi yang sudah ada.
 - Semua secret hanya di environment server.
 - Webhook diverifikasi, form dibatasi laju request, dan input tervalidasi di server.
+- Tracking non-esensial hanya berjalan setelah consent. Ringkasan insight WhatsApp saat ini dibuka manual oleh admin melalui tautan pesan yang sudah terisi; tidak ada pengiriman otomatis sebelum integrasi resmi tersedia.
 
 ## Menjalankan lapisan data
 

@@ -10,7 +10,10 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
   return (
     <main className="admin-shell">
       <header className="admin-header">
-        <Link href="/admin/content">Anugrah Plastik · Admin</Link>
+        <nav className="admin-navigation" aria-label="Navigasi admin">
+          <Link href="/admin/content">Konten</Link>
+          {session?.role === "admin" ? <Link href="/admin/insights">Insight</Link> : null}
+        </nav>
         {session ? (
           <form action={logout}>
             <span>{session.name}</span>

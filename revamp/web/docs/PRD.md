@@ -24,10 +24,12 @@ Meningkatkan jumlah RFQ berkualitas dari calon pelanggan yang membutuhkan cetak 
 4. CRM dasar: lead, status, catatan follow-up, attribution, dan hak akses admin/content/sales.
 5. Notifikasi lead ke sales melalui WhatsApp Cloud API setelah kredensial tersedia.
 6. GA4, GTM, PostHog, serta consent sebelum pengukuran non-esensial aktif.
+7. Insight perilaku anonim: section engagement, scroll milestone, CTA, FAQ, portfolio, form funnel, dan titik keluar.
 
 ## Batasan rilis pertama
 
 - Form publik mengumpulkan nama, nomor WhatsApp, dan kebutuhan singkat.
+- Analitik perilaku hanya aktif setelah persetujuan; isi form, nomor telepon, dan pesan tidak direkam sebagai event.
 - Tidak ada inventory, pengadaan, keuangan, quotation otomatis, chatbot, atau upload file publik pada rilis pertama.
 - Media CMS disimpan pada disk server; database hanya menyimpan metadata.
 
@@ -37,6 +39,7 @@ Meningkatkan jumlah RFQ berkualitas dari calon pelanggan yang membutuhkan cetak 
 - Rasio CTA klik ke form submit.
 - Sumber campaign dan halaman yang menghasilkan lead.
 - Waktu respons awal sales terhadap lead baru.
+- Section/CTA dengan engagement tinggi, titik keluar, dan rasio form dimulai terhadap submit.
 
 ## Kriteria penerimaan
 

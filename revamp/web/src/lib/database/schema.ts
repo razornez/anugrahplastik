@@ -1,4 +1,4 @@
-import { boolean, integer, jsonb, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -83,3 +83,39 @@ export const leads = pgTable("leads", {
   attribution: jsonb("attribution"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const analyticsSessions = pgTable(
+  "analytics_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    anonymousId: varchar("anonymous_id", { length: 72 }).notNull().unique(),
+    landingPath: varchar("landing_path", { length: 500 }).notNull(),
+    referrer: varchar("referrer", { length: 1000 }),
+    attribution: jsonb("attribution"),
+    consentedAt: timestamp("consented_at", { withTimezone: true }).defaultNow().notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("analytics_sessions_created_at_idx").on(table.createdAt)],
+);
+
+export const analyticsEvents = pgTable(
+  "analytics_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => analyticsSessions.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 80 }).notNull(),
+    path: varchar("path", { length: 500 }).notNull(),
+    sectionKey: varchar("section_key", { length: 100 }),
+    elementKey: varchar("element_key", { length: 160 }),
+    metadata: jsonb("metadata"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("analytics_events_occurred_at_idx").on(table.occurredAt),
+    index("analytics_events_name_occurred_at_idx").on(table.name, table.occurredAt),
+    index("analytics_events_section_occurred_at_idx").on(table.sectionKey, table.occurredAt),
+  ],
+);

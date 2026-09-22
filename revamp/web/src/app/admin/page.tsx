@@ -10,6 +10,20 @@ function percentage(current: number, prior: number) {
   return `${value >= 0 ? "+" : ""}${value}%`;
 }
 
+function activityLabel(action: string) {
+  const labels: Record<string, string> = {
+    "prospect.assigned": "Penanggung jawab prospek diperbarui",
+    "prospect.note_added": "Catatan prospek ditambahkan",
+    "prospect.whatsapp_started": "Percakapan WhatsApp dibuka",
+    "content.publish": "Perubahan halaman utama diterbitkan",
+    "content.draft": "Perubahan halaman utama disimpan",
+    "team.member_created": "Anggota tim ditambahkan",
+    "team.member_activated": "Akses anggota tim diaktifkan",
+    "team.member_deactivated": "Akses anggota tim dinonaktifkan",
+  };
+  return labels[action] ?? "Perubahan diperbarui";
+}
+
 export default async function WorkspacePage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
   const user = await getSession();
   if (!user) redirect("/admin/login");
@@ -41,7 +55,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
 
       <section className="marketing-pulse">
         <div className="pulse-copy">
-          <p className="eyebrow">Pulse pemasaran · {label}</p>
+          <p className="eyebrow">Ringkasan pemasaran · {label}</p>
           <strong>{overview?.current.formSubmits ?? 0}</strong>
           <span>form terkirim</span>
           <small>
@@ -50,16 +64,16 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
         </div>
         <div className="pulse-metrics">
           <div>
-            <span>Sesi</span>
+            <span>Pengunjung</span>
             <strong>{overview?.current.sessions ?? 0}</strong>
             <small>{percentage(overview?.current.sessions ?? 0, overview?.comparison.sessions ?? 0)}</small>
           </div>
           <div>
-            <span>CTA diklik</span>
+            <span>Tombol minat</span>
             <strong>{overview?.current.ctaClicks ?? 0}</strong>
           </div>
           <div>
-            <span>WhatsApp</span>
+            <span>Klik WhatsApp</span>
             <strong>{overview?.current.whatsappClicks ?? 0}</strong>
           </div>
           <div>
@@ -107,15 +121,15 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
           ) : null}
         </section>
         <section className="insight-card">
-          <p className="eyebrow">Wawasan minggu ini</p>
+          <p className="eyebrow">Yang perlu diperhatikan</p>
           <h2>{(overview?.current.formSubmits ?? 0) > 0 ? "Permintaan mulai masuk." : "Belum ada form terkirim."}</h2>
           <p>
             {(overview?.current.ctaClicks ?? 0) > 0
-              ? "Tinjau CTA dan section dengan engagement tertinggi untuk menjaga momentum."
-              : "Gunakan halaman Insight untuk melihat section dan CTA yang mulai mendapat perhatian."}
+              ? "Lihat tombol dan bagian halaman yang paling sering menarik minat pengunjung."
+              : "Buka laporan pengunjung untuk melihat bagian halaman yang mulai sering diperhatikan."}
           </p>
           {user.role === "admin" ? (
-            <Link href="/admin/insights">Buka insight →</Link>
+            <Link href="/admin/insights">Buka laporan →</Link>
           ) : (
             <Link href="/admin/content">Tinjau konten →</Link>
           )}
@@ -125,7 +139,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
       <section className="activity-panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Jejak kerja</p>
+            <p className="eyebrow">Riwayat perubahan</p>
             <h2>Aktivitas terbaru</h2>
           </div>
         </div>
@@ -134,7 +148,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
             <div className="activity-item" key={`${event.action}-${index}`}>
               <span />
               <p>
-                <strong>{event.actorName ?? "Sistem"}</strong> · {event.action.replace(".", " ")}
+                <strong>{event.actorName ?? "Sistem"}</strong> · {activityLabel(event.action)}
               </p>
               <time>{event.createdAt.toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</time>
             </div>

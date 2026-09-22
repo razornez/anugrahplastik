@@ -1,6 +1,7 @@
 import { and, count, countDistinct, desc, eq, gte, isNotNull } from "drizzle-orm";
 import { analyticsEvents, analyticsSessions } from "@/lib/database/schema";
 import { getDatabase } from "@/lib/database/client";
+import { actionLabel, sectionLabel } from "./display-labels";
 
 export type InsightRow = { key: string; total: number };
 
@@ -114,18 +115,18 @@ export async function getAnalyticsInsight(days = 7): Promise<AnalyticsInsight> {
 }
 
 export function analyticsWhatsappReport(insight: AnalyticsInsight) {
-  const list = (items: InsightRow[]) =>
-    items.length ? items.map((item) => `${item.key} (${item.total})`).join(", ") : "belum ada data";
+  const list = (items: InsightRow[], label: (key: string) => string) =>
+    items.length ? items.map((item) => `${label(item.key)} (${item.total})`).join(", ") : "belum ada data";
   return [
-    `Ringkasan website Anugrah Plastik · ${insight.days} hari terakhir`,
+    `Ringkasan pengunjung website · ${insight.days} hari terakhir`,
     "",
-    `Sesi anonim: ${insight.sessions}`,
-    `Interaksi tercatat: ${insight.events}`,
-    `Form dimulai / terkirim: ${insight.formStarts} / ${insight.formSubmits}`,
+    `Kunjungan tercatat: ${insight.sessions}`,
+    `Interaksi di halaman: ${insight.events}`,
+    `Form mulai diisi / terkirim: ${insight.formStarts} / ${insight.formSubmits}`,
     `Klik WhatsApp: ${insight.whatsappClicks}`,
     "",
-    `Section paling banyak dibaca: ${list(insight.topSections)}`,
-    `CTA paling banyak diklik: ${list(insight.topCtas)}`,
-    `Titik keluar terbanyak: ${list(insight.exitSections)}`,
+    `Bagian yang paling diperhatikan: ${list(insight.topSections, sectionLabel)}`,
+    `Tombol yang paling sering diklik: ${list(insight.topCtas, actionLabel)}`,
+    `Bagian yang sering ditinggalkan: ${list(insight.exitSections, sectionLabel)}`,
   ].join("\n");
 }

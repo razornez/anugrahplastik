@@ -36,19 +36,19 @@ export default async function ContentPage({
   const [content, query] = await Promise.all([getDraftLandingContent(), searchParams]);
   const message = query.status
     ? query.status === "publish"
-      ? "Versi publik sudah diperbarui."
-      : "Draft tersimpan. Halaman publik belum berubah."
+      ? "Perubahan sudah tampil di halaman utama."
+      : "Perubahan disimpan sebagai rancangan. Halaman utama belum berubah."
     : query.error
-      ? "Konten belum dapat disimpan. Periksa setiap isian lalu coba kembali."
-      : "Perubahan draft tidak akan memengaruhi halaman publik sebelum dipublish.";
+      ? "Perubahan belum dapat disimpan. Periksa isian lalu coba lagi."
+      : "Anda dapat menyimpan rancangan terlebih dahulu. Halaman utama hanya berubah saat diterbitkan.";
 
   return (
     <section className="content-workspace" aria-labelledby="content-title">
       <header className="content-workspace-head">
         <div>
-          <p className="eyebrow">Konten landing</p>
+          <p className="eyebrow">Isi halaman utama</p>
           <h1 id="content-title">Perbarui pesan tanpa menggeser desain.</h1>
-          <p>Setiap perubahan disimpan sebagai draft terlebih dahulu; versi publik hanya berubah saat dipublish.</p>
+          <p>Simpan perubahan sebagai rancangan, periksa tampilannya, lalu terbitkan ketika sudah siap.</p>
         </div>
       </header>
       <form action={saveLandingContent} className="content-editor">
@@ -100,8 +100,8 @@ export default async function ContentPage({
               { name: "hero.titleHighlight", label: "Judul sorotan", value: content.hero.titleHighlight },
               { name: "hero.titleAfter", label: "Judul baris 3", value: content.hero.titleAfter },
               { name: "hero.description", label: "Deskripsi", value: content.hero.description, multiline: true },
-              { name: "hero.primaryCta", label: "CTA utama", value: content.hero.primaryCta },
-              { name: "hero.secondaryCta", label: "CTA kedua", value: content.hero.secondaryCta },
+              { name: "hero.primaryCta", label: "Teks tombol utama", value: content.hero.primaryCta },
+              { name: "hero.secondaryCta", label: "Teks tombol kedua", value: content.hero.secondaryCta },
             ]}
           />
           <ContentSection
@@ -127,7 +127,7 @@ export default async function ContentPage({
             title="Material"
             fields={[
               { name: "material.title", label: "Judul", value: content.material.title },
-              { name: "material.primaryCta", label: "CTA", value: content.material.primaryCta },
+              { name: "material.primaryCta", label: "Teks tombol", value: content.material.primaryCta },
             ]}
           />
           <ContentSection
@@ -141,7 +141,7 @@ export default async function ContentPage({
             fields={[
               { name: "faq.title", label: "Judul", value: content.faq.title },
               { name: "faq.description", label: "Deskripsi", value: content.faq.description, multiline: true },
-              { name: "faq.primaryCta", label: "CTA", value: content.faq.primaryCta },
+              { name: "faq.primaryCta", label: "Teks tombol", value: content.faq.primaryCta },
             ]}
           />
           <ContentSection
@@ -152,7 +152,7 @@ export default async function ContentPage({
               { name: "contact.description", label: "Deskripsi", value: content.contact.description, multiline: true },
               { name: "contact.formTitle", label: "Judul formulir", value: content.contact.formTitle },
               { name: "contact.formDescription", label: "Keterangan formulir", value: content.contact.formDescription },
-              { name: "contact.primaryCta", label: "CTA formulir", value: content.contact.primaryCta },
+              { name: "contact.primaryCta", label: "Teks tombol formulir", value: content.contact.primaryCta },
             ]}
           />
           <ContentSection
@@ -169,21 +169,21 @@ export default async function ContentPage({
           />
         </div>
         <aside className="content-publish-panel">
-          <p className="eyebrow">Status versi</p>
-          <h2>Draft siap ditinjau.</h2>
-          <p>Preview menunjukkan draft saat ini. Publish memperbarui landing page dan mencatat revisi.</p>
+          <p className="eyebrow">Status perubahan</p>
+          <h2>Rancangan siap diperiksa.</h2>
+          <p>Lihat tampilan terbaru sebelum menerbitkannya ke halaman utama.</p>
           <a href="/preview/landing" target="_blank" rel="noreferrer">
-            Buka preview ↗
+            Lihat tampilan ↗
           </a>
           <div className="admin-actions">
             <button name="action" value="draft" type="submit">
-              Simpan draft
+              Simpan rancangan
             </button>
             <button name="action" value="publish" type="submit">
-              Publish ke landing page
+              Terbitkan ke halaman utama
             </button>
           </div>
-          <small>Perubahan penting tercatat pada jejak kerja.</small>
+          <small>Perubahan penting dapat dilihat di riwayat aktivitas.</small>
         </aside>
       </form>
     </section>

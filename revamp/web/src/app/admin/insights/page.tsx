@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { analyticsWhatsappReport, getAnalyticsInsight, type InsightRow } from "@/features/analytics/insight-service";
+import { actionLabel, sectionLabel } from "@/features/analytics/display-labels";
 
-function InsightList({ title, items }: { title: string; items: InsightRow[] }) {
+function InsightList({ title, items, label }: { title: string; items: InsightRow[]; label: (key: string) => string }) {
   return (
     <section className="insight-list">
       <h2>{title}</h2>
@@ -10,7 +11,7 @@ function InsightList({ title, items }: { title: string; items: InsightRow[] }) {
         <ol>
           {items.map((item) => (
             <li key={item.key}>
-              <span>{item.key.replace("ap-", "")}</span>
+              <span>{label(item.key)}</span>
               <strong>{item.total}</strong>
             </li>
           ))}
@@ -33,11 +34,11 @@ export default async function InsightsPage({ searchParams }: { searchParams: Pro
 
   return (
     <section className="admin-card insights-card">
-      <p>INSIGHT & TINDAKAN</p>
+      <p>LAPORAN PENGUNJUNG</p>
       <div className="insights-heading">
         <div>
-          <h1>Perilaku pengunjung</h1>
-          <span>Hanya data dari pengunjung yang memberi persetujuan analitik.</span>
+          <h1>Apa yang menarik perhatian pengunjung?</h1>
+          <span>Data ini hanya berasal dari pengunjung yang menyetujui pengukuran penggunaan website.</span>
         </div>
         <a className="insight-wa" href={whatsappUrl} target="_blank" rel="noreferrer">
           Kirim ringkasan ke WhatsApp
@@ -52,30 +53,30 @@ export default async function InsightsPage({ searchParams }: { searchParams: Pro
         </a>
       </nav>
       {!insight.available ? (
-        <div className="admin-status">Database belum tersambung. Insight akan muncul setelah koneksi aktif.</div>
+        <div className="admin-status">Data belum dapat dimuat. Laporan akan muncul setelah koneksi aktif.</div>
       ) : null}
       <div className="insight-metrics">
         <div>
-          <span>Sesi anonim</span>
+          <span>Kunjungan tercatat</span>
           <strong>{insight.sessions}</strong>
         </div>
         <div>
-          <span>Interaksi</span>
+          <span>Interaksi di halaman</span>
           <strong>{insight.events}</strong>
         </div>
         <div>
-          <span>Form terkirim</span>
+          <span>Form permintaan masuk</span>
           <strong>{insight.formSubmits}</strong>
         </div>
         <div>
-          <span>Klik WhatsApp</span>
+          <span>Tekan tombol WhatsApp</span>
           <strong>{insight.whatsappClicks}</strong>
         </div>
       </div>
       <div className="insight-grid">
-        <InsightList title="Section paling banyak dibaca" items={insight.topSections} />
-        <InsightList title="CTA paling banyak diklik" items={insight.topCtas} />
-        <InsightList title="Titik keluar terbanyak" items={insight.exitSections} />
+        <InsightList title="Bagian yang paling diperhatikan" items={insight.topSections} label={sectionLabel} />
+        <InsightList title="Tombol yang paling sering diklik" items={insight.topCtas} label={actionLabel} />
+        <InsightList title="Bagian yang sering ditinggalkan" items={insight.exitSections} label={sectionLabel} />
       </div>
     </section>
   );

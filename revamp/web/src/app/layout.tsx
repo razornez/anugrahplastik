@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Archivo, Hanken_Grotesk, Space_Mono } from "next/font/google";
 import "./globals.css";
+import "./landing-template.css";
 
 const heading = Archivo({
   variable: "--font-archivo",

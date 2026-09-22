@@ -31,25 +31,17 @@ function extractTemplate() {
   const component = source.match(/<x-dc\b[^>]*>([\s\S]*?)<\/x-dc>/)?.[1];
   if (!component) throw new Error("Template landing tidak dapat dibaca.");
 
-  const styles = [...component.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((match) => match[1]).join("\n");
   const markup = component
     .replace(/<helmet>[\s\S]*?<\/helmet>/, "")
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/g, "")
     .replace(/\sdata-dc-[\w-]+(?:=("[^"]*"|'[^']*'))?/g, "")
     .replace(/\sdata-props=("[^"]*"|'[^']*')/g, "");
 
-  return {
-    markup,
-    styles:
-      styles
-        .replaceAll("'Archivo'", "var(--font-archivo)")
-        .replaceAll("'Hanken Grotesk'", "var(--font-hanken)")
-        .replaceAll("'Space Mono'", "var(--font-space)") +
-      "@media (max-width:900px){#ap-burger{display:flex!important}#ap-header:focus-within #ap-mobile{display:block!important}}",
-  };
+  return markup;
 }
 
 export function renderLandingTemplate(content: LandingContent) {
-  const { styles, markup: initialMarkup } = extractTemplate();
+  const initialMarkup = extractTemplate();
   const toWebp = (path: string) => `/images-webp/${path.replace(/\.jpe?g$/i, ".webp")}`;
   let markup = initialMarkup
     .replace(/src="img\/([^"]+)"/g, (_match, path: string) => `src="${toWebp(path)}"`)
@@ -135,5 +127,5 @@ export function renderLandingTemplate(content: LandingContent) {
     content.footer.description,
   );
 
-  return { markup, styles };
+  return markup;
 }

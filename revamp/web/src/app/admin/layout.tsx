@@ -1,27 +1,20 @@
-import Link from "next/link";
 import { getSession } from "@/lib/auth/session";
 import { logout } from "@/features/content/admin-actions";
+import { AdminSidebar } from "@/components/admin-sidebar";
 
 export const instant = false;
 
 export default async function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const session = await getSession();
 
+  if (!session) {
+    return <main className="admin-shell admin-shell--public">{children}</main>;
+  }
+
   return (
     <main className="admin-shell">
-      <header className="admin-header">
-        <nav className="admin-navigation" aria-label="Navigasi admin">
-          <Link href="/admin/content">Konten</Link>
-          {session?.role === "admin" ? <Link href="/admin/insights">Insight</Link> : null}
-        </nav>
-        {session ? (
-          <form action={logout}>
-            <span>{session.name}</span>
-            <button type="submit">Keluar</button>
-          </form>
-        ) : null}
-      </header>
-      {children}
+      <AdminSidebar name={session.name} role={session.role} onLogout={logout} />
+      <div className="admin-main">{children}</div>
     </main>
   );
 }

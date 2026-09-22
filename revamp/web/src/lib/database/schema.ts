@@ -5,6 +5,7 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   name: varchar("name", { length: 120 }).notNull(),
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+  pinHash: varchar("pin_hash", { length: 255 }),
   role: varchar("role", { length: 20 }).notNull().default("content"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -81,8 +82,42 @@ export const leads = pgTable("leads", {
   landingPath: varchar("landing_path", { length: 500 }),
   referrer: varchar("referrer", { length: 1000 }),
   attribution: jsonb("attribution"),
+  assignedUserId: uuid("assigned_user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const leadNotes = pgTable(
+  "lead_notes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("lead_notes_lead_created_at_idx").on(table.leadId, table.createdAt)],
+);
+
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    action: varchar("action", { length: 100 }).notNull(),
+    entityType: varchar("entity_type", { length: 60 }).notNull(),
+    entityId: varchar("entity_id", { length: 100 }),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("audit_logs_created_at_idx").on(table.createdAt),
+    index("audit_logs_entity_created_at_idx").on(table.entityType, table.entityId, table.createdAt),
+  ],
+);
 
 export const analyticsSessions = pgTable(
   "analytics_sessions",

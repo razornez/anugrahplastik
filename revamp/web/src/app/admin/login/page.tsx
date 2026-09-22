@@ -1,4 +1,6 @@
 import { login } from "@/features/content/admin-actions";
+import Image from "next/image";
+import { AdminLoginForm } from "@/components/admin-login-form";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
@@ -19,27 +21,33 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           : null;
 
   return (
-    <section className="admin-card login-card">
-      <p>BACK OFFICE</p>
-      <h1>Masuk untuk mengelola konten</h1>
-      <form action={login}>
-        <label>
-          Email
-          <input name="email" type="email" autoComplete="email" defaultValue={localAutofill?.email} required />
-        </label>
-        <label>
-          Kata sandi
-          <input
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            defaultValue={localAutofill?.password}
-            required
-          />
-        </label>
-        {message ? <small>{message}</small> : null}
-        <button type="submit">Masuk</button>
-      </form>
+    <section className="login-experience">
+      <div className="login-context">
+        <Image
+          src="/images-webp/mesin/Anugrah Plastik (71).webp"
+          alt="Proses produksi Anugrah Plastik"
+          fill
+          priority
+          sizes="(max-width: 760px) 100vw, 50vw"
+        />
+        <div>
+          <span>ANUGRAH PLASTIK</span>
+          <h1>Ruang kerja untuk setiap permintaan yang berarti.</h1>
+          <p>Kelola prospek, konten, dan pembelajaran pemasaran dalam satu tempat.</p>
+        </div>
+      </div>
+      <div className="login-panel">
+        <div className="login-mark">AP</div>
+        <p className="eyebrow">Back office</p>
+        <h2>Selamat datang kembali.</h2>
+        <span>Masuk untuk melanjutkan pekerjaan hari ini.</span>
+        <AdminLoginForm
+          action={login}
+          email={localAutofill?.email}
+          password={localAutofill?.password}
+          message={message}
+        />
+      </div>
     </section>
   );
 }

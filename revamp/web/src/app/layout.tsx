@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Archivo, Hanken_Grotesk, Space_Mono } from "next/font/google";
 import "./globals.css";
 import "./landing-template.css";
@@ -17,6 +17,8 @@ export const metadata: Metadata = {
   description:
     "Buat ulang spare part dan produk plastik custom dari sampel atau gambar. Free moulding tanpa syarat, tanpa minimum order.",
 };
+
+export const viewport: Viewport = { themeColor: "#0b2442", viewportFit: "cover" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

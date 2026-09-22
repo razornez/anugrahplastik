@@ -6,13 +6,13 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { compare, hash } from "bcryptjs";
 import { getDatabase } from "@/lib/database/client";
-import { contentBlocks, contentRevisions, users } from "@/lib/database/schema";
+import { auditLogs, contentBlocks, contentRevisions, users } from "@/lib/database/schema";
 import { clearSession, createSession, getSession, type SessionUser } from "@/lib/auth/session";
 import { clientAddress, takeRateLimit } from "@/lib/security/rate-limit";
 import { LANDING_CONTENT_KEY, landingContentSchema, type LandingContent } from "./landing-content";
 
 function canManageContent(user: SessionUser | null): user is SessionUser {
-  return user?.role === "admin" || user?.role === "content";
+  return Boolean(user);
 }
 
 async function requireContentManager() {
@@ -26,9 +26,11 @@ export async function login(formData: FormData) {
     .trim()
     .toLowerCase();
   const password = String(formData.get("password") || "");
+  const pin = String(formData.get("pin") || "");
   const requestHeaders = await headers();
-  const rate = takeRateLimit(`login:${clientAddress(requestHeaders)}`, 8, 15 * 60 * 1_000);
-  if (!rate.allowed) redirect("/admin/login?error=rate-limit");
+  const addressRate = takeRateLimit(`login:${clientAddress(requestHeaders)}`, 8, 15 * 60 * 1_000);
+  const accountRate = takeRateLimit(`login-account:${email}`, 8, 15 * 60 * 1_000);
+  if (!addressRate.allowed || !accountRate.allowed) redirect("/admin/login?error=rate-limit");
   const database = getDatabase();
   if (!database) redirect("/admin/login?error=database");
 
@@ -36,15 +38,17 @@ export async function login(formData: FormData) {
 
   const initialEmail = process.env.INITIAL_ADMIN_EMAIL?.trim().toLowerCase();
   const initialPassword = process.env.INITIAL_ADMIN_PASSWORD;
-  if (!user && initialEmail === email && initialPassword === password) {
+  if (!user && !pin && initialEmail === email && initialPassword === password) {
     [user] = await database
       .insert(users)
       .values({ email, name: "Administrator", passwordHash: await hash(password, 12), role: "admin" })
       .returning();
   }
 
-  if (!user || !user.isActive || !(await compare(password, user.passwordHash)))
-    redirect("/admin/login?error=credentials");
+  const authenticated = pin
+    ? Boolean(user?.pinHash) && (await compare(pin, user.pinHash!))
+    : Boolean(user) && (await compare(password, user!.passwordHash));
+  if (!user || !user.isActive || !authenticated) redirect("/admin/login?error=credentials");
 
   await createSession({ id: user.id, name: user.name, email: user.email, role: user.role as SessionUser["role"] });
   redirect("/admin/content");
@@ -119,6 +123,13 @@ export async function saveLandingContent(formData: FormData) {
     await transaction
       .insert(contentRevisions)
       .values({ contentBlockId: saved.id, content, version, action, actorId: user.id });
+    await transaction.insert(auditLogs).values({
+      actorId: user.id,
+      action: `content.${action}`,
+      entityType: "content_block",
+      entityId: saved.id,
+      metadata: { key: LANDING_CONTENT_KEY, version },
+    });
     return [saved];
   });
 

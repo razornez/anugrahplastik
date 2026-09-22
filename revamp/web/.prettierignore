@@ -1,3 +1,3 @@
 .next/
 node_modules/
-public/template-light/
+src/features/marketing/template-light.html

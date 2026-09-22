@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { LandingContent } from "@/features/content/landing-content";
 
-const templatePath = join(process.cwd(), "public", "template-light", "index.html");
+const templatePath = join(process.cwd(), "src", "features", "marketing", "template-light.html");
 const source = readFileSync(templatePath, "utf8");
 
 function escapeHtml(value: string) {

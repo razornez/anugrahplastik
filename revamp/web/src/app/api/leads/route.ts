@@ -25,15 +25,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Penyimpanan formulir belum tersedia." }, { status: 503 });
   }
 
-  const attribution = body && typeof body === "object" && "attribution" in body ? body.attribution : null;
-  await database.insert(leads).values({
-    name: parsed.data.name,
-    phone: parsed.data.phone,
-    message: parsed.data.message,
-    landingPath: parsed.data.landingPath || null,
-    referrer: request.headers.get("referer"),
-    attribution,
-  });
+  try {
+    await database.insert(leads).values({
+      name: parsed.data.name,
+      phone: parsed.data.phone,
+      message: parsed.data.message,
+      landingPath: parsed.data.landingPath || null,
+      referrer: request.headers.get("referer"),
+      attribution: parsed.data.attribution ?? null,
+    });
+  } catch {
+    return NextResponse.json({ message: "Permintaan belum dapat disimpan. Silakan coba lagi." }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }

@@ -43,13 +43,14 @@ export function LandingInteractions() {
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const revealItems = Array.from(root.querySelectorAll<HTMLElement>("[data-reveal]"));
+    let revealObserver: IntersectionObserver | null = null;
     if (!reducedMotion) {
       revealItems.forEach((item) => {
         item.style.opacity = "0";
         item.style.transform = "translateY(26px)";
         item.style.transition = "opacity .65s ease, transform .65s ease";
       });
-      const revealObserver = new IntersectionObserver(
+      revealObserver = new IntersectionObserver(
         (entries, observer) => {
           entries.forEach((entry) => {
             if (!entry.isIntersecting) return;
@@ -61,7 +62,7 @@ export function LandingInteractions() {
         },
         { threshold: 0.12 },
       );
-      revealItems.forEach((item) => revealObserver.observe(item));
+      revealItems.forEach((item) => revealObserver?.observe(item));
     }
 
     const burger = document.getElementById("ap-burger");
@@ -179,8 +180,10 @@ export function LandingInteractions() {
         });
         if (!response.ok) throw new Error("Lead tidak tersimpan");
       } catch {
+        form.dataset.submitError = "true";
         return;
       }
+      form.dataset.submitError = "false";
       const message = [
         "Halo Anugrah Plastik, saya ingin minta penawaran.",
         "",
@@ -202,6 +205,7 @@ export function LandingInteractions() {
       lightbox?.removeEventListener("click", closeLightbox);
       window.removeEventListener("keydown", closeOnEscape);
       navigationObserver.disconnect();
+      revealObserver?.disconnect();
       faqHandlers.forEach(({ question, handler }) => question.removeEventListener("click", handler));
       form?.removeEventListener("submit", submitForm);
     };

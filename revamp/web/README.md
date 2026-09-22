@@ -45,6 +45,7 @@ Pemeriksaan yang sama berjalan otomatis pada setiap push dan pull request ke `ma
 - [Alur BMad](docs/BMAD-REFERENCE.md)
 - [SDLC](docs/SDLC.md)
 - [Pedoman engineering](docs/ENGINEERING-GUIDELINES.md)
+- [Protokol delivery](docs/DELIVERY-PROTOCOL.md)
 - [Quality gates](docs/QUALITY-GATES.md)
 - [Runbook](docs/RUNBOOK.md)
 

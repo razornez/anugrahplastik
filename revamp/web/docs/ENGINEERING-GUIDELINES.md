@@ -34,3 +34,10 @@
 - Gunakan versi stable terbaru saat setup; patch keamanan diprioritaskan, minor update ditinjau bulanan, major update melalui compatibility test.
 - Lockfile wajib di-commit.
 - Setiap perubahan wajib punya alasan, test yang relevan, dan tidak menambah dependency tanpa kebutuhan jelas.
+
+## Cara kerja
+
+- Pilih tingkat pekerjaan berdasarkan [delivery protocol](DELIVERY-PROTOCOL.md): jalur cepat untuk koreksi UI terbatas, jalur standar untuk fitur tunggal, dan jalur fondasi untuk perubahan lintas domain.
+- Quality gate harus proporsional terhadap risiko. Jangan memaksakan pengujian end-to-end untuk perubahan UI yang benar-benar terisolasi; jangan pula melewatkan perencanaan dan validasi untuk perubahan yang mengubah alur, data, atau arsitektur.
+- Untuk pekerjaan UI standar dan fondasi, jangan mulai dari komponen. Mulai dari pengguna, pekerjaan utama, hierarki informasi, state, dan acceptance criteria visual.
+- Saat kebutuhan belum cukup matang, angkat pertanyaan, alternatif, trade-off, dan rekomendasi sebelum implementasi. Jangan mengisi kekosongan dengan solusi generik.

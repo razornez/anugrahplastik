@@ -26,6 +26,7 @@ export const analyticsEventSchema = z.object({
   sectionKey: shortKey.optional(),
   elementKey: shortKey.optional(),
   metadata: z.record(z.string().max(50), z.union([z.string().max(120), z.number().finite(), z.boolean()])).optional(),
+  consentVersion: z.literal("v1"),
 });
 
 export type AnalyticsEvent = z.infer<typeof analyticsEventSchema>;

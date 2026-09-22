@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { analyticsEvents, analyticsSessions } from "@/lib/database/schema";
 import { getDatabase } from "@/lib/database/client";
 import { clientAddress, takeRateLimit } from "@/lib/security/rate-limit";
 import { analyticsEventSchema } from "@/features/analytics/schema";
+import { deviceContext, locationContext } from "@/features/analytics/request-context";
 
 function referrerPath(value: string | null) {
   if (!value) return null;
@@ -30,26 +31,37 @@ export async function POST(request: Request) {
   const event = parsed.data;
   try {
     let [session] = await database
-      .select({ id: analyticsSessions.id })
+      .select({ id: analyticsSessions.id, createdAt: analyticsSessions.createdAt })
       .from(analyticsSessions)
       .where(eq(analyticsSessions.anonymousId, event.anonymousId));
 
     if (!session) {
+      const [device, location] = await Promise.all([
+        Promise.resolve(deviceContext(request.headers.get("user-agent"))),
+        locationContext(request.headers),
+      ]);
       [session] = await database
         .insert(analyticsSessions)
         .values({
           anonymousId: event.anonymousId,
           landingPath: event.path,
           referrer: referrerPath(request.headers.get("referer")),
+          deviceCategory: device.deviceCategory,
+          browserName: device.browserName,
+          operatingSystem: device.operatingSystem,
+          countryName: location.countryName,
+          regionName: location.regionName,
+          cityName: location.cityName,
+          consentVersion: event.consentVersion,
         })
-        .returning({ id: analyticsSessions.id });
-    } else {
-      await database
-        .update(analyticsSessions)
-        .set({ lastSeenAt: new Date() })
-        .where(eq(analyticsSessions.id, session.id));
+        .returning({ id: analyticsSessions.id, createdAt: analyticsSessions.createdAt });
     }
 
+    const [lastEvent] = await database
+      .select({ sequence: sql<number>`coalesce(max(${analyticsEvents.sequence}), 0)` })
+      .from(analyticsEvents)
+      .where(eq(analyticsEvents.sessionId, session.id));
+    const now = new Date();
     await database.insert(analyticsEvents).values({
       sessionId: session.id,
       name: event.name,
@@ -57,7 +69,22 @@ export async function POST(request: Request) {
       sectionKey: event.sectionKey ?? null,
       elementKey: event.elementKey ?? null,
       metadata: event.metadata ?? null,
+      sequence: Number(lastEvent?.sequence ?? 0) + 1,
     });
+    await database
+      .update(analyticsSessions)
+      .set({
+        lastSeenAt: now,
+        lastEventAt: now,
+        ...(event.sectionKey ? { lastSectionKey: event.sectionKey } : {}),
+        ...(event.name === "page_leave"
+          ? {
+              endedAt: now,
+              durationSeconds: Math.max(0, Math.round((now.getTime() - session.createdAt.getTime()) / 1_000)),
+            }
+          : {}),
+      })
+      .where(eq(analyticsSessions.id, session.id));
   } catch {
     return new NextResponse(null, { status: 204 });
   }

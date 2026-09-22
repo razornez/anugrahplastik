@@ -54,6 +54,28 @@ SELECT anonymous_id, '/', referrer, created_at, created_at, last_seen_at
 FROM demo_sessions
 ON CONFLICT (anonymous_id) DO NOTHING;
 
+UPDATE analytics_sessions
+SET
+  device_category = CASE
+    WHEN anonymous_id IN ('demo-anugrah-001', 'demo-anugrah-002', 'demo-anugrah-005', 'demo-anugrah-007', 'demo-anugrah-010') THEN 'mobile'
+    WHEN anonymous_id IN ('demo-anugrah-003', 'demo-anugrah-008') THEN 'tablet'
+    ELSE 'desktop'
+  END,
+  browser_name = CASE WHEN anonymous_id IN ('demo-anugrah-001', 'demo-anugrah-005', 'demo-anugrah-007') THEN 'Safari' ELSE 'Chrome' END,
+  operating_system = CASE
+    WHEN anonymous_id IN ('demo-anugrah-001', 'demo-anugrah-005', 'demo-anugrah-007') THEN 'iOS'
+    WHEN anonymous_id IN ('demo-anugrah-002', 'demo-anugrah-010') THEN 'Android'
+    ELSE 'Windows'
+  END,
+  city_name = CASE
+    WHEN anonymous_id IN ('demo-anugrah-001', 'demo-anugrah-004', 'demo-anugrah-009') THEN 'Bandung'
+    WHEN anonymous_id IN ('demo-anugrah-002', 'demo-anugrah-007') THEN 'Jakarta Selatan'
+    WHEN anonymous_id IN ('demo-anugrah-003', 'demo-anugrah-008') THEN 'Bekasi'
+    WHEN anonymous_id IN ('demo-anugrah-005', 'demo-anugrah-010') THEN 'Cimahi'
+    ELSE 'Bandung Barat'
+  END
+WHERE anonymous_id LIKE 'demo-anugrah-%';
+
 WITH events(anonymous_id, name, section_key, element_key, occurred_at) AS (
   VALUES
     ('demo-anugrah-001', 'section_engaged', 'ap-hero', NULL, now() - interval '49 minutes'),
@@ -103,6 +125,28 @@ WHERE NOT EXISTS (
     AND existing.name = events.name
     AND existing.occurred_at = events.occurred_at
 );
+
+WITH ordered AS (
+  SELECT id, row_number() OVER (PARTITION BY session_id ORDER BY occurred_at, id) AS position
+  FROM analytics_events
+  WHERE session_id IN (SELECT id FROM analytics_sessions WHERE anonymous_id LIKE 'demo-anugrah-%')
+)
+UPDATE analytics_events SET sequence = ordered.position FROM ordered WHERE analytics_events.id = ordered.id;
+
+UPDATE analytics_sessions AS session
+SET
+  last_section_key = last_event.section_key,
+  last_event_at = last_event.occurred_at,
+  ended_at = CASE WHEN last_event.name = 'page_leave' THEN last_event.occurred_at ELSE NULL END,
+  duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM (last_event.occurred_at - session.created_at))::integer)
+FROM analytics_events AS last_event
+WHERE last_event.id = (
+  SELECT id
+  FROM analytics_events
+  WHERE session_id = session.id
+  ORDER BY sequence DESC
+  LIMIT 1
+) AND session.anonymous_id LIKE 'demo-anugrah-%';
 
 WITH admin_user AS (
   SELECT id FROM users WHERE role = 'admin' AND is_active = true ORDER BY created_at LIMIT 1

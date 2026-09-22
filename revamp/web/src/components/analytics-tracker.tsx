@@ -22,8 +22,8 @@ function currentPath() {
   return window.location.pathname;
 }
 
-function sendEvent(event: Omit<AnalyticsEvent, "anonymousId">, useBeacon = false) {
-  const payload: AnalyticsEvent = { ...event, anonymousId: anonymousId() };
+function sendEvent(event: Omit<AnalyticsEvent, "anonymousId" | "consentVersion">, useBeacon = false) {
+  const payload: AnalyticsEvent = { ...event, anonymousId: anonymousId(), consentVersion: "v1" };
   const body = JSON.stringify(payload);
 
   if (useBeacon && navigator.sendBeacon) {

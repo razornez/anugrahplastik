@@ -3,12 +3,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { getWorkspaceOverview, type WorkspacePeriod } from "@/features/workspace/service";
-
-function percentage(current: number, prior: number) {
-  if (!prior) return current ? "baru" : "—";
-  const value = Math.round(((current - prior) / prior) * 100);
-  return `${value >= 0 ? "+" : ""}${value}%`;
-}
+import { AnalyticsTrendChart } from "@/components/analytics-trend-chart";
+import { getAnalyticsReport } from "@/features/analytics/report-service";
 
 function activityLabel(action: string) {
   const labels: Record<string, string> = {
@@ -29,7 +25,11 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   if (!user) redirect("/admin/login");
   const query = await searchParams;
   const period: WorkspacePeriod = query.period === "today" || query.period === "month" ? query.period : "week";
-  const overview = await getWorkspaceOverview(period);
+  const days = period === "today" ? 7 : period === "month" ? 30 : 7;
+  const [overview, report] = await Promise.all([
+    getWorkspaceOverview(period),
+    getAnalyticsReport({ days, device: "all", city: "", source: "", outcome: "" }),
+  ]);
   const label = period === "today" ? "Hari ini" : period === "month" ? "Bulan berjalan" : "7 hari terakhir";
 
   return (
@@ -56,25 +56,23 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
       <section className="marketing-pulse">
         <div className="pulse-copy">
           <p className="eyebrow">Ringkasan pemasaran · {label}</p>
-          <strong>{overview?.current.formSubmits ?? 0}</strong>
+          <strong>{report.totals.forms}</strong>
           <span>form terkirim</span>
-          <small>
-            {percentage(overview?.current.formSubmits ?? 0, overview?.comparison.forms ?? 0)} dari periode sebelumnya
-          </small>
+          <small>berdasarkan kunjungan pada periode ini</small>
         </div>
         <div className="pulse-metrics">
           <div>
             <span>Pengunjung</span>
-            <strong>{overview?.current.sessions ?? 0}</strong>
-            <small>{percentage(overview?.current.sessions ?? 0, overview?.comparison.sessions ?? 0)}</small>
+            <strong>{report.totals.sessions}</strong>
+            <small>kunjungan anonim</small>
           </div>
           <div>
             <span>Tombol minat</span>
-            <strong>{overview?.current.ctaClicks ?? 0}</strong>
+            <strong>{report.totals.ctaClicks}</strong>
           </div>
           <div>
             <span>Klik WhatsApp</span>
-            <strong>{overview?.current.whatsappClicks ?? 0}</strong>
+            <strong>{report.totals.whatsappClicks}</strong>
           </div>
           <div>
             <span>Prospek baru</span>
@@ -92,6 +90,58 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
           <span>Workshop · Bandung</span>
         </div>
       </section>
+
+      <div className="analytics-overview-grid">
+        <AnalyticsTrendChart points={report.trend} />
+        <section className="analytics-summary-card">
+          <p className="eyebrow">Perangkat pengunjung</p>
+          <h2>Dari mana mereka membuka website?</h2>
+          {report.devices.length ? (
+            report.devices.map((item) => (
+              <div className="distribution-row" key={item.key}>
+                <span>{item.label}</span>
+                <b style={{ width: `${Math.round((item.total / Math.max(1, report.totals.sessions)) * 100)}%` }} />
+                <strong>{item.total}</strong>
+              </div>
+            ))
+          ) : (
+            <p className="empty-copy">Belum ada data perangkat.</p>
+          )}
+        </section>
+      </div>
+
+      <div className="analytics-overview-grid analytics-overview-grid--secondary">
+        <section className="analytics-summary-card">
+          <p className="eyebrow">Perjalanan menuju permintaan</p>
+          <h2>Di langkah mana minat berkurang?</h2>
+          {report.funnel.map((item) => (
+            <div className="funnel-row" key={item.label}>
+              <span>{item.label}</span>
+              <b style={{ width: `${Math.round((item.total / Math.max(1, report.funnel[0]?.total ?? 1)) * 100)}%` }} />
+              <strong>{item.total}</strong>
+            </div>
+          ))}
+        </section>
+        <section className="analytics-summary-card">
+          <p className="eyebrow">Wilayah kunjungan</p>
+          <h2>Lokasi perkiraan berdasarkan jaringan</h2>
+          {report.cities.length ? (
+            report.cities.map((item) => (
+              <div className="location-row" key={item.key}>
+                <span>{item.key}</span>
+                <strong>{item.total} kunjungan</strong>
+              </div>
+            ))
+          ) : (
+            <p className="empty-copy">Lokasi akan terlihat ketika database GeoIP lokal telah dipasang di server.</p>
+          )}
+          {user.role !== "content" ? (
+            <Link className="report-link" href="/admin/insights">
+              Lihat perjalanan pengunjung →
+            </Link>
+          ) : null}
+        </section>
+      </div>
 
       <div className="workspace-grid">
         <section className="action-list">
@@ -122,13 +172,13 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
         </section>
         <section className="insight-card">
           <p className="eyebrow">Yang perlu diperhatikan</p>
-          <h2>{(overview?.current.formSubmits ?? 0) > 0 ? "Permintaan mulai masuk." : "Belum ada form terkirim."}</h2>
+          <h2>{report.totals.forms > 0 ? "Permintaan mulai masuk." : "Belum ada form terkirim."}</h2>
           <p>
-            {(overview?.current.ctaClicks ?? 0) > 0
+            {report.totals.ctaClicks > 0
               ? "Lihat tombol dan bagian halaman yang paling sering menarik minat pengunjung."
               : "Buka laporan pengunjung untuk melihat bagian halaman yang mulai sering diperhatikan."}
           </p>
-          {user.role === "admin" ? (
+          {user.role === "admin" || user.role === "sales" ? (
             <Link href="/admin/insights">Buka laporan →</Link>
           ) : (
             <Link href="/admin/content">Tinjau konten →</Link>

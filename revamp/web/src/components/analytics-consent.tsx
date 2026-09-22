@@ -33,9 +33,11 @@ export function AnalyticsConsent() {
   return (
     <aside className="analytics-consent" aria-label="Pilihan analitik">
       <p>
-        Kami menggunakan analitik anonim untuk memahami bagian website yang membantu pengunjung. Isi formulir tidak
-        direkam.
+        Dengan izin Anda, kami mencatat penggunaan website secara anonim—perangkat, lokasi kota kasar, klik, scroll, dan
+        bagian terakhir yang dilihat—untuk memperbaiki informasi di halaman. Isi formulir, nomor WhatsApp, dan IP tidak
+        direkam dalam analitik.
       </p>
+      <a href="/privasi">Pelajari cara kami menggunakan data</a>
       <div>
         <button type="button" onClick={() => choose("denied")}>
           Tolak

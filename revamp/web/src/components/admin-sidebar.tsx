@@ -59,7 +59,9 @@ export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
     { href: "/admin", label: "Beranda", icon: <HomeIcon /> },
     { href: "/admin/prospects", label: "Prospek", icon: <ProspectIcon /> },
     { href: "/admin/content", label: "Konten landing", icon: <ContentIcon /> },
-    ...(role === "admin" ? [{ href: "/admin/insights", label: "Laporan pengunjung", icon: <InsightIcon /> }] : []),
+    ...(role === "admin" || role === "sales"
+      ? [{ href: "/admin/insights", label: "Laporan pengunjung", icon: <InsightIcon /> }]
+      : []),
   ];
 
   return (

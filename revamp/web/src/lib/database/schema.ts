@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, jsonb, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -127,11 +127,26 @@ export const analyticsSessions = pgTable(
     landingPath: varchar("landing_path", { length: 500 }).notNull(),
     referrer: varchar("referrer", { length: 1000 }),
     attribution: jsonb("attribution"),
+    deviceCategory: varchar("device_category", { length: 20 }).notNull().default("unknown"),
+    browserName: varchar("browser_name", { length: 80 }),
+    operatingSystem: varchar("operating_system", { length: 80 }),
+    countryName: varchar("country_name", { length: 100 }),
+    regionName: varchar("region_name", { length: 120 }),
+    cityName: varchar("city_name", { length: 120 }),
+    lastSectionKey: varchar("last_section_key", { length: 100 }),
+    lastEventAt: timestamp("last_event_at", { withTimezone: true }),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    durationSeconds: integer("duration_seconds"),
+    consentVersion: varchar("consent_version", { length: 20 }).notNull().default("v1"),
     consentedAt: timestamp("consented_at", { withTimezone: true }).defaultNow().notNull(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [index("analytics_sessions_created_at_idx").on(table.createdAt)],
+  (table) => [
+    index("analytics_sessions_created_at_idx").on(table.createdAt),
+    index("analytics_sessions_device_created_at_idx").on(table.deviceCategory, table.createdAt),
+    index("analytics_sessions_city_created_at_idx").on(table.cityName, table.createdAt),
+  ],
 );
 
 export const analyticsEvents = pgTable(
@@ -146,11 +161,31 @@ export const analyticsEvents = pgTable(
     sectionKey: varchar("section_key", { length: 100 }),
     elementKey: varchar("element_key", { length: 160 }),
     metadata: jsonb("metadata"),
+    sequence: integer("sequence").notNull().default(1),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index("analytics_events_occurred_at_idx").on(table.occurredAt),
     index("analytics_events_name_occurred_at_idx").on(table.name, table.occurredAt),
     index("analytics_events_section_occurred_at_idx").on(table.sectionKey, table.occurredAt),
+    index("analytics_events_session_sequence_idx").on(table.sessionId, table.sequence),
   ],
+);
+
+export const analyticsDailyMetrics = pgTable(
+  "analytics_daily_metrics",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    reportDate: date("report_date").notNull(),
+    deviceCategory: varchar("device_category", { length: 20 }).notNull().default("unknown"),
+    cityName: varchar("city_name", { length: 120 }).notNull().default("Tidak diketahui"),
+    sourceName: varchar("source_name", { length: 120 }).notNull().default("Langsung"),
+    sessions: integer("sessions").notNull().default(0),
+    formSubmits: integer("form_submits").notNull().default(0),
+    ctaClicks: integer("cta_clicks").notNull().default(0),
+    whatsappClicks: integer("whatsapp_clicks").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("analytics_daily_metrics_date_idx").on(table.reportDate)],
 );

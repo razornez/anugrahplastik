@@ -11,6 +11,13 @@ export type AnalyticsHealth = {
   message: string;
 };
 
+function elapsedSeconds(now: number, value: Date | string | null | undefined) {
+  if (!value) return null;
+  const timestamp = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return null;
+  return Math.max(0, Math.round((now - timestamp) / 1000));
+}
+
 export async function getAnalyticsHealth(): Promise<AnalyticsHealth | null> {
   const database = getDatabase();
   if (!database) return null;
@@ -20,7 +27,9 @@ export async function getAnalyticsHealth(): Promise<AnalyticsHealth | null> {
       .select({
         pending: sql<number>`count(*) filter (where ${analyticsIngestBatches.status} in ('pending', 'processing'))`,
         failed: sql<number>`count(*) filter (where ${analyticsIngestBatches.status} = 'failed')`,
-        oldestAt: sql<Date | null>`min(${analyticsIngestBatches.receivedAt}) filter (where ${analyticsIngestBatches.status} in ('pending', 'processing'))`,
+        oldestAt: sql<
+          Date | string | null
+        >`min(${analyticsIngestBatches.receivedAt}) filter (where ${analyticsIngestBatches.status} in ('pending', 'processing'))`,
       })
       .from(analyticsIngestBatches),
     database
@@ -32,10 +41,8 @@ export async function getAnalyticsHealth(): Promise<AnalyticsHealth | null> {
   const now = Date.now();
   const pendingBatches = Number(queue[0]?.pending ?? 0);
   const failedBatches = Number(queue[0]?.failed ?? 0);
-  const oldest = queue[0]?.oldestAt;
-  const oldestSeconds = oldest ? Math.max(0, Math.round((now - oldest.getTime()) / 1000)) : 0;
-  const heartbeat = worker[0]?.heartbeatAt;
-  const workerSecondsAgo = heartbeat ? Math.max(0, Math.round((now - heartbeat.getTime()) / 1000)) : null;
+  const oldestSeconds = elapsedSeconds(now, queue[0]?.oldestAt) ?? 0;
+  const workerSecondsAgo = elapsedSeconds(now, worker[0]?.heartbeatAt);
 
   if (
     pendingBatches >= 2500 ||

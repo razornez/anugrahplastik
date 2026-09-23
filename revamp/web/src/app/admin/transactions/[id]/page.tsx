@@ -9,6 +9,8 @@ import {
 import { requireOperationsAccess } from "@/features/operations/access";
 import { getTransactionDetail } from "@/features/operations/service";
 
+export const instant = false;
+
 type TransactionStage = "commercial" | "payment" | "fulfilment";
 
 const stages: Record<TransactionStage, { label: string; shortLabel: string; description: string }> = {

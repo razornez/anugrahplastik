@@ -4,6 +4,8 @@ import { getSession } from "@/lib/auth/session";
 import { addProspectNote, assignProspect } from "@/features/workspace/actions";
 import { getProspects } from "@/features/workspace/service";
 
+export const instant = false;
+
 export default async function ProspectsPage({ searchParams }: { searchParams: Promise<{ selected?: string }> }) {
   const user = await getSession();
   if (!user) redirect("/admin/login");

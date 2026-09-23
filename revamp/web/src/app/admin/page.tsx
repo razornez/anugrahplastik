@@ -7,6 +7,8 @@ import { AnalyticsTrendChart } from "@/components/analytics-trend-chart";
 import { getAnalyticsReport } from "@/features/analytics/report-service";
 import { getAnalyticsHealth } from "@/features/analytics/health-service";
 
+export const instant = false;
+
 function activityLabel(action: string) {
   const labels: Record<string, string> = {
     "prospect.assigned": "Penanggung jawab prospek diperbarui",

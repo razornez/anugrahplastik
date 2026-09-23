@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { InstallAppButton } from "@/components/install-app-button";
 import { getSession } from "@/lib/auth/session";
 
+export const instant = false;
+
 export default async function ProfilePage() {
   const user = await getSession();
   if (!user) redirect("/admin/login");

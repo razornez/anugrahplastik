@@ -4,6 +4,8 @@ import { DesignModelViewer } from "@/components/design-model-viewer";
 import { requireOperationsAccess } from "@/features/operations/access";
 import { getDesignFile } from "@/features/operations/service";
 
+export const instant = false;
+
 function previewFormat(value: string): value is "stl" | "obj" | "glb" {
   return value === "stl" || value === "obj" || value === "glb";
 }

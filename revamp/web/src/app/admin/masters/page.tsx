@@ -11,6 +11,8 @@ import { getSession } from "@/lib/auth/session";
 import { DesignUploadForm } from "@/components/design-upload-form";
 import Link from "next/link";
 
+export const instant = false;
+
 function formatBytes(value: number) {
   return value < 1_000_000 ? `${Math.max(1, Math.round(value / 1_000))} KB` : `${(value / 1_000_000).toFixed(1)} MB`;
 }

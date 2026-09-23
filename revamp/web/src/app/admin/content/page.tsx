@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth/session";
 import { saveLandingContent } from "@/features/content/admin-actions";
 import { getDraftLandingContent } from "@/features/content/landing-service";
 
+export const instant = false;
+
 type Field = { name: string; label: string; value: string; multiline?: boolean };
 
 function ContentSection({ id, title, fields }: { id: string; title: string; fields: Field[] }) {

@@ -2,6 +2,8 @@ import { login } from "@/features/content/admin-actions";
 import Image from "next/image";
 import { AdminLoginForm } from "@/components/admin-login-form";
 
+export const instant = false;
+
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
   const localAutofill =

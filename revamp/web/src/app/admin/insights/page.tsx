@@ -4,6 +4,8 @@ import { actionLabel, eventLabel, sectionLabel } from "@/features/analytics/disp
 import { getAnalyticsReport, type DeviceFilter, type ReportFilters } from "@/features/analytics/report-service";
 import { getSession } from "@/lib/auth/session";
 
+export const instant = false;
+
 function queryString(filters: ReportFilters, session?: string) {
   const query = new URLSearchParams();
   query.set("days", String(filters.days));

@@ -3,6 +3,8 @@ import { TransactionCreateForm } from "@/components/transaction-create-form";
 import { getActiveCustomerCount, getOperationsOverview } from "@/features/operations/service";
 import { requireOperationsAccess } from "@/features/operations/access";
 
+export const instant = false;
+
 function stageLabel(value: string) {
   const labels: Record<string, string> = {
     quotation: "Penawaran disiapkan",

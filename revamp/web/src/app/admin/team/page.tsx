@@ -5,6 +5,8 @@ import { getDatabase } from "@/lib/database/client";
 import { users } from "@/lib/database/schema";
 import { createTeamMember, toggleTeamMember } from "@/features/workspace/team-actions";
 
+export const instant = false;
+
 export default async function TeamPage({
   searchParams,
 }: {

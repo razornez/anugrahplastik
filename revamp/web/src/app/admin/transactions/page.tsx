@@ -19,14 +19,12 @@ export default async function TransactionsPage() {
   const [overview, customerCount] = await Promise.all([getOperationsOverview(), getActiveCustomerCount()]);
 
   return (
-    <section className="operations-page">
-      <header className="operations-head operations-head--with-action">
+    <section className="operations-page transactions-page">
+      <header className="operations-head transactions-page__head">
         <div>
           <p className="eyebrow">Transaksi</p>
-          <h1>Jaga pekerjaan tetap bergerak dari penawaran sampai serah terima.</h1>
-          <p>
-            Setiap transaksi menyatukan dokumen, pembayaran, produksi, pengiriman, dan aktivitas dalam satu nomor kerja.
-          </p>
+          <h1>Semua pekerjaan, jelas tahapnya.</h1>
+          <p>Pilih pekerjaan untuk melihat tindakan berikutnya, atau mulai transaksi baru dari kebutuhan customer.</p>
         </div>
         <TransactionCreateForm customerCount={customerCount} />
       </header>

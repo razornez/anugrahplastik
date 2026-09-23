@@ -303,3 +303,86 @@ export async function releaseProduction(formData: FormData) {
   await writeAudit(user.id, "transaction.production_released", "transaction", transactionId);
   revalidatePath(`/admin/transactions/${transactionId}`);
 }
+
+const transactionTrackSchema = z.discriminatedUnion("track", [
+  z.object({
+    track: z.literal("commercial"),
+    status: z.enum(["quotation", "po_received", "contract", "completed"]),
+    reason: z.string().min(3).max(240),
+    transactionId: z.string().uuid(),
+  }),
+  z.object({
+    track: z.literal("payment"),
+    status: z.enum(["awaiting_invoice", "payment_recorded", "verified"]),
+    reason: z.string().min(3).max(240),
+    transactionId: z.string().uuid(),
+  }),
+  z.object({
+    track: z.literal("fulfilment"),
+    status: z.enum(["not_released", "released", "completed"]),
+    reason: z.string().min(3).max(240),
+    transactionId: z.string().uuid(),
+  }),
+]);
+
+export async function updateTransactionTrackStatus(formData: FormData) {
+  const user = await actor("owner");
+  const input = transactionTrackSchema.parse({
+    transactionId: value(formData, "transactionId"),
+    track: value(formData, "track"),
+    status: value(formData, "status"),
+    reason: value(formData, "reason"),
+  });
+  const database = getDatabase();
+  if (!database) throw new Error("Database belum terhubung.");
+  await database.transaction(async (transaction) => {
+    const [current] = await transaction
+      .select({
+        commercialStatus: businessTransactions.commercialStatus,
+        paymentStatus: businessTransactions.paymentStatus,
+        fulfilmentStatus: businessTransactions.fulfilmentStatus,
+      })
+      .from(businessTransactions)
+      .where(eq(businessTransactions.id, input.transactionId));
+    if (!current) throw new Error("Transaksi tidak ditemukan.");
+
+    const previousStatus =
+      input.track === "commercial"
+        ? current.commercialStatus
+        : input.track === "payment"
+          ? current.paymentStatus
+          : current.fulfilmentStatus;
+
+    if (input.track === "commercial") {
+      await transaction
+        .update(businessTransactions)
+        .set({ commercialStatus: input.status, updatedAt: new Date() })
+        .where(eq(businessTransactions.id, input.transactionId));
+    } else if (input.track === "payment") {
+      await transaction
+        .update(businessTransactions)
+        .set({ paymentStatus: input.status, updatedAt: new Date() })
+        .where(eq(businessTransactions.id, input.transactionId));
+    } else {
+      await transaction
+        .update(businessTransactions)
+        .set({ fulfilmentStatus: input.status, updatedAt: new Date() })
+        .where(eq(businessTransactions.id, input.transactionId));
+    }
+
+    await transaction.insert(auditLogs).values({
+      actorId: user.id,
+      action: "transaction.track_status_changed",
+      entityType: "transaction",
+      entityId: input.transactionId,
+      metadata: {
+        track: input.track,
+        previousStatus,
+        nextStatus: input.status,
+        reason: input.reason,
+      },
+    });
+  });
+  refreshOperations();
+  revalidatePath(`/admin/transactions/${input.transactionId}`);
+}

@@ -96,15 +96,15 @@ export default async function TransactionDetailPage({ params }: { params: Promis
               </div>
               {transaction.lines.map((line) => (
                 <div className="line-table-row" key={line.id}>
-                  <span>
+                  <span data-label="Barang / pekerjaan">
                     <strong>{line.productName ?? line.description}</strong>
                     <small>{line.materialName ?? "Material belum dipilih"}</small>
                   </span>
-                  <span>
+                  <span data-label="Jumlah">
                     {line.quantity} {line.unit}
                   </span>
-                  <span>{rupiah(Number(line.unitPrice))}</span>
-                  <span>{rupiah(Number(line.quantity) * Number(line.unitPrice))}</span>
+                  <span data-label="Harga">{rupiah(Number(line.unitPrice))}</span>
+                  <span data-label="Nilai">{rupiah(Number(line.quantity) * Number(line.unitPrice))}</span>
                 </div>
               ))}
             </div>

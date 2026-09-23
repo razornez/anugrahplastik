@@ -75,11 +75,11 @@ export default async function MastersPage() {
               <h2>Daftar customer</h2>
             </div>
           </div>
-          <form className="compact-form" action={createCustomer}>
-            <input name="code" placeholder="Kode, mis. CUS-001" required />
-            <input name="name" placeholder="Nama perusahaan / customer" required />
-            <input name="email" type="email" placeholder="Email (opsional)" />
-            <input name="phone" inputMode="tel" placeholder="WhatsApp (opsional)" />
+          <form className="compact-form compact-form--customer" action={createCustomer}>
+            <input aria-label="Kode customer" name="code" placeholder="Kode customer" required />
+            <input aria-label="Nama customer" name="name" placeholder="Nama customer" required />
+            <input aria-label="Email customer" name="email" type="email" placeholder="Email (opsional)" />
+            <input aria-label="WhatsApp customer" name="phone" inputMode="tel" placeholder="No. WhatsApp (opsional)" />
             <button type="submit">Tambah customer</button>
           </form>
           <div className="master-list">
@@ -104,8 +104,8 @@ export default async function MastersPage() {
             </div>
           </div>
           <form className="compact-form compact-form--two" action={createSupplier}>
-            <input name="code" placeholder="Kode pemasok" required />
-            <input name="name" placeholder="Nama pemasok" required />
+            <input aria-label="Kode pemasok" name="code" placeholder="Kode pemasok" required />
+            <input aria-label="Nama pemasok" name="name" placeholder="Nama pemasok" required />
             <button type="submit">Tambah pemasok</button>
           </form>
           <div className="master-list">
@@ -130,10 +130,10 @@ export default async function MastersPage() {
             </div>
           </div>
           <form className="compact-form compact-form--two" action={createMaterial}>
-            <input name="code" placeholder="Kode bahan" required />
-            <input name="name" placeholder="Nama bahan" required />
-            <input name="family" placeholder="Keluarga polimer, mis. PP" required />
-            <input name="grade" placeholder="Grade (opsional)" />
+            <input aria-label="Kode bahan" name="code" placeholder="Kode bahan" required />
+            <input aria-label="Nama bahan" name="name" placeholder="Nama bahan" required />
+            <input aria-label="Keluarga polimer" name="family" placeholder="Keluarga polimer" required />
+            <input aria-label="Grade bahan" name="grade" placeholder="Grade (opsional)" />
             <button type="submit">Tambah bahan</button>
           </form>
           <div className="master-list">
@@ -161,9 +161,16 @@ export default async function MastersPage() {
             </div>
           </div>
           <form className="compact-form compact-form--two" action={createProduct}>
-            <input name="sku" placeholder="Kode barang" required />
-            <input name="name" placeholder="Nama barang" required />
-            <input name="weight" type="number" min="0" step="0.001" placeholder="Berat per pcs (gram)" />
+            <input aria-label="Kode barang" name="sku" placeholder="Kode barang" required />
+            <input aria-label="Nama barang" name="name" placeholder="Nama barang" required />
+            <input
+              aria-label="Berat per pcs dalam gram"
+              name="weight"
+              type="number"
+              min="0"
+              step="0.001"
+              placeholder="Berat per pcs (gram)"
+            />
             <button type="submit">Tambah barang</button>
           </form>
           <div className="master-list">
@@ -192,9 +199,9 @@ export default async function MastersPage() {
             </div>
           </div>
           <form className="compact-form compact-form--two" action={createMould}>
-            <input name="code" placeholder="Kode mould" required />
-            <input name="name" placeholder="Nama mould" required />
-            <input name="cavities" type="number" min="1" placeholder="Jumlah cavity" />
+            <input aria-label="Kode mould" name="code" placeholder="Kode mould" required />
+            <input aria-label="Nama mould" name="name" placeholder="Nama mould" required />
+            <input aria-label="Jumlah cavity" name="cavities" type="number" min="1" placeholder="Jumlah cavity" />
             <button type="submit">Tambah mould</button>
           </form>
           <div className="master-list">

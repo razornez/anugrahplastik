@@ -100,7 +100,13 @@ export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
       <nav className="admin-sidebar-nav" aria-label="Menu back office">
         <p>RUANG KERJA</p>
         {navigation.map((item) => (
-          <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined}>
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={pathname === item.href ? "page" : undefined}
+            aria-label={item.label}
+            title={item.label}
+          >
             {item.icon}
             <span>{item.label}</span>
           </Link>
@@ -108,9 +114,16 @@ export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
       </nav>
 
       <div className="admin-sidebar-bottom">
-        <Link className="admin-public-link" href="/" target="_blank" rel="noreferrer">
+        <Link
+          className="admin-public-link"
+          href="/"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Lihat landing page"
+          title="Lihat landing page"
+        >
           <ExternalIcon />
-          Lihat landing page
+          <span>Lihat landing page</span>
         </Link>
         <Link className="admin-account" href="/admin/profile">
           <span aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>
@@ -120,7 +133,9 @@ export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
           </div>
         </Link>
         <form action={onLogout}>
-          <button type="submit">Keluar</button>
+          <button type="submit" aria-label="Keluar dari ruang kerja" title="Keluar dari ruang kerja">
+            <span>Keluar</span>
+          </button>
         </form>
       </div>
       <nav className="admin-bottom-nav" aria-label="Navigasi mobile">

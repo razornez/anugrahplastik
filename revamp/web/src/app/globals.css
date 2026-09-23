@@ -5073,6 +5073,72 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Transaction search is a compact toolbar, never a shrinking flex row. */
+.transaction-list-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(116px, 0.55fr) auto;
+  align-items: end;
+  gap: 10px;
+  padding: 18px;
+  border-bottom: 1px solid #edf1f6;
+}
+.transaction-list-head > strong {
+  grid-column: 1 / -1;
+  min-width: 0;
+  font-size: 14px;
+}
+.transaction-list-head input,
+.transaction-list-head select {
+  min-width: 0;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 11px;
+  border: 1px solid #d8e3ef;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--admin-ink);
+  font: inherit;
+  font-size: 12px;
+}
+.transaction-list-head button {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--admin-blue);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.transaction-list > .directory-pagination {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 16px 18px;
+  border-top: 1px solid #edf1f6;
+}
+.transaction-list > .directory-pagination a,
+.transaction-list > .directory-pagination > span:first-child,
+.transaction-list > .directory-pagination > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.transaction-list > .directory-pagination > span:nth-child(2) {
+  max-width: 86px;
+  color: var(--admin-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+}
+.transaction-list > .directory-pagination a:last-child,
+.transaction-list > .directory-pagination > span:last-child {
+  text-align: right;
+}
+
 @media (max-width: 980px) {
   .master-hub__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5082,6 +5148,22 @@ body {
   }
 }
 @media (max-width: 560px) {
+  .transaction-list-head {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+  .transaction-list-head > strong,
+  .transaction-list-head input,
+  .transaction-list-head select,
+  .transaction-list-head button {
+    grid-column: 1;
+  }
+  .transaction-list-head button {
+    width: 100%;
+  }
+  .transaction-list > .directory-pagination {
+    padding: 14px 16px;
+  }
   .master-hub__grid {
     grid-template-columns: 1fr;
     gap: 12px;

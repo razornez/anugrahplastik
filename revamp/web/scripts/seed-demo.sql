@@ -163,3 +163,128 @@ FROM entries
 WHERE NOT EXISTS (
   SELECT 1 FROM audit_logs existing WHERE existing.action = entries.action AND existing.entity_id = entries.entity_id
 );
+
+-- Operational demonstration data. Values deliberately reflect different stages so the transaction workspace can be reviewed.
+INSERT INTO customers (code, legal_name, display_name, email, phone, delivery_address, notes)
+VALUES
+  ('CUS-001', 'PT Sinar Kemasan Nusantara', 'Sinar Kemasan', 'purchasing@sinarkemasan.co.id', '0812-7890-1122', 'Kawasan Industri Rancaekek, Bandung', 'Komponen untuk lini pengemasan.'),
+  ('CUS-002', 'CV Garuda Teknik Mandiri', 'Garuda Teknik', 'operasional@garudateknik.co.id', '0813-4402-8831', 'Cimahi, Jawa Barat', 'Reproduksi spare part mesin.'),
+  ('CUS-003', 'PT Daya Cipta Interior', 'Daya Cipta Interior', 'proyek@dayacipta.co.id', '0811-2233-8877', 'Kota Bandung, Jawa Barat', 'Produk custom proyek interior.')
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO suppliers (code, name, contact_name, phone, notes)
+VALUES
+  ('SUP-001', 'PT Polimer Jaya', 'Rudi', '0812-1001-2222', 'Resin PP dan HDPE.'),
+  ('SUP-002', 'CV Warna Presisi', 'Intan', '0812-3004-5521', 'Masterbatch dan warna custom.')
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO materials (code, name, polymer_family, grade, density, notes)
+VALUES
+  ('MAT-PP-01', 'Polypropylene Natural', 'PP', 'Injection grade', 0.900, 'Untuk komponen umum.'),
+  ('MAT-NYL-01', 'Nylon 6', 'Nylon', 'Engineering grade', 1.140, 'Untuk gear dan komponen tahan aus.'),
+  ('MAT-HDPE-01', 'HDPE Natural', 'HDPE', 'Blow / injection grade', 0.950, 'Untuk komponen dengan ketahanan kimia.')
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO material_suppliers (material_id, supplier_id, supplier_sku, reference_price, lead_time_days, is_preferred)
+SELECT material.id, supplier.id, source.sku, source.price, source.lead_days, true
+FROM (VALUES
+  ('MAT-PP-01', 'SUP-001', 'PP-INJ-NAT', 18500.00, 3),
+  ('MAT-NYL-01', 'SUP-001', 'NYL6-ENG', 62000.00, 5),
+  ('MAT-HDPE-01', 'SUP-001', 'HDPE-NAT', 20500.00, 3)
+) AS source(material_code, supplier_code, sku, price, lead_days)
+JOIN materials material ON material.code = source.material_code
+JOIN suppliers supplier ON supplier.code = source.supplier_code
+ON CONFLICT (material_id, supplier_id) DO NOTHING;
+
+INSERT INTO material_color_lots (material_id, color_name, color_code, lot_number)
+SELECT material.id, source.color_name, source.color_code, source.lot_number
+FROM (VALUES
+  ('MAT-PP-01', 'Biru teknis', '#1767D1', 'PP-BLU-2408'),
+  ('MAT-NYL-01', 'Hitam', '#1D2228', 'NYL-BLK-2409')
+) AS source(material_code, color_name, color_code, lot_number)
+JOIN materials material ON material.code = source.material_code
+WHERE NOT EXISTS (SELECT 1 FROM material_color_lots existing WHERE existing.lot_number = source.lot_number);
+
+INSERT INTO products (sku, name, specification, default_material_id, unit_weight_grams)
+SELECT source.sku, source.name, source.specification, material.id, source.weight
+FROM (VALUES
+  ('PRD-GEAR-001', 'Cover gear mesin pengemas', 'Reproduksi berdasarkan sampel fisik.', 'MAT-NYL-01', 68.500),
+  ('PRD-SPACER-001', 'Spacer nylon 30 mm', 'Komponen spacer mesin.', 'MAT-NYL-01', 12.200),
+  ('PRD-CLIP-001', 'Clip kabel custom', 'Produk custom interior.', 'MAT-PP-01', 7.800)
+) AS source(sku, name, specification, material_code, weight)
+JOIN materials material ON material.code = source.material_code
+ON CONFLICT (sku) DO NOTHING;
+
+INSERT INTO moulds (code, name, product_id, cavity_count, construction_material, status)
+SELECT source.code, source.name, product.id, source.cavities, source.construction_material, source.status
+FROM (VALUES
+  ('MLD-GEAR-01', 'Mould cover gear 1 cavity', 'PRD-GEAR-001', 1, 'P20 steel', 'active'),
+  ('MLD-CLIP-01', 'Mould clip kabel 4 cavity', 'PRD-CLIP-001', 4, 'P20 steel', 'planned')
+) AS source(code, name, product_sku, cavities, construction_material, status)
+JOIN products product ON product.sku = source.product_sku
+ON CONFLICT (code) DO NOTHING;
+
+WITH admin_user AS (
+  SELECT id FROM users WHERE role = 'admin' AND is_active = true ORDER BY created_at LIMIT 1
+), source(reference_no, customer_code, title, commercial_status, payment_status, fulfilment_status, created_at) AS (
+  VALUES
+    ('TRX-2026-00001', 'CUS-001', 'Reproduksi cover gear mesin pengemas', 'quotation', 'awaiting_payment', 'not_released', now() - interval '1 day'),
+    ('TRX-2026-00002', 'CUS-002', 'Produksi spacer nylon untuk mesin', 'contract', 'verified', 'released', now() - interval '6 days'),
+    ('TRX-2026-00003', 'CUS-003', 'Clip kabel custom untuk proyek interior', 'po_received', 'partial', 'sample', now() - interval '12 days')
+)
+INSERT INTO business_transactions (reference_no, customer_id, owner_id, title, commercial_status, payment_status, fulfilment_status, created_at, updated_at, quoted_at)
+SELECT source.reference_no, customer.id, (SELECT id FROM admin_user), source.title, source.commercial_status, source.payment_status, source.fulfilment_status, source.created_at, source.created_at, source.created_at
+FROM source
+JOIN customers customer ON customer.code = source.customer_code
+ON CONFLICT (reference_no) DO NOTHING;
+
+INSERT INTO transaction_lines (transaction_id, product_id, material_id, description, quantity, unit, unit_price, tax_rate)
+SELECT transaction.id, product.id, material.id, source.description, source.quantity, 'pcs', source.unit_price, 11.00
+FROM (VALUES
+  ('TRX-2026-00001', 'PRD-GEAR-001', 'MAT-NYL-01', 'Cover gear mesin pengemas', 120.000, 78500.00),
+  ('TRX-2026-00002', 'PRD-SPACER-001', 'MAT-NYL-01', 'Spacer nylon 30 mm', 1500.000, 6900.00),
+  ('TRX-2026-00003', 'PRD-CLIP-001', 'MAT-PP-01', 'Clip kabel custom', 800.000, 4200.00)
+) AS source(reference_no, product_sku, material_code, description, quantity, unit_price)
+JOIN business_transactions transaction ON transaction.reference_no = source.reference_no
+JOIN products product ON product.sku = source.product_sku
+JOIN materials material ON material.code = source.material_code
+WHERE NOT EXISTS (SELECT 1 FROM transaction_lines existing WHERE existing.transaction_id = transaction.id AND existing.description = source.description);
+
+INSERT INTO transaction_invoices (transaction_id, invoice_no, kind, amount, due_at, status, issued_at)
+SELECT transaction.id, source.invoice_no, source.kind, source.amount, now() + make_interval(days => source.due_offset), source.status, now() - interval '1 day'
+FROM (VALUES
+  ('TRX-2026-00001', 'INV-2026-00001', 'deposit', 2826000.00, 7, 'sent'),
+  ('TRX-2026-00002', 'INV-2026-00002', 'final', 11488500.00, -1, 'paid'),
+  ('TRX-2026-00003', 'INV-2026-00003', 'deposit', 1680000.00, 3, 'partial')
+) AS source(reference_no, invoice_no, kind, amount, due_offset, status)
+JOIN business_transactions transaction ON transaction.reference_no = source.reference_no
+ON CONFLICT (invoice_no) DO NOTHING;
+
+WITH admin_user AS (
+  SELECT id FROM users WHERE role = 'admin' AND is_active = true ORDER BY created_at LIMIT 1
+)
+INSERT INTO transaction_financial_entries (transaction_id, invoice_id, kind, direction, amount, occurred_at, status, reference, verified_by, verified_at)
+SELECT transaction.id, invoice.id, 'customer_payment', 'in', source.amount, now() - source.age, 'verified', source.reference, (SELECT id FROM admin_user), now() - source.age
+FROM (VALUES
+  ('TRX-2026-00002', 'INV-2026-00002', 11488500.00, interval '2 days', 'TRF-883920'),
+  ('TRX-2026-00003', 'INV-2026-00003', 1000000.00, interval '4 days', 'TRF-882117')
+) AS source(reference_no, invoice_no, amount, age, reference)
+JOIN business_transactions transaction ON transaction.reference_no = source.reference_no
+JOIN transaction_invoices invoice ON invoice.invoice_no = source.invoice_no
+WHERE NOT EXISTS (SELECT 1 FROM transaction_financial_entries existing WHERE existing.reference = source.reference);
+
+INSERT INTO production_batches (transaction_id, product_id, material_id, mould_id, batch_no, kind, status, planned_quantity, completed_quantity, started_at)
+SELECT transaction.id, product.id, material.id, mould.id, source.batch_no, source.kind, source.status, source.planned, source.completed, now() - source.age
+FROM (VALUES
+  ('TRX-2026-00002', 'PRD-SPACER-001', 'MAT-NYL-01', 'MLD-GEAR-01', 'BAT-2026-00012', 'production', 'in_progress', 1500.000, 740.000, interval '1 day'),
+  ('TRX-2026-00003', 'PRD-CLIP-001', 'MAT-PP-01', 'MLD-CLIP-01', 'BAT-2026-00013', 'sample', 'awaiting_approval', 20.000, 20.000, interval '3 days')
+) AS source(reference_no, product_sku, material_code, mould_code, batch_no, kind, status, planned, completed, age)
+JOIN business_transactions transaction ON transaction.reference_no = source.reference_no
+JOIN products product ON product.sku = source.product_sku
+JOIN materials material ON material.code = source.material_code
+JOIN moulds mould ON mould.code = source.mould_code
+ON CONFLICT (batch_no) DO NOTHING;
+
+INSERT INTO transaction_number_counters (reference_year, last_value)
+VALUES (2026, 3)
+ON CONFLICT (reference_year) DO UPDATE SET last_value = GREATEST(transaction_number_counters.last_value, EXCLUDED.last_value), updated_at = now();

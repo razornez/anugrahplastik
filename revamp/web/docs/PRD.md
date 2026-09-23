@@ -23,13 +23,13 @@ Meningkatkan jumlah RFQ berkualitas dari calon pelanggan yang membutuhkan cetak 
 3. CMS section-based untuk hero, layanan, portfolio, FAQ, CTA, navigasi, kontak, dan metadata.
 4. CRM dasar: lead, status, catatan follow-up, attribution, dan hak akses admin/content/sales.
 5. Notifikasi lead ke sales melalui WhatsApp Cloud API setelah kredensial tersedia.
-6. GA4, GTM, PostHog, serta consent sebelum pengukuran non-esensial aktif.
+6. Pengukuran perilaku anonim dengan opt-out yang dapat diakses dari footer dan halaman privasi.
 7. Insight perilaku anonim: section engagement, scroll milestone, CTA, FAQ, portfolio, form funnel, dan titik keluar.
 
 ## Batasan rilis pertama
 
 - Form publik mengumpulkan nama, nomor WhatsApp, dan kebutuhan singkat.
-- Analitik perilaku hanya aktif setelah persetujuan; isi form, nomor telepon, dan pesan tidak direkam sebagai event.
+- Analitik perilaku memakai ID kunjungan acak dan dapat dinonaktifkan; isi form, nomor telepon, pesan, dan IP tidak direkam sebagai event.
 - Tidak ada inventory, pengadaan, keuangan, quotation otomatis, chatbot, atau upload file publik pada rilis pertama.
 - Media CMS disimpan pada disk server; database hanya menyimpan metadata.
 
@@ -47,3 +47,11 @@ Meningkatkan jumlah RFQ berkualitas dari calon pelanggan yang membutuhkan cetak 
 - Layout rapi pada iPhone 12 mini (375 × 812), tablet, dan desktop.
 - Submit inquiry menghasilkan lead beserta halaman asal, referrer, dan UTM.
 - Konten draft tidak terlihat publik; content, sales, dan admin hanya dapat mengakses fungsi sesuai perannya.
+
+## Epic operasional
+
+- Customer, supplier, material, warna/lot, barang, mould, dan file desain privat menjadi master bersama.
+- Transaksi bernomor `TRX-YYYY-#####` menautkan penawaran, PO, kontrak, invoice, pembayaran, batch produksi, pengiriman, dan BAST.
+- Pembayaran dapat parsial; hanya administrator yang memverifikasi pembayaran dan melepas produksi.
+- File kerja 3D tidak dipublikasikan. Preview browser dibatasi ke STL, OBJ, dan GLB; sumber CAD diunduh tim berwenang.
+- Penagihan transaksi, biaya proyek, dan piutang dicatat per transaksi. Jurnal akuntansi umum, stok fisik, dan pengadaan supplier berada di luar scope epic ini.

@@ -126,6 +126,10 @@ export function renderLandingTemplate(content: LandingContent) {
     /(<footer[\s\S]*?<p style="font-size: 14px; line-height: 1\.65; margin: 16px 0 0; max-width: 340px">)[\s\S]*?(<\/p>)/,
     content.footer.description,
   );
+  markup = markup.replace(
+    /(<span id="ap-copy">[\s\S]*?<\/span>)/,
+    `$1 <a class="ap-link" href="/privasi" style="margin-left: 12px">Privasi &amp; pengaturan analitik</a>`,
+  );
 
   return markup;
 }

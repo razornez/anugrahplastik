@@ -20,13 +20,20 @@ export type AnalyticsEventName = (typeof analyticsEventNames)[number];
 const shortKey = z.string().trim().min(1).max(160);
 
 export const analyticsEventSchema = z.object({
-  anonymousId: z.string().uuid(),
   name: z.enum(analyticsEventNames),
   path: z.string().startsWith("/").max(500),
   sectionKey: shortKey.optional(),
   elementKey: shortKey.optional(),
   metadata: z.record(z.string().max(50), z.union([z.string().max(120), z.number().finite(), z.boolean()])).optional(),
-  consentVersion: z.literal("v1"),
+  occurredAt: z.string().datetime().optional(),
 });
 
 export type AnalyticsEvent = z.infer<typeof analyticsEventSchema>;
+
+export const analyticsBatchSchema = z.object({
+  anonymousId: z.string().uuid(),
+  events: z.array(analyticsEventSchema).min(1).max(25),
+  consentVersion: z.literal("v1"),
+});
+
+export type AnalyticsBatch = z.infer<typeof analyticsBatchSchema>;

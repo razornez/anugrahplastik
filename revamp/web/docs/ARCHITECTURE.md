@@ -13,15 +13,17 @@
 - `content`: section, media, draft, publish, navigasi, SEO, redirect.
 - `crm`: lead, status pipeline, catatan, attribution, activity log.
 - `identity`: user, role, session, audit log.
-- `integrations`: WhatsApp, analytics, webhook, konfigurasi rahasia.
+- `operations`: customer, supplier, material, barang, mould, transaksi, pembayaran proyek, batch, pengiriman, dan dokumen.
+- `integrations`: WhatsApp, analytics, DocGen, Gmail, webhook, konfigurasi rahasia.
 
 ## Aturan data
 
 - Mutation hanya melalui server action atau route handler yang tervalidasi.
 - Migration versioned adalah satu-satunya cara mengubah schema.
-- Media berada di volume server dan direferensikan oleh `media_assets`.
+- Media publik berada di volume server dan direferensikan oleh `media_assets`; file kerja 3D dan dokumen transaksi berada di storage privat di luar `public/`.
 - Lead dan aktivitas tidak boleh dihapus dari UI biasa; gunakan status, archive, atau audit trail.
-- Event analitik menyimpan sesi anonim, nama event, halaman, section, elemen, dan metadata terbatas; tidak menyimpan nilai input formulir.
+- Event analitik menyimpan sesi anonim, nama event, halaman, section, elemen, dan metadata terbatas; tidak menyimpan nilai input formulir. Browser mengirim batch kecil ke antrean PostgreSQL, lalu satu worker meringkasnya agar request landing tetap ringan.
+- Angka transaksi yang bersifat riwayat—jumlah terjual, customer pembeli, batch, dan penggunaan material—diturunkan dari transaksi/batch, bukan diubah langsung pada master.
 
 ## Cache
 
@@ -36,7 +38,7 @@
 - Password saat ini memakai bcrypt dengan cost factor 12; migrasi ke Argon2id dilakukan bersama proses rehash akun agar tidak menurunkan kompatibilitas sesi yang sudah ada.
 - Semua secret hanya di environment server.
 - Webhook diverifikasi, form dibatasi laju request, dan input tervalidasi di server.
-- Tracking non-esensial hanya berjalan setelah consent. Ringkasan insight WhatsApp saat ini dibuka manual oleh admin melalui tautan pesan yang sudah terisi; tidak ada pengiriman otomatis sebelum integrasi resmi tersedia.
+- Tracking berjalan anonim secara default dan dapat dinonaktifkan dari footer atau halaman privasi. Nama, nomor WhatsApp, isi formulir, dan IP tidak masuk ke analitik. Ringkasan insight WhatsApp saat ini dibuka manual oleh admin melalui tautan pesan yang sudah terisi; tidak ada pengiriman otomatis sebelum integrasi resmi tersedia.
 
 ## Menjalankan lapisan data
 

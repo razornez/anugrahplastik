@@ -2,12 +2,12 @@
 
 import { useEffect } from "react";
 import { analyticsConsent } from "./analytics-consent";
-import type { AnalyticsEvent, AnalyticsEventName } from "@/features/analytics/schema";
+import type { AnalyticsBatch, AnalyticsEvent, AnalyticsEventName } from "@/features/analytics/schema";
 
 const anonymousKey = "ap-analytics-anonymous-id-v1";
 const scrollMilestones = [25, 50, 75, 90] as const;
 
-type TrackDetail = Omit<AnalyticsEvent, "anonymousId" | "path">;
+type TrackDetail = Omit<AnalyticsEvent, "path" | "occurredAt">;
 
 function anonymousId() {
   const existing = window.localStorage.getItem(anonymousKey);
@@ -22,8 +22,9 @@ function currentPath() {
   return window.location.pathname;
 }
 
-function sendEvent(event: Omit<AnalyticsEvent, "anonymousId" | "consentVersion">, useBeacon = false) {
-  const payload: AnalyticsEvent = { ...event, anonymousId: anonymousId(), consentVersion: "v1" };
+function sendBatch(events: AnalyticsEvent[], useBeacon = false) {
+  if (!analyticsConsent() || events.length === 0) return;
+  const payload: AnalyticsBatch = { anonymousId: anonymousId(), events, consentVersion: "v1" };
   const body = JSON.stringify(payload);
 
   if (useBeacon && navigator.sendBeacon) {
@@ -73,7 +74,6 @@ export function AnalyticsTracker() {
     let dispose = () => undefined;
 
     const start = () => {
-      if (!analyticsConsent()) return;
       const root = document.getElementById("ap-root");
       if (!root) return;
 
@@ -83,8 +83,14 @@ export function AnalyticsTracker() {
       const observedSections = new Set<string>();
       const sectionTimers = new Map<string, number>();
       const reachedMilestones = new Set<number>();
+      const queue: AnalyticsEvent[] = [];
+      const flush = (useBeacon = false) => {
+        const outgoing = queue.splice(0, 25);
+        sendBatch(outgoing, useBeacon);
+      };
       const track = (name: AnalyticsEventName, detail: Partial<TrackDetail> = {}, useBeacon = false) => {
-        sendEvent({ name, path: currentPath(), ...detail }, useBeacon);
+        queue.push({ name, path: currentPath(), ...detail, occurredAt: new Date().toISOString() });
+        if (useBeacon || queue.length >= 10) flush(useBeacon);
       };
 
       track("page_view");
@@ -154,7 +160,10 @@ export function AnalyticsTracker() {
           track("form_abandon", { sectionKey: "ap-contact", elementKey: "request-form" }, true);
         }
         track("page_leave", { sectionKey: activeSection }, true);
+        flush(true);
       };
+
+      const interval = window.setInterval(() => flush(), 5_000);
 
       window.addEventListener("scroll", onScroll, { passive: true });
       root.addEventListener("click", onClick);
@@ -171,14 +180,19 @@ export function AnalyticsTracker() {
         window.removeEventListener("pagehide", onPageHide);
         sectionTimers.forEach((timer) => window.clearTimeout(timer));
         sectionObserver.disconnect();
+        window.clearInterval(interval);
+        flush();
       };
     };
 
-    const onConsent = () => start();
+    const onConsent = () => {
+      dispose();
+      start();
+    };
     start();
-    window.addEventListener("ap:analytics-consent", onConsent);
+    window.addEventListener("ap:analytics-preference", onConsent);
     return () => {
-      window.removeEventListener("ap:analytics-consent", onConsent);
+      window.removeEventListener("ap:analytics-preference", onConsent);
       dispose();
     };
   }, []);

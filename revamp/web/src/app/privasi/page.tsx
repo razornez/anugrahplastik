@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AnalyticsPreferenceControl } from "@/components/analytics-preference-control";
 
 export const metadata: Metadata = { title: "Privasi Analitik | Anugrah Plastik" };
 
@@ -8,7 +9,7 @@ export default function PrivacyPage() {
       <p className="eyebrow">Privasi analitik</p>
       <h1>Informasi penggunaan website dipakai untuk memperbaiki pengalaman pengunjung.</h1>
       <section>
-        <h2>Yang dicatat setelah Anda mengizinkan</h2>
+        <h2>Yang dicatat secara anonim</h2>
         <p>
           Jenis perangkat, browser, sumber kunjungan, lokasi kota/kabupaten perkiraan, bagian halaman yang dibuka,
           kedalaman scroll, dan tombol yang dipilih.
@@ -31,9 +32,10 @@ export default function PrivacyPage() {
       <section>
         <h2>Pilihan Anda</h2>
         <p>
-          Anda dapat menolak analitik pada pemberitahuan yang muncul saat membuka website. Penolakan tidak memengaruhi
-          fungsi utama website.
+          Anda dapat menonaktifkan analitik di perangkat ini kapan saja. Pilihan tersebut tidak memengaruhi fungsi utama
+          website.
         </p>
+        <AnalyticsPreferenceControl />
       </section>
     </main>
   );

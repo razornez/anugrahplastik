@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth/session";
 import { getWorkspaceOverview, type WorkspacePeriod } from "@/features/workspace/service";
 import { AnalyticsTrendChart } from "@/components/analytics-trend-chart";
 import { getAnalyticsReport } from "@/features/analytics/report-service";
+import { getAnalyticsHealth } from "@/features/analytics/health-service";
 
 function activityLabel(action: string) {
   const labels: Record<string, string> = {
@@ -26,9 +27,10 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   const query = await searchParams;
   const period: WorkspacePeriod = query.period === "today" || query.period === "month" ? query.period : "week";
   const days = period === "today" ? 7 : period === "month" ? 30 : 7;
-  const [overview, report] = await Promise.all([
+  const [overview, report, analyticsHealth] = await Promise.all([
     getWorkspaceOverview(period),
     getAnalyticsReport({ days, device: "all", city: "", source: "", outcome: "" }),
+    user.role === "admin" ? getAnalyticsHealth() : Promise.resolve(null),
   ]);
   const label = period === "today" ? "Hari ini" : period === "month" ? "Bulan berjalan" : "7 hari terakhir";
 
@@ -142,6 +144,40 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
           ) : null}
         </section>
       </div>
+
+      {user.role === "admin" && analyticsHealth ? (
+        <section className={`analytics-health analytics-health--${analyticsHealth.status}`}>
+          <div>
+            <p className="eyebrow">Kesehatan pencatatan pengunjung</p>
+            <h2>
+              {analyticsHealth.status === "normal"
+                ? "Sistem masih lapang"
+                : analyticsHealth.status === "attention"
+                  ? "Perlu dipantau"
+                  : "Perlu ditangani"}
+            </h2>
+            <p>{analyticsHealth.message}</p>
+          </div>
+          <dl>
+            <div>
+              <dt>Antrean</dt>
+              <dd>{analyticsHealth.pendingBatches} batch</dd>
+            </div>
+            <div>
+              <dt>Batch tertua</dt>
+              <dd>{analyticsHealth.oldestSeconds} dtk</dd>
+            </div>
+            <div>
+              <dt>Worker</dt>
+              <dd>
+                {analyticsHealth.workerSecondsAgo === null
+                  ? "Belum terbaca"
+                  : `${analyticsHealth.workerSecondsAgo} dtk lalu`}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
 
       <div className="workspace-grid">
         <section className="action-list">

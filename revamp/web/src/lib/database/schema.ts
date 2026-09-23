@@ -1,4 +1,17 @@
-import { boolean, date, index, integer, jsonb, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  date,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -137,6 +150,7 @@ export const analyticsSessions = pgTable(
     lastEventAt: timestamp("last_event_at", { withTimezone: true }),
     endedAt: timestamp("ended_at", { withTimezone: true }),
     durationSeconds: integer("duration_seconds"),
+    eventSequence: integer("event_sequence").notNull().default(0),
     consentVersion: varchar("consent_version", { length: 20 }).notNull().default("v1"),
     consentedAt: timestamp("consented_at", { withTimezone: true }).defaultNow().notNull(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
@@ -188,4 +202,393 @@ export const analyticsDailyMetrics = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("analytics_daily_metrics_date_idx").on(table.reportDate)],
+);
+
+/**
+ * The public website only appends compact batches here. A dedicated worker
+ * expands them into the reporting tables, so visitor traffic cannot compete
+ * with lead forms or the operational workspace for request time.
+ */
+export const analyticsIngestBatches = pgTable(
+  "analytics_ingest_batches",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    anonymousId: varchar("anonymous_id", { length: 72 }).notNull(),
+    payload: jsonb("payload").notNull(),
+    eventCount: integer("event_count").notNull(),
+    priority: integer("priority").notNull().default(0),
+    status: varchar("status", { length: 20 }).notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    lastError: text("last_error"),
+  },
+  (table) => [
+    index("analytics_ingest_batches_status_received_idx").on(table.status, table.receivedAt),
+    index("analytics_ingest_batches_anonymous_received_idx").on(table.anonymousId, table.receivedAt),
+  ],
+);
+
+export const analyticsWorkerState = pgTable("analytics_worker_state", {
+  name: varchar("name", { length: 60 }).primaryKey(),
+  heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }).notNull().defaultNow(),
+  processedBatches: integer("processed_batches").notNull().default(0),
+  processedEvents: integer("processed_events").notNull().default(0),
+  failedBatches: integer("failed_batches").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const customers = pgTable(
+  "customers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    code: varchar("code", { length: 32 }).notNull().unique(),
+    kind: varchar("kind", { length: 20 }).notNull().default("business"),
+    legalName: varchar("legal_name", { length: 180 }).notNull(),
+    displayName: varchar("display_name", { length: 180 }).notNull(),
+    taxId: varchar("tax_id", { length: 32 }),
+    email: varchar("email", { length: 255 }),
+    phone: varchar("phone", { length: 32 }),
+    billingAddress: text("billing_address"),
+    deliveryAddress: text("delivery_address"),
+    notes: text("notes"),
+    status: varchar("status", { length: 20 }).notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("customers_status_display_name_idx").on(table.status, table.displayName)],
+);
+
+export const customerContacts = pgTable(
+  "customer_contacts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 120 }).notNull(),
+    position: varchar("position", { length: 100 }),
+    email: varchar("email", { length: 255 }),
+    phone: varchar("phone", { length: 32 }),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("customer_contacts_customer_idx").on(table.customerId)],
+);
+
+export const suppliers = pgTable(
+  "suppliers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    code: varchar("code", { length: 32 }).notNull().unique(),
+    name: varchar("name", { length: 180 }).notNull(),
+    contactName: varchar("contact_name", { length: 120 }),
+    email: varchar("email", { length: 255 }),
+    phone: varchar("phone", { length: 32 }),
+    address: text("address"),
+    notes: text("notes"),
+    status: varchar("status", { length: 20 }).notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("suppliers_status_name_idx").on(table.status, table.name)],
+);
+
+export const materials = pgTable(
+  "materials",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    code: varchar("code", { length: 32 }).notNull().unique(),
+    name: varchar("name", { length: 160 }).notNull(),
+    polymerFamily: varchar("polymer_family", { length: 100 }).notNull(),
+    grade: varchar("grade", { length: 120 }),
+    density: numeric("density", { precision: 7, scale: 3 }),
+    unit: varchar("unit", { length: 16 }).notNull().default("kg"),
+    notes: text("notes"),
+    status: varchar("status", { length: 20 }).notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("materials_status_name_idx").on(table.status, table.name)],
+);
+
+export const materialSuppliers = pgTable(
+  "material_suppliers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => materials.id, { onDelete: "cascade" }),
+    supplierId: uuid("supplier_id")
+      .notNull()
+      .references(() => suppliers.id, { onDelete: "restrict" }),
+    supplierSku: varchar("supplier_sku", { length: 100 }),
+    referencePrice: numeric("reference_price", { precision: 16, scale: 2 }),
+    leadTimeDays: integer("lead_time_days"),
+    isPreferred: boolean("is_preferred").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("material_suppliers_material_supplier_unique").on(table.materialId, table.supplierId),
+    index("material_suppliers_supplier_idx").on(table.supplierId),
+  ],
+);
+
+export const materialColorLots = pgTable(
+  "material_color_lots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => materials.id, { onDelete: "cascade" }),
+    colorName: varchar("color_name", { length: 100 }).notNull(),
+    colorCode: varchar("color_code", { length: 32 }),
+    lotNumber: varchar("lot_number", { length: 100 }),
+    status: varchar("status", { length: 20 }).notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("material_color_lots_material_idx").on(table.materialId)],
+);
+
+export const products = pgTable(
+  "products",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sku: varchar("sku", { length: 64 }).notNull().unique(),
+    name: varchar("name", { length: 180 }).notNull(),
+    specification: text("specification"),
+    defaultMaterialId: uuid("default_material_id").references(() => materials.id, { onDelete: "set null" }),
+    unitWeightGrams: numeric("unit_weight_grams", { precision: 12, scale: 3 }),
+    unit: varchar("unit", { length: 16 }).notNull().default("pcs"),
+    photoAssetId: uuid("photo_asset_id").references(() => mediaAssets.id, { onDelete: "set null" }),
+    status: varchar("status", { length: 20 }).notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("products_status_name_idx").on(table.status, table.name)],
+);
+
+export const moulds = pgTable(
+  "moulds",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    code: varchar("code", { length: 64 }).notNull().unique(),
+    name: varchar("name", { length: 180 }).notNull(),
+    productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+    cavityCount: integer("cavity_count"),
+    constructionMaterial: varchar("construction_material", { length: 120 }),
+    status: varchar("status", { length: 24 }).notNull().default("planned"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("moulds_product_status_idx").on(table.productId, table.status)],
+);
+
+export const businessTransactions = pgTable(
+  "business_transactions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    referenceNo: varchar("reference_no", { length: 32 }).notNull().unique(),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "restrict" }),
+    ownerId: uuid("owner_id").references(() => users.id, { onDelete: "set null" }),
+    title: varchar("title", { length: 220 }).notNull(),
+    commercialStatus: varchar("commercial_status", { length: 32 }).notNull().default("quotation"),
+    paymentStatus: varchar("payment_status", { length: 32 }).notNull().default("awaiting_invoice"),
+    fulfilmentStatus: varchar("fulfilment_status", { length: 32 }).notNull().default("not_released"),
+    holdReason: text("hold_reason"),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    quotedAt: timestamp("quoted_at", { withTimezone: true }),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("business_transactions_customer_created_idx").on(table.customerId, table.createdAt),
+    index("business_transactions_status_updated_idx").on(table.commercialStatus, table.updatedAt),
+  ],
+);
+
+export const transactionNumberCounters = pgTable("transaction_number_counters", {
+  referenceYear: integer("reference_year").primaryKey(),
+  lastValue: integer("last_value").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const transactionLines = pgTable(
+  "transaction_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => businessTransactions.id, { onDelete: "cascade" }),
+    productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+    materialId: uuid("material_id").references(() => materials.id, { onDelete: "set null" }),
+    colorLotId: uuid("color_lot_id").references(() => materialColorLots.id, { onDelete: "set null" }),
+    description: text("description").notNull(),
+    quantity: numeric("quantity", { precision: 16, scale: 3 }).notNull(),
+    unit: varchar("unit", { length: 16 }).notNull().default("pcs"),
+    unitPrice: numeric("unit_price", { precision: 16, scale: 2 }).notNull().default("0"),
+    taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).notNull().default("0"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [index("transaction_lines_transaction_idx").on(table.transactionId)],
+);
+
+export const transactionInvoices = pgTable(
+  "transaction_invoices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => businessTransactions.id, { onDelete: "cascade" }),
+    invoiceNo: varchar("invoice_no", { length: 80 }).notNull().unique(),
+    kind: varchar("kind", { length: 24 }).notNull(),
+    amount: numeric("amount", { precision: 16, scale: 2 }).notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    status: varchar("status", { length: 24 }).notNull().default("draft"),
+    issuedAt: timestamp("issued_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("transaction_invoices_transaction_status_idx").on(table.transactionId, table.status)],
+);
+
+export const transactionDocuments = pgTable(
+  "transaction_documents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => businessTransactions.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoice_id").references(() => transactionInvoices.id, { onDelete: "set null" }),
+    type: varchar("type", { length: 36 }).notNull(),
+    direction: varchar("direction", { length: 16 }).notNull().default("internal"),
+    documentNo: varchar("document_no", { length: 100 }),
+    version: integer("version").notNull().default(1),
+    status: varchar("status", { length: 24 }).notNull().default("draft"),
+    templateId: varchar("template_id", { length: 120 }),
+    providerDocumentId: varchar("provider_document_id", { length: 120 }),
+    storagePath: varchar("storage_path", { length: 500 }),
+    originalName: varchar("original_name", { length: 255 }),
+    checksum: varchar("checksum", { length: 128 }),
+    sentMessageId: varchar("sent_message_id", { length: 255 }),
+    recipient: varchar("recipient", { length: 255 }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("transaction_documents_transaction_type_idx").on(table.transactionId, table.type)],
+);
+
+export const transactionFinancialEntries = pgTable(
+  "transaction_financial_entries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => businessTransactions.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoice_id").references(() => transactionInvoices.id, { onDelete: "set null" }),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    direction: varchar("direction", { length: 12 }).notNull(),
+    amount: numeric("amount", { precision: 16, scale: 2 }).notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("unverified"),
+    proofDocumentId: uuid("proof_document_id").references(() => transactionDocuments.id, { onDelete: "set null" }),
+    reference: varchar("reference", { length: 160 }),
+    notes: text("notes"),
+    verifiedBy: uuid("verified_by").references(() => users.id, { onDelete: "set null" }),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("transaction_financial_entries_transaction_status_idx").on(table.transactionId, table.status)],
+);
+
+export const productionBatches = pgTable(
+  "production_batches",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => businessTransactions.id, { onDelete: "cascade" }),
+    productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+    materialId: uuid("material_id").references(() => materials.id, { onDelete: "set null" }),
+    colorLotId: uuid("color_lot_id").references(() => materialColorLots.id, { onDelete: "set null" }),
+    mouldId: uuid("mould_id").references(() => moulds.id, { onDelete: "set null" }),
+    batchNo: varchar("batch_no", { length: 80 }).notNull().unique(),
+    kind: varchar("kind", { length: 24 }).notNull().default("production"),
+    status: varchar("status", { length: 32 }).notNull().default("planned"),
+    plannedQuantity: numeric("planned_quantity", { precision: 16, scale: 3 }),
+    completedQuantity: numeric("completed_quantity", { precision: 16, scale: 3 }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("production_batches_transaction_status_idx").on(table.transactionId, table.status)],
+);
+
+export const shipments = pgTable(
+  "shipments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => businessTransactions.id, { onDelete: "cascade" }),
+    shipmentNo: varchar("shipment_no", { length: 80 }).notNull().unique(),
+    status: varchar("status", { length: 24 }).notNull().default("planned"),
+    recipientName: varchar("recipient_name", { length: 160 }),
+    deliveryAddress: text("delivery_address"),
+    shippedAt: timestamp("shipped_at", { withTimezone: true }),
+    receivedAt: timestamp("received_at", { withTimezone: true }),
+    deliveryDocumentId: uuid("delivery_document_id").references(() => transactionDocuments.id, {
+      onDelete: "set null",
+    }),
+    bastDocumentId: uuid("bast_document_id").references(() => transactionDocuments.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("shipments_transaction_status_idx").on(table.transactionId, table.status)],
+);
+
+export const shipmentLines = pgTable(
+  "shipment_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    shipmentId: uuid("shipment_id")
+      .notNull()
+      .references(() => shipments.id, { onDelete: "cascade" }),
+    transactionLineId: uuid("transaction_line_id")
+      .notNull()
+      .references(() => transactionLines.id, { onDelete: "restrict" }),
+    quantity: numeric("quantity", { precision: 16, scale: 3 }).notNull(),
+  },
+  (table) => [index("shipment_lines_shipment_idx").on(table.shipmentId)],
+);
+
+export const productDesignFiles = pgTable(
+  "product_design_files",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+    mouldId: uuid("mould_id").references(() => moulds.id, { onDelete: "set null" }),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    transactionId: uuid("transaction_id").references(() => businessTransactions.id, { onDelete: "set null" }),
+    origin: varchar("origin", { length: 24 }).notNull(),
+    fileKind: varchar("file_kind", { length: 24 }).notNull(),
+    format: varchar("format", { length: 12 }).notNull(),
+    storagePath: varchar("storage_path", { length: 500 }).notNull().unique(),
+    originalName: varchar("original_name", { length: 255 }).notNull(),
+    mimeType: varchar("mime_type", { length: 120 }).notNull(),
+    byteSize: integer("byte_size").notNull(),
+    checksum: varchar("checksum", { length: 128 }).notNull(),
+    version: integer("version").notNull().default(1),
+    reuseApprovedAt: timestamp("reuse_approved_at", { withTimezone: true }),
+    reuseApprovedBy: uuid("reuse_approved_by").references(() => users.id, { onDelete: "set null" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("product_design_files_product_created_idx").on(table.productId, table.createdAt),
+    index("product_design_files_customer_created_idx").on(table.customerId, table.createdAt),
+  ],
 );

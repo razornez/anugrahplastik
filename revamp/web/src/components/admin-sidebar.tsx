@@ -45,6 +45,24 @@ function InsightIcon() {
   );
 }
 
+function TransactionIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M5.25 3.75h10.5l3 3v13.5H5.25A1.5 1.5 0 0 1 3.75 18.75v-13.5a1.5 1.5 0 0 1 1.5-1.5Z" />
+      <path d="M15.75 3.75v3h3M7.5 11.25h9M7.5 15h6" />
+    </svg>
+  );
+}
+
+function MasterIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M4.75 7.5 12 3.75l7.25 3.75L12 11.25 4.75 7.5Z" />
+      <path d="M4.75 12 12 15.75 19.25 12M4.75 16.5 12 20.25l7.25-3.75" />
+    </svg>
+  );
+}
+
 function ExternalIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -58,11 +76,16 @@ export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
   const navigation = [
     { href: "/admin", label: "Beranda", icon: <HomeIcon /> },
     { href: "/admin/prospects", label: "Prospek", icon: <ProspectIcon /> },
+    ...(role === "admin" || role === "sales"
+      ? [{ href: "/admin/transactions", label: "Transaksi", icon: <TransactionIcon /> }]
+      : []),
     { href: "/admin/content", label: "Konten landing", icon: <ContentIcon /> },
     ...(role === "admin" || role === "sales"
       ? [{ href: "/admin/insights", label: "Laporan pengunjung", icon: <InsightIcon /> }]
       : []),
+    ...(role === "admin" ? [{ href: "/admin/masters", label: "Data master", icon: <MasterIcon /> }] : []),
   ];
+  const mobileNavigation = navigation.filter((item) => item.href !== "/admin/masters");
 
   return (
     <aside className="admin-sidebar">
@@ -101,7 +124,7 @@ export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
         </form>
       </div>
       <nav className="admin-bottom-nav" aria-label="Navigasi mobile">
-        {navigation.map((item) => (
+        {mobileNavigation.map((item) => (
           <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined}>
             {item.icon}
             <span>{item.label.replace(" landing", "")}</span>

@@ -21,7 +21,7 @@ Buka `http://localhost:3000`.
 
 ```bash
 pnpm db:generate
-pnpm db:migrate
+ pnpm db:migrate
 ```
 
 Tanpa `DATABASE_URL`, halaman tetap dapat dibuka. Form permintaan memberi informasi jelas bahwa penyimpanan belum siap, sehingga tidak ada prospek yang dianggap berhasil tersimpan secara keliru.
@@ -36,6 +36,16 @@ pnpm lint
 pnpm build
 ```
 
+## Worker analitik
+
+Tracker landing memasukkan event anonim ke batch PostgreSQL. Jalankan satu proses berikut selain server web:
+
+```bash
+pnpm analytics:worker
+```
+
+Di production, jalankan worker sebagai service terpisah dan pantau meter kesehatan pada Beranda administrator.
+
 Pemeriksaan yang sama berjalan otomatis pada setiap push dan pull request ke `main`.
 
 ## Dokumen proyek
@@ -48,6 +58,8 @@ Pemeriksaan yang sama berjalan otomatis pada setiap push dan pull request ke `ma
 - [Protokol delivery](docs/DELIVERY-PROTOCOL.md)
 - [Quality gates](docs/QUALITY-GATES.md)
 - [Runbook](docs/RUNBOOK.md)
+- [Epic operasional](docs/OPERATIONS-EPIC.md)
+- [ADR antrean dan storage](docs/ADR-005-analytics-queue-and-private-files.md)
 
 ## Tahap berikutnya
 

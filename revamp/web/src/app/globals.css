@@ -4746,7 +4746,7 @@ body {
   }
   .landing-editor .landing-editor__preview {
     position: static;
-    grid-column: 1 / -1;
+    grid-column: 2;
   }
   .landing-mini {
     max-height: 440px;

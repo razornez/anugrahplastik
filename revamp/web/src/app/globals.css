@@ -3467,7 +3467,7 @@ body {
   gap: 24px;
 }
 .transaction-create-trigger,
-.transaction-create-dialog button,
+.transaction-create-dialog .transaction-create__actions button,
 .transaction-stage-manager button {
   min-height: 44px;
   border: 0;
@@ -3486,10 +3486,16 @@ body {
   box-shadow: 0 12px 20px -14px rgba(17, 142, 75, 0.9);
 }
 .transaction-create-dialog {
+  position: fixed;
+  inset: 0;
   width: min(560px, calc(100vw - 32px));
+  height: fit-content;
+  max-height: calc(100dvh - 32px);
   border: 0;
   border-radius: 20px;
   background: #fff;
+  margin: auto;
+  overflow: visible;
   padding: 0;
   color: var(--admin-ink);
   box-shadow: 0 28px 70px -25px rgba(5, 21, 41, 0.55);
@@ -3525,12 +3531,29 @@ body {
   min-height: 38px;
   flex: 0 0 38px;
   place-items: center;
+  border: 0;
   border-radius: 50%;
   background: #edf5ff;
   padding: 0;
   color: var(--admin-blue);
+  cursor: pointer;
+  font: inherit;
   font-size: 23px;
   font-weight: 400;
+}
+.transaction-create-dialog .customer-combobox__results button {
+  min-height: 48px;
+  border: 0;
+  border-bottom: 1px solid #edf1f6;
+  border-radius: 0;
+  background: #fff;
+  padding: 9px 11px;
+  color: var(--admin-ink);
+  font-size: 12px;
+}
+.transaction-create-dialog .customer-combobox__results button:hover,
+.transaction-create-dialog .customer-combobox__results button.is-active {
+  background: #edf5ff;
 }
 .transaction-create-dialog .transaction-create {
   grid-template-columns: 1fr;

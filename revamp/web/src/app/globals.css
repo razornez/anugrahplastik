@@ -4744,7 +4744,7 @@ body {
   .landing-editor {
     grid-template-columns: 154px minmax(0, 1fr);
   }
-  .landing-editor__preview {
+  .landing-editor .landing-editor__preview {
     position: static;
     grid-column: 1 / -1;
   }
@@ -4798,8 +4798,8 @@ body {
   .landing-editor__index {
     display: none;
   }
-  .landing-editor__form,
-  .landing-editor__preview {
+  .landing-editor .landing-editor__form,
+  .landing-editor .landing-editor__preview {
     position: static;
     padding: 15px;
   }

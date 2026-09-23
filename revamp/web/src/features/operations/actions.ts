@@ -10,6 +10,7 @@ import {
   businessTransactions,
   customers,
   materials,
+  masterNumberCounters,
   moulds,
   products,
   suppliers,
@@ -47,46 +48,91 @@ function refreshOperations() {
   revalidatePath("/admin/transactions");
 }
 
+type MasterKind = "customer" | "supplier" | "material" | "product" | "mould";
+
+const masterCodePrefix: Record<MasterKind, string> = {
+  customer: "CUS",
+  supplier: "SUP",
+  material: "MAT",
+  product: "PRD",
+  mould: "MLD",
+};
+
+async function nextMasterCode(
+  transaction: Parameters<Parameters<NonNullable<ReturnType<typeof getDatabase>>["transaction"]>[0]>[0],
+  kind: MasterKind,
+) {
+  const [counter] = await transaction
+    .insert(masterNumberCounters)
+    .values({ kind, lastValue: 1 })
+    .onConflictDoUpdate({
+      target: masterNumberCounters.kind,
+      set: { lastValue: sql`${masterNumberCounters.lastValue} + 1`, updatedAt: new Date() },
+    })
+    .returning({ lastValue: masterNumberCounters.lastValue });
+  if (!counter) throw new Error("Kode master belum dapat dibuat.");
+  return `${masterCodePrefix[kind]}-${String(counter.lastValue).padStart(6, "0")}`;
+}
+
 export async function createCustomer(formData: FormData) {
   const user = await actor("operations");
   const input = z
     .object({
-      code: z.string().min(2).max(32),
       name: z.string().min(2).max(180),
       email: z.string().email().optional(),
       phone: z.string().max(32).optional(),
     })
     .parse({
-      code: value(formData, "code").toUpperCase(),
       name: value(formData, "name"),
       email: value(formData, "email") || undefined,
       phone: value(formData, "phone") || undefined,
     });
   const database = getDatabase();
   if (!database) throw new Error("Database belum terhubung.");
-  const [record] = await database
-    .insert(customers)
-    .values({
-      code: input.code,
-      legalName: input.name,
-      displayName: input.name,
-      email: input.email ?? null,
-      phone: input.phone ?? null,
-    })
-    .returning({ id: customers.id });
-  await writeAudit(user.id, "master.customer_created", "customer", record.id, { code: input.code });
+  await database.transaction(async (transaction) => {
+    const code = await nextMasterCode(transaction, "customer");
+    const [record] = await transaction
+      .insert(customers)
+      .values({
+        code,
+        legalName: input.name,
+        displayName: input.name,
+        email: input.email ?? null,
+        phone: input.phone ?? null,
+      })
+      .returning({ id: customers.id });
+    if (!record) throw new Error("Pelanggan belum dapat disimpan.");
+    await transaction.insert(auditLogs).values({
+      actorId: user.id,
+      action: "master.customer_created",
+      entityType: "customer",
+      entityId: record.id,
+      metadata: { code },
+    });
+  });
   refreshOperations();
 }
 
 export async function createSupplier(formData: FormData) {
   const user = await actor("owner");
-  const input = z
-    .object({ code: z.string().min(2).max(32), name: z.string().min(2).max(180) })
-    .parse({ code: value(formData, "code").toUpperCase(), name: value(formData, "name") });
+  const input = z.object({ name: z.string().min(2).max(180) }).parse({ name: value(formData, "name") });
   const database = getDatabase();
   if (!database) throw new Error("Database belum terhubung.");
-  const [record] = await database.insert(suppliers).values(input).returning({ id: suppliers.id });
-  await writeAudit(user.id, "master.supplier_created", "supplier", record.id, { code: input.code });
+  await database.transaction(async (transaction) => {
+    const code = await nextMasterCode(transaction, "supplier");
+    const [record] = await transaction
+      .insert(suppliers)
+      .values({ ...input, code })
+      .returning({ id: suppliers.id });
+    if (!record) throw new Error("Pemasok belum dapat disimpan.");
+    await transaction.insert(auditLogs).values({
+      actorId: user.id,
+      action: "master.supplier_created",
+      entityType: "supplier",
+      entityId: record.id,
+      metadata: { code },
+    });
+  });
   refreshOperations();
 }
 
@@ -94,21 +140,32 @@ export async function createMaterial(formData: FormData) {
   const user = await actor("owner");
   const input = z
     .object({
-      code: z.string().min(2).max(32),
       name: z.string().min(2).max(160),
       polymerFamily: z.string().min(2).max(100),
       grade: z.string().max(120).optional(),
     })
     .parse({
-      code: value(formData, "code").toUpperCase(),
       name: value(formData, "name"),
       polymerFamily: value(formData, "family"),
       grade: value(formData, "grade") || undefined,
     });
   const database = getDatabase();
   if (!database) throw new Error("Database belum terhubung.");
-  const [record] = await database.insert(materials).values(input).returning({ id: materials.id });
-  await writeAudit(user.id, "master.material_created", "material", record.id, { code: input.code });
+  await database.transaction(async (transaction) => {
+    const code = await nextMasterCode(transaction, "material");
+    const [record] = await transaction
+      .insert(materials)
+      .values({ ...input, code })
+      .returning({ id: materials.id });
+    if (!record) throw new Error("Bahan belum dapat disimpan.");
+    await transaction.insert(auditLogs).values({
+      actorId: user.id,
+      action: "master.material_created",
+      entityType: "material",
+      entityId: record.id,
+      metadata: { code },
+    });
+  });
   refreshOperations();
 }
 
@@ -116,22 +173,30 @@ export async function createProduct(formData: FormData) {
   const user = await actor("owner");
   const input = z
     .object({
-      sku: z.string().min(2).max(64),
       name: z.string().min(2).max(180),
       weight: z.coerce.number().nonnegative().optional(),
     })
     .parse({
-      sku: value(formData, "sku").toUpperCase(),
       name: value(formData, "name"),
       weight: value(formData, "weight") || undefined,
     });
   const database = getDatabase();
   if (!database) throw new Error("Database belum terhubung.");
-  const [record] = await database
-    .insert(products)
-    .values({ sku: input.sku, name: input.name, unitWeightGrams: input.weight ? String(input.weight) : null })
-    .returning({ id: products.id });
-  await writeAudit(user.id, "master.product_created", "product", record.id, { sku: input.sku });
+  await database.transaction(async (transaction) => {
+    const sku = await nextMasterCode(transaction, "product");
+    const [record] = await transaction
+      .insert(products)
+      .values({ sku, name: input.name, unitWeightGrams: input.weight ? String(input.weight) : null })
+      .returning({ id: products.id });
+    if (!record) throw new Error("Barang belum dapat disimpan.");
+    await transaction.insert(auditLogs).values({
+      actorId: user.id,
+      action: "master.product_created",
+      entityType: "product",
+      entityId: record.id,
+      metadata: { code: sku },
+    });
+  });
   refreshOperations();
 }
 
@@ -139,22 +204,30 @@ export async function createMould(formData: FormData) {
   const user = await actor("owner");
   const input = z
     .object({
-      code: z.string().min(2).max(64),
       name: z.string().min(2).max(180),
       cavities: z.coerce.number().int().positive().optional(),
     })
     .parse({
-      code: value(formData, "code").toUpperCase(),
       name: value(formData, "name"),
       cavities: value(formData, "cavities") || undefined,
     });
   const database = getDatabase();
   if (!database) throw new Error("Database belum terhubung.");
-  const [record] = await database
-    .insert(moulds)
-    .values({ code: input.code, name: input.name, cavityCount: input.cavities ?? null })
-    .returning({ id: moulds.id });
-  await writeAudit(user.id, "master.mould_created", "mould", record.id, { code: input.code });
+  await database.transaction(async (transaction) => {
+    const code = await nextMasterCode(transaction, "mould");
+    const [record] = await transaction
+      .insert(moulds)
+      .values({ code, name: input.name, cavityCount: input.cavities ?? null })
+      .returning({ id: moulds.id });
+    if (!record) throw new Error("Mould belum dapat disimpan.");
+    await transaction.insert(auditLogs).values({
+      actorId: user.id,
+      action: "master.mould_created",
+      entityType: "mould",
+      entityId: record.id,
+      metadata: { code },
+    });
+  });
   refreshOperations();
 }
 

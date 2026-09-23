@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { actionLabel, eventLabel, sectionLabel } from "@/features/analytics/display-labels";
-import { getAnalyticsReport, type DeviceFilter, type ReportFilters } from "@/features/analytics/report-service";
+import {
+  getAnalyticsJourney,
+  getAnalyticsReport,
+  type DeviceFilter,
+  type ReportFilters,
+} from "@/features/analytics/report-service";
 import { getSession } from "@/lib/auth/session";
 
 export const instant = false;
 
-function queryString(filters: ReportFilters, session?: string) {
+function queryString(filters: ReportFilters, session?: string, cursor?: string, direction?: string) {
   const query = new URLSearchParams();
   query.set("days", String(filters.days));
   if (filters.device !== "all") query.set("device", filters.device);
@@ -14,6 +19,8 @@ function queryString(filters: ReportFilters, session?: string) {
   if (filters.source) query.set("source", filters.source);
   if (filters.outcome) query.set("outcome", filters.outcome);
   if (session) query.set("session", session);
+  if (cursor) query.set("cursor", cursor);
+  if (direction) query.set("direction", direction);
   return query.toString();
 }
 
@@ -45,6 +52,8 @@ export default async function InsightsPage({
     source?: string;
     outcome?: string;
     session?: string;
+    cursor?: string;
+    direction?: string;
   }>;
 }) {
   const user = await getSession();
@@ -60,8 +69,11 @@ export default async function InsightsPage({
     source: query.source ?? "",
     outcome: query.outcome ?? "",
   };
-  const report = await getAnalyticsReport(filters);
-  const selected = report.journeys.find((journey) => journey.id === query.session) ?? null;
+  const report = await getAnalyticsReport(filters, {
+    cursor: query.cursor,
+    direction: query.direction === "previous" ? "previous" : "next",
+  });
+  const selected = query.session ? await getAnalyticsJourney(query.session) : null;
 
   return (
     <section className="visitor-report" aria-labelledby="visitor-report-title">
@@ -170,7 +182,7 @@ export default async function InsightsPage({
                 className="journey-row"
                 aria-current={selected?.id === journey.id ? "page" : undefined}
                 key={journey.id}
-                href={"/admin/insights?" + queryString(filters, journey.id)}
+                href={"/admin/insights?" + queryString(filters, journey.id, query.cursor, query.direction)}
               >
                 <span className="journey-device">
                   {journey.deviceCategory === "mobile" ? "HP" : journey.deviceCategory === "desktop" ? "PC" : "TB"}
@@ -188,6 +200,27 @@ export default async function InsightsPage({
           ) : (
             <p className="empty-copy">Belum ada kunjungan sesuai filter.</p>
           )}
+          <nav className="directory-pagination" aria-label="Pindah halaman perjalanan">
+            {report.hasPrevious ? (
+              <Link
+                href={
+                  "/admin/insights?" + queryString(filters, undefined, report.previousCursor ?? undefined, "previous")
+                }
+              >
+                ← Sebelumnya
+              </Link>
+            ) : (
+              <span>← Sebelumnya</span>
+            )}
+            <span>25 kunjungan per halaman</span>
+            {report.hasNext ? (
+              <Link href={"/admin/insights?" + queryString(filters, undefined, report.nextCursor ?? undefined, "next")}>
+                Berikutnya →
+              </Link>
+            ) : (
+              <span>Berikutnya →</span>
+            )}
+          </nav>
         </section>
         <aside className="journey-detail">
           {selected ? (

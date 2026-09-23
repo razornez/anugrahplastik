@@ -1,42 +1,33 @@
-import { desc, gte, inArray } from "drizzle-orm";
+import { and, asc, count, countDistinct, desc, eq, gte, or, sql } from "drizzle-orm";
 import { analyticsEvents, analyticsSessions } from "@/lib/database/schema";
 import { getDatabase } from "@/lib/database/client";
-import { trafficSource } from "./source";
+import { decodeTimeCursor, encodeTimeCursor } from "@/lib/pagination/cursor";
 
 export type ReportPeriod = 7 | 30;
 export type DeviceFilter = "all" | "mobile" | "desktop" | "tablet" | "unknown";
-
 export type ReportFilters = { days: ReportPeriod; device: DeviceFilter; city: string; source: string; outcome: string };
-
-type SessionRecord = {
+export type JourneyPageQuery = { cursor?: string; direction?: "next" | "previous" };
+type EventRecord = {
   id: string;
-  landingPath: string;
-  referrer: string | null;
+  name: string;
+  sectionKey: string | null;
+  elementKey: string | null;
+  sequence: number;
+  occurredAt: Date;
+};
+export type VisitorJourney = {
+  id: string;
   deviceCategory: string;
   browserName: string | null;
   operatingSystem: string | null;
   cityName: string | null;
-  regionName: string | null;
+  sourceName: string;
+  outcome: string;
   lastSectionKey: string | null;
-  createdAt: Date;
-  lastEventAt: Date | null;
-  endedAt: Date | null;
   durationSeconds: number | null;
+  createdAt: Date;
 };
-
-type EventRecord = {
-  id: string;
-  sessionId: string;
-  name: string;
-  sectionKey: string | null;
-  elementKey: string | null;
-  metadata: Record<string, string | number | boolean> | null;
-  sequence: number;
-  occurredAt: Date;
-};
-
-export type VisitorJourney = SessionRecord & { sourceName: string; outcome: string; events: EventRecord[] };
-
+export type VisitorJourneyDetail = VisitorJourney & { events: EventRecord[] };
 export type AnalyticsReport = {
   available: boolean;
   filters: ReportFilters;
@@ -48,6 +39,10 @@ export type AnalyticsReport = {
   journeys: VisitorJourney[];
   citiesForFilter: string[];
   sourcesForFilter: string[];
+  hasNext: boolean;
+  hasPrevious: boolean;
+  nextCursor: string | null;
+  previousCursor: string | null;
 };
 
 const emptyReport = (filters: ReportFilters): AnalyticsReport => ({
@@ -61,135 +56,204 @@ const emptyReport = (filters: ReportFilters): AnalyticsReport => ({
   journeys: [],
   citiesForFilter: [],
   sourcesForFilter: [],
+  hasNext: false,
+  hasPrevious: false,
+  nextCursor: null,
+  previousCursor: null,
 });
-
-function reportDate(date: Date) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(date);
-}
-
 function deviceLabel(key: string) {
   return key === "mobile" ? "Ponsel" : key === "desktop" ? "Komputer" : key === "tablet" ? "Tablet" : "Tidak diketahui";
 }
-
-function outcomeFor(events: EventRecord[]) {
-  if (events.some((event) => event.name === "form_submit")) return "Form terkirim";
-  if (events.some((event) => event.name === "whatsapp_click")) return "Klik WhatsApp";
-  if (events.some((event) => event.name === "form_start")) return "Form mulai diisi";
-  if (events.some((event) => event.name === "cta_click")) return "Tombol minat diklik";
-  return "Melihat halaman";
-}
-
 function initialTrend(days: number) {
   return Array.from({ length: days }, (_, index) => {
     const date = new Date();
     date.setDate(date.getDate() - (days - index - 1));
-    return { date: reportDate(date), sessions: 0, forms: 0 };
+    return { date: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(date), sessions: 0, forms: 0 };
   });
 }
+function sessionConditions(filters: ReportFilters, since: Date) {
+  return and(
+    gte(analyticsSessions.createdAt, since),
+    filters.device !== "all" ? eq(analyticsSessions.deviceCategory, filters.device) : undefined,
+    filters.city ? eq(analyticsSessions.cityName, filters.city) : undefined,
+    filters.source ? eq(analyticsSessions.sourceName, filters.source) : undefined,
+    filters.outcome ? eq(analyticsSessions.outcome, filters.outcome) : undefined,
+  );
+}
+async function eventSessions(filters: ReportFilters, since: Date, eventName: string) {
+  const database = getDatabase();
+  if (!database) return 0;
+  const [row] = await database
+    .select({ total: countDistinct(analyticsEvents.sessionId) })
+    .from(analyticsEvents)
+    .innerJoin(analyticsSessions, eq(analyticsEvents.sessionId, analyticsSessions.id))
+    .where(and(sessionConditions(filters, since), eq(analyticsEvents.name, eventName)));
+  return Number(row?.total ?? 0);
+}
 
-export async function getAnalyticsReport(filters: ReportFilters): Promise<AnalyticsReport> {
+export async function getAnalyticsReport(
+  filters: ReportFilters,
+  page: JourneyPageQuery = {},
+): Promise<AnalyticsReport> {
   const database = getDatabase();
   if (!database) return emptyReport(filters);
   const since = new Date(Date.now() - filters.days * 24 * 60 * 60 * 1_000);
-  const rawSessions = (await database
+  const conditions = sessionConditions(filters, since);
+  const cursor = decodeTimeCursor(page.cursor);
+  const cursorDate = cursor ? new Date(cursor.createdAt) : null;
+  const cursorId = cursor?.id ?? "";
+  const backwards = page.direction === "previous";
+  const cursorCondition = cursorDate
+    ? backwards
+      ? or(
+          sql`${analyticsSessions.createdAt} > ${cursorDate}`,
+          and(eq(analyticsSessions.createdAt, cursorDate), sql`${analyticsSessions.id} > ${cursorId}`),
+        )
+      : or(
+          sql`${analyticsSessions.createdAt} < ${cursorDate}`,
+          and(eq(analyticsSessions.createdAt, cursorDate), sql`${analyticsSessions.id} < ${cursorId}`),
+        )
+    : undefined;
+  const order = backwards
+    ? [asc(analyticsSessions.createdAt), asc(analyticsSessions.id)]
+    : [desc(analyticsSessions.createdAt), desc(analyticsSessions.id)];
+  const [
+    totalRows,
+    deviceRows,
+    cityRows,
+    sourceRows,
+    trendRows,
+    sessionsPage,
+    forms,
+    ctaClicks,
+    whatsappClicks,
+    engaged,
+    started,
+  ] = await Promise.all([
+    database.select({ total: count() }).from(analyticsSessions).where(conditions),
+    database
+      .select({ key: analyticsSessions.deviceCategory, total: count() })
+      .from(analyticsSessions)
+      .where(conditions)
+      .groupBy(analyticsSessions.deviceCategory),
+    database
+      .select({ key: sql<string>`coalesce(${analyticsSessions.cityName}, 'Tidak diketahui')`, total: count() })
+      .from(analyticsSessions)
+      .where(conditions)
+      .groupBy(sql`coalesce(${analyticsSessions.cityName}, 'Tidak diketahui')`)
+      .orderBy(desc(count()))
+      .limit(5),
+    database
+      .selectDistinct({ sourceName: analyticsSessions.sourceName })
+      .from(analyticsSessions)
+      .where(gte(analyticsSessions.createdAt, since))
+      .orderBy(analyticsSessions.sourceName)
+      .limit(60),
+    database
+      .select({
+        date: sql<string>`to_char(${analyticsSessions.createdAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD')`,
+        sessions: count(),
+        forms: sql<number>`count(*) filter (where ${analyticsSessions.outcome} = 'Form terkirim')`,
+      })
+      .from(analyticsSessions)
+      .where(conditions)
+      .groupBy(sql`to_char(${analyticsSessions.createdAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD')`),
+    database
+      .select({
+        id: analyticsSessions.id,
+        deviceCategory: analyticsSessions.deviceCategory,
+        browserName: analyticsSessions.browserName,
+        operatingSystem: analyticsSessions.operatingSystem,
+        cityName: analyticsSessions.cityName,
+        sourceName: analyticsSessions.sourceName,
+        outcome: analyticsSessions.outcome,
+        lastSectionKey: analyticsSessions.lastSectionKey,
+        durationSeconds: analyticsSessions.durationSeconds,
+        createdAt: analyticsSessions.createdAt,
+      })
+      .from(analyticsSessions)
+      .where(and(conditions, cursorCondition))
+      .orderBy(...order)
+      .limit(26),
+    eventSessions(filters, since, "form_submit"),
+    eventSessions(filters, since, "cta_click"),
+    eventSessions(filters, since, "whatsapp_click"),
+    eventSessions(filters, since, "section_engaged"),
+    eventSessions(filters, since, "form_start"),
+  ]);
+  const citiesForFilter = await database
+    .selectDistinct({ cityName: analyticsSessions.cityName })
+    .from(analyticsSessions)
+    .where(and(gte(analyticsSessions.createdAt, since), sql`${analyticsSessions.cityName} is not null`))
+    .orderBy(analyticsSessions.cityName)
+    .limit(60);
+  const hasAdjacent = sessionsPage.length > 25;
+  const shown = backwards ? sessionsPage.slice(0, 25).reverse() : sessionsPage.slice(0, 25);
+  const trend = initialTrend(filters.days);
+  const pointByDate = new Map(trend.map((point) => [point.date, point]));
+  trendRows.forEach((row) => {
+    const point = pointByDate.get(row.date);
+    if (point) {
+      point.sessions = Number(row.sessions);
+      point.forms = Number(row.forms);
+    }
+  });
+  return {
+    available: true,
+    filters,
+    totals: { sessions: Number(totalRows[0]?.total ?? 0), forms, ctaClicks, whatsappClicks },
+    trend,
+    devices: deviceRows
+      .map((row) => ({ key: row.key, label: deviceLabel(row.key), total: Number(row.total) }))
+      .sort((a, b) => b.total - a.total),
+    cities: cityRows.map((row) => ({ key: row.key, total: Number(row.total) })),
+    funnel: [
+      { label: "Pengunjung", total: Number(totalRows[0]?.total ?? 0) },
+      { label: "Melihat bagian halaman", total: engaged },
+      { label: "Menekan tombol minat", total: ctaClicks },
+      { label: "Mulai isi formulir", total: started },
+      { label: "Form terkirim", total: forms },
+    ],
+    journeys: shown,
+    citiesForFilter: citiesForFilter.flatMap((row) => (row.cityName ? [row.cityName] : [])),
+    sourcesForFilter: sourceRows.map((row) => row.sourceName),
+    hasNext: backwards ? Boolean(page.cursor) : hasAdjacent,
+    hasPrevious: backwards ? hasAdjacent : Boolean(page.cursor),
+    nextCursor: shown.length ? encodeTimeCursor(shown.at(-1)!) : null,
+    previousCursor: shown.length ? encodeTimeCursor(shown[0]) : null,
+  };
+}
+
+export async function getAnalyticsJourney(id: string): Promise<VisitorJourneyDetail | null> {
+  const database = getDatabase();
+  if (!database) return null;
+  const [session] = await database
     .select({
       id: analyticsSessions.id,
-      landingPath: analyticsSessions.landingPath,
-      referrer: analyticsSessions.referrer,
       deviceCategory: analyticsSessions.deviceCategory,
       browserName: analyticsSessions.browserName,
       operatingSystem: analyticsSessions.operatingSystem,
       cityName: analyticsSessions.cityName,
-      regionName: analyticsSessions.regionName,
+      sourceName: analyticsSessions.sourceName,
+      outcome: analyticsSessions.outcome,
       lastSectionKey: analyticsSessions.lastSectionKey,
-      createdAt: analyticsSessions.createdAt,
-      lastEventAt: analyticsSessions.lastEventAt,
-      endedAt: analyticsSessions.endedAt,
       durationSeconds: analyticsSessions.durationSeconds,
+      createdAt: analyticsSessions.createdAt,
     })
     .from(analyticsSessions)
-    .where(gte(analyticsSessions.createdAt, since))
-    .orderBy(desc(analyticsSessions.createdAt))) as SessionRecord[];
-  const sourceOptions = Array.from(new Set(rawSessions.map((session) => trafficSource(session.referrer)))).sort();
-  const cityOptions = Array.from(
-    new Set(rawSessions.map((session) => session.cityName).filter((city): city is string => Boolean(city))),
-  ).sort();
-  const filteredSessions = rawSessions.filter((session) => {
-    if (filters.device !== "all" && session.deviceCategory !== filters.device) return false;
-    if (filters.city && session.cityName !== filters.city) return false;
-    if (filters.source && trafficSource(session.referrer) !== filters.source) return false;
-    return true;
-  });
-  const sessionIds = filteredSessions.map((session) => session.id);
-  const rawEvents = sessionIds.length
-    ? ((await database
-        .select({
-          id: analyticsEvents.id,
-          sessionId: analyticsEvents.sessionId,
-          name: analyticsEvents.name,
-          sectionKey: analyticsEvents.sectionKey,
-          elementKey: analyticsEvents.elementKey,
-          metadata: analyticsEvents.metadata,
-          sequence: analyticsEvents.sequence,
-          occurredAt: analyticsEvents.occurredAt,
-        })
-        .from(analyticsEvents)
-        .where(inArray(analyticsEvents.sessionId, sessionIds))
-        .orderBy(analyticsEvents.sessionId, analyticsEvents.sequence)) as EventRecord[])
-    : [];
-  const eventsBySession = new Map<string, EventRecord[]>();
-  rawEvents.forEach((event) =>
-    eventsBySession.set(event.sessionId, [...(eventsBySession.get(event.sessionId) ?? []), event]),
-  );
-  const allJourneys = filteredSessions.map((session) => {
-    const events = eventsBySession.get(session.id) ?? [];
-    return { ...session, sourceName: trafficSource(session.referrer), outcome: outcomeFor(events), events };
-  });
-  const journeys = filters.outcome ? allJourneys.filter((journey) => journey.outcome === filters.outcome) : allJourneys;
-  const trend = initialTrend(filters.days);
-  const trendIndex = new Map(trend.map((point) => [point.date, point]));
-  journeys.forEach((session) => {
-    const point = trendIndex.get(reportDate(session.createdAt));
-    if (!point) return;
-    point.sessions += 1;
-    if (session.events.some((event) => event.name === "form_submit")) point.forms += 1;
-  });
-  const deviceTotals = new Map<string, number>();
-  const cityTotals = new Map<string, number>();
-  journeys.forEach((session) => {
-    deviceTotals.set(session.deviceCategory, (deviceTotals.get(session.deviceCategory) ?? 0) + 1);
-    const city = session.cityName ?? "Tidak diketahui";
-    cityTotals.set(city, (cityTotals.get(city) ?? 0) + 1);
-  });
-  const uniqueSessionsFor = (eventName: string) =>
-    new Set(
-      journeys
-        .filter((journey) => journey.events.some((event) => event.name === eventName))
-        .map((journey) => journey.id),
-    ).size;
-  const forms = uniqueSessionsFor("form_submit");
-  const ctaClicks = rawEvents.filter((event) => event.name === "cta_click").length;
-  const whatsappClicks = rawEvents.filter((event) => event.name === "whatsapp_click").length;
-  return {
-    available: true,
-    filters,
-    totals: { sessions: journeys.length, forms, ctaClicks, whatsappClicks },
-    trend,
-    devices: Array.from(deviceTotals, ([key, total]) => ({ key, label: deviceLabel(key), total })).sort(
-      (a, b) => b.total - a.total,
-    ),
-    cities: Array.from(cityTotals, ([key, total]) => ({ key, total }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 5),
-    funnel: [
-      { label: "Pengunjung", total: journeys.length },
-      { label: "Melihat bagian halaman", total: uniqueSessionsFor("section_engaged") },
-      { label: "Menekan tombol minat", total: uniqueSessionsFor("cta_click") },
-      { label: "Mulai isi formulir", total: uniqueSessionsFor("form_start") },
-      { label: "Form terkirim", total: forms },
-    ],
-    journeys: journeys.slice(0, 30),
-    citiesForFilter: cityOptions,
-    sourcesForFilter: sourceOptions,
-  };
+    .where(eq(analyticsSessions.id, id));
+  if (!session) return null;
+  const events = await database
+    .select({
+      id: analyticsEvents.id,
+      name: analyticsEvents.name,
+      sectionKey: analyticsEvents.sectionKey,
+      elementKey: analyticsEvents.elementKey,
+      sequence: analyticsEvents.sequence,
+      occurredAt: analyticsEvents.occurredAt,
+    })
+    .from(analyticsEvents)
+    .where(eq(analyticsEvents.sessionId, id))
+    .orderBy(analyticsEvents.sequence);
+  return { ...session, events };
 }

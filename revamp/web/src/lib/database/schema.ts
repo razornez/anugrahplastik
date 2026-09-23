@@ -139,6 +139,8 @@ export const analyticsSessions = pgTable(
     anonymousId: varchar("anonymous_id", { length: 72 }).notNull().unique(),
     landingPath: varchar("landing_path", { length: 500 }).notNull(),
     referrer: varchar("referrer", { length: 1000 }),
+    sourceName: varchar("source_name", { length: 120 }).notNull().default("Langsung"),
+    outcome: varchar("outcome", { length: 40 }).notNull().default("Melihat halaman"),
     attribution: jsonb("attribution"),
     deviceCategory: varchar("device_category", { length: 20 }).notNull().default("unknown"),
     browserName: varchar("browser_name", { length: 80 }),
@@ -160,6 +162,8 @@ export const analyticsSessions = pgTable(
     index("analytics_sessions_created_at_idx").on(table.createdAt),
     index("analytics_sessions_device_created_at_idx").on(table.deviceCategory, table.createdAt),
     index("analytics_sessions_city_created_at_idx").on(table.cityName, table.createdAt),
+    index("analytics_sessions_source_created_at_idx").on(table.sourceName, table.createdAt),
+    index("analytics_sessions_outcome_created_at_idx").on(table.outcome, table.createdAt),
   ],
 );
 
@@ -416,6 +420,12 @@ export const transactionNumberCounters = pgTable("transaction_number_counters", 
   referenceYear: integer("reference_year").primaryKey(),
   lastValue: integer("last_value").notNull().default(0),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const masterNumberCounters = pgTable("master_number_counters", {
+  kind: varchar("kind", { length: 24 }).primaryKey(),
+  lastValue: integer("last_value").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const transactionLines = pgTable(

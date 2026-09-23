@@ -6,11 +6,29 @@ import { getProspects } from "@/features/workspace/service";
 
 export const instant = false;
 
-export default async function ProspectsPage({ searchParams }: { searchParams: Promise<{ selected?: string }> }) {
+function prospectUrl(params: Record<string, string | undefined>) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) search.set(key, value);
+  });
+  return `/admin/prospects?${search}`;
+}
+
+export default async function ProspectsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ selected?: string; q?: string; status?: string; cursor?: string; direction?: string }>;
+}) {
   const user = await getSession();
   if (!user) redirect("/admin/login");
   const query = await searchParams;
-  const data = await getProspects(query.selected);
+  const data = await getProspects({
+    selectedId: query.selected,
+    search: query.q,
+    status: query.status,
+    cursor: query.cursor,
+    direction: query.direction === "previous" ? "previous" : "next",
+  });
   if (!data) return <div className="admin-notice">Database belum terhubung.</div>;
 
   return (
@@ -24,14 +42,25 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Pr
       </header>
       <div className="prospects-workspace">
         <aside className="prospect-list" aria-label="Daftar prospek">
-          <div className="prospect-list-head">
+          <form className="prospect-list-head" method="get">
             <strong>{data.prospects.length} prospek</strong>
-            <span>Terbaru</span>
-          </div>
+            <input name="q" defaultValue={query.q} placeholder="Cari nama atau nomor" aria-label="Cari prospek" />
+            <select name="status" defaultValue={query.status ?? ""} aria-label="Status prospek">
+              <option value="">Semua status</option>
+              <option value="new">Baru</option>
+            </select>
+            <button type="submit">Cari</button>
+          </form>
           {data.prospects.map((prospect) => (
             <Link
               key={prospect.id}
-              href={`/admin/prospects?selected=${prospect.id}`}
+              href={prospectUrl({
+                q: query.q,
+                status: query.status,
+                cursor: query.cursor,
+                direction: query.direction,
+                selected: prospect.id,
+              })}
               aria-current={data.selected?.id === prospect.id ? "page" : undefined}
             >
               <span className="prospect-initial">{prospect.name.slice(0, 1)}</span>
@@ -42,6 +71,37 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Pr
               <time>{prospect.createdAt.toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</time>
             </Link>
           ))}
+          <nav className="directory-pagination" aria-label="Pindah halaman prospek">
+            {data.hasPrevious ? (
+              <Link
+                href={prospectUrl({
+                  q: query.q,
+                  status: query.status,
+                  cursor: data.previousCursor ?? undefined,
+                  direction: "previous",
+                })}
+              >
+                ← Sebelumnya
+              </Link>
+            ) : (
+              <span>← Sebelumnya</span>
+            )}
+            <span>25 prospek per halaman</span>
+            {data.hasNext ? (
+              <Link
+                href={prospectUrl({
+                  q: query.q,
+                  status: query.status,
+                  cursor: data.nextCursor ?? undefined,
+                  direction: "next",
+                })}
+              >
+                Berikutnya →
+              </Link>
+            ) : (
+              <span>Berikutnya →</span>
+            )}
+          </nav>
         </aside>
         <section className="prospect-detail">
           {data.selected ? (

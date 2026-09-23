@@ -1,6 +1,7 @@
-import { and, count, desc, eq, gte, isNull, lt } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, isNull, lt, or, sql } from "drizzle-orm";
 import { analyticsEvents, analyticsSessions, auditLogs, leadNotes, leads, users } from "@/lib/database/schema";
 import { getDatabase } from "@/lib/database/client";
+import { decodeTimeCursor, encodeTimeCursor } from "@/lib/pagination/cursor";
 
 export type WorkspacePeriod = "today" | "week" | "month";
 
@@ -93,10 +94,39 @@ export async function getWorkspaceOverview(period: WorkspacePeriod) {
   };
 }
 
-export async function getProspects(selectedId?: string) {
+export async function getProspects(
+  query: {
+    selectedId?: string;
+    search?: string;
+    status?: string;
+    cursor?: string;
+    direction?: "next" | "previous";
+  } = {},
+) {
   const database = getDatabase();
   if (!database) return null;
-  const [prospects, members] = await Promise.all([
+  const cursor = decodeTimeCursor(query.cursor);
+  const cursorDate = cursor ? new Date(cursor.createdAt) : null;
+  const cursorId = cursor?.id ?? "";
+  const backwards = query.direction === "previous";
+  const filters = and(
+    query.status ? eq(leads.status, query.status) : undefined,
+    query.search
+      ? or(ilike(leads.name, `%${query.search.slice(0, 120)}%`), ilike(leads.phone, `%${query.search.slice(0, 120)}%`))
+      : undefined,
+    cursorDate
+      ? backwards
+        ? or(
+            sql`${leads.createdAt} > ${cursorDate}`,
+            and(eq(leads.createdAt, cursorDate), sql`${leads.id} > ${cursorId}`),
+          )
+        : or(
+            sql`${leads.createdAt} < ${cursorDate}`,
+            and(eq(leads.createdAt, cursorDate), sql`${leads.id} < ${cursorId}`),
+          )
+      : undefined,
+  );
+  const [loadedProspects, members] = await Promise.all([
     database
       .select({
         id: leads.id,
@@ -111,10 +141,14 @@ export async function getProspects(selectedId?: string) {
       })
       .from(leads)
       .leftJoin(users, eq(leads.assignedUserId, users.id))
-      .orderBy(desc(leads.createdAt)),
+      .where(filters)
+      .orderBy(...(backwards ? [asc(leads.createdAt), asc(leads.id)] : [desc(leads.createdAt), desc(leads.id)]))
+      .limit(26),
     database.select({ id: users.id, name: users.name, role: users.role }).from(users).where(eq(users.isActive, true)),
   ]);
-  const selected = prospects.find((prospect) => prospect.id === selectedId) ?? prospects[0] ?? null;
+  const hasAdjacent = loadedProspects.length > 25;
+  const prospects = backwards ? loadedProspects.slice(0, 25).reverse() : loadedProspects.slice(0, 25);
+  const selected = prospects.find((prospect) => prospect.id === query.selectedId) ?? prospects[0] ?? null;
   const notes = selected
     ? await database
         .select({ id: leadNotes.id, body: leadNotes.body, createdAt: leadNotes.createdAt, authorName: users.name })
@@ -123,5 +157,14 @@ export async function getProspects(selectedId?: string) {
         .where(eq(leadNotes.leadId, selected.id))
         .orderBy(desc(leadNotes.createdAt))
     : [];
-  return { prospects, selected, notes, members };
+  return {
+    prospects,
+    selected,
+    notes,
+    members,
+    hasNext: backwards ? Boolean(query.cursor) : hasAdjacent,
+    hasPrevious: backwards ? hasAdjacent : Boolean(query.cursor),
+    nextCursor: prospects.length ? encodeTimeCursor(prospects.at(-1)!) : null,
+    previousCursor: prospects.length ? encodeTimeCursor(prospects[0]) : null,
+  };
 }

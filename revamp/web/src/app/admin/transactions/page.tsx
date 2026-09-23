@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { TransactionCreateForm } from "@/components/transaction-create-form";
-import { getActiveCustomerCount, getOperationsOverview } from "@/features/operations/service";
+import { getActiveCustomerCount, getTransactionPage } from "@/features/operations/service";
 import { requireOperationsAccess } from "@/features/operations/access";
 
 export const instant = false;
@@ -16,9 +16,30 @@ function stageLabel(value: string) {
   return labels[value] ?? value;
 }
 
-export default async function TransactionsPage() {
+function transactionUrl(params: Record<string, string | undefined>) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) search.set(key, value);
+  });
+  return `/admin/transactions?${search}`;
+}
+
+export default async function TransactionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; status?: string; cursor?: string; direction?: string }>;
+}) {
   const user = await requireOperationsAccess();
-  const [overview, customerCount] = await Promise.all([getOperationsOverview(), getActiveCustomerCount()]);
+  const query = await searchParams;
+  const [transactions, customerCount] = await Promise.all([
+    getTransactionPage({
+      search: query.q,
+      status: query.status,
+      cursor: query.cursor,
+      direction: query.direction === "previous" ? "previous" : "next",
+    }),
+    getActiveCustomerCount(),
+  ]);
 
   return (
     <section className="operations-page transactions-page">
@@ -36,12 +57,25 @@ export default async function TransactionsPage() {
       ) : null}
       <div className="transaction-workspace">
         <aside className="transaction-list">
-          <div className="transaction-list-head">
+          <form className="transaction-list-head" method="get">
             <strong>Semua transaksi</strong>
-            <span>{overview?.transactions.length ?? 0} pekerjaan</span>
-          </div>
-          {overview?.transactions.length ? (
-            overview.transactions.map((transaction) => (
+            <input
+              name="q"
+              defaultValue={query.q}
+              aria-label="Cari transaksi"
+              placeholder="Cari pekerjaan atau customer"
+            />
+            <select name="status" defaultValue={query.status ?? ""} aria-label="Status transaksi">
+              <option value="">Semua tahap</option>
+              <option value="quotation">Penawaran</option>
+              <option value="po_received">PO diterima</option>
+              <option value="contract">Kontrak</option>
+              <option value="completed">Selesai</option>
+            </select>
+            <button type="submit">Cari</button>
+          </form>
+          {transactions?.rows.length ? (
+            transactions.rows.map((transaction) => (
               <Link href={`/admin/transactions/${transaction.id}`} key={transaction.id}>
                 <span className="transaction-mark">{transaction.referenceNo.slice(-2)}</span>
                 <span>
@@ -58,6 +92,37 @@ export default async function TransactionsPage() {
           ) : (
             <p className="empty-copy">Belum ada transaksi. Mulai dari customer dan penawaran pertama.</p>
           )}
+          <nav className="directory-pagination" aria-label="Pindah halaman transaksi">
+            {transactions?.hasPrevious ? (
+              <Link
+                href={transactionUrl({
+                  q: query.q,
+                  status: query.status,
+                  cursor: transactions.previousCursor ?? undefined,
+                  direction: "previous",
+                })}
+              >
+                ← Sebelumnya
+              </Link>
+            ) : (
+              <span>← Sebelumnya</span>
+            )}
+            <span>25 transaksi per halaman</span>
+            {transactions?.hasNext ? (
+              <Link
+                href={transactionUrl({
+                  q: query.q,
+                  status: query.status,
+                  cursor: transactions.nextCursor ?? undefined,
+                  direction: "next",
+                })}
+              >
+                Berikutnya →
+              </Link>
+            ) : (
+              <span>Berikutnya →</span>
+            )}
+          </nav>
         </aside>
         <section className="transaction-empty-detail">
           <p className="eyebrow">Pilih pekerjaan</p>

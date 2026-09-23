@@ -21,6 +21,28 @@ function asDate(value) {
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 }
 
+function trafficSource(referrer) {
+  if (!referrer) return "Langsung";
+  try {
+    const host = new URL(referrer).hostname.toLowerCase();
+    if (host.includes("google")) return "Google";
+    if (host.includes("instagram")) return "Instagram";
+    if (host.includes("facebook")) return "Facebook";
+    return host.replace(/^www\./, "");
+  } catch {
+    return "Langsung";
+  }
+}
+
+function outcomeFor(events) {
+  const names = new Set(events.map((event) => event.name));
+  if (names.has("form_submit")) return "Form terkirim";
+  if (names.has("whatsapp_click")) return "Klik WhatsApp";
+  if (names.has("form_start")) return "Form mulai diisi";
+  if (names.has("cta_click")) return "Tombol minat diklik";
+  return "Melihat halaman";
+}
+
 async function heartbeat(client, additions = {}) {
   await client.query(
     `INSERT INTO analytics_worker_state (name, heartbeat_at, processed_batches, processed_events, failed_batches, updated_at)
@@ -66,15 +88,16 @@ async function processBatch(client, batch) {
   const eventAt = asDate(first.occurredAt);
   const sessionResult = await client.query(
     `INSERT INTO analytics_sessions (
-       anonymous_id, landing_path, referrer, device_category, browser_name, operating_system,
+       anonymous_id, landing_path, referrer, source_name, outcome, device_category, browser_name, operating_system,
        country_name, region_name, city_name, consent_version, consented_at, last_seen_at, created_at
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'v1', $10, $10, $10)
+     ) VALUES ($1, $2, $3, $4, 'Melihat halaman', $5, $6, $7, $8, $9, $10, 'v1', $11, $11, $11)
      ON CONFLICT (anonymous_id) DO UPDATE SET last_seen_at = GREATEST(analytics_sessions.last_seen_at, EXCLUDED.last_seen_at)
      RETURNING id, created_at, event_sequence`,
     [
       batch.anonymous_id,
       request.landingPath ?? first.path,
       request.referrer ?? null,
+      trafficSource(request.referrer ?? null),
       context.deviceCategory ?? "unknown",
       context.browserName ?? null,
       context.operatingSystem ?? null,
@@ -119,9 +142,24 @@ async function processBatch(client, batch) {
          last_event_at = $3,
          last_section_key = COALESCE($4, last_section_key),
          ended_at = COALESCE($5, ended_at),
-         duration_seconds = COALESCE($6, duration_seconds)
+         duration_seconds = COALESCE($6, duration_seconds),
+         outcome = CASE
+           WHEN $7 = 'Form terkirim' OR outcome = 'Form terkirim' THEN 'Form terkirim'
+           WHEN $7 = 'Klik WhatsApp' OR outcome = 'Klik WhatsApp' THEN 'Klik WhatsApp'
+           WHEN $7 = 'Form mulai diisi' OR outcome = 'Form mulai diisi' THEN 'Form mulai diisi'
+           WHEN $7 = 'Tombol minat diklik' OR outcome = 'Tombol minat diklik' THEN 'Tombol minat diklik'
+           ELSE 'Melihat halaman'
+         END
      WHERE id = $1`,
-    [session.id, sequence, finalEvent.occurredAt, finalEvent.sectionKey ?? null, endedAt, durationSeconds],
+    [
+      session.id,
+      sequence,
+      finalEvent.occurredAt,
+      finalEvent.sectionKey ?? null,
+      endedAt,
+      durationSeconds,
+      outcomeFor(payload.events),
+    ],
   );
 }
 

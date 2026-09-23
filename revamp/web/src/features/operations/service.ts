@@ -1,4 +1,4 @@
-import { desc, eq, getTableColumns, sql } from "drizzle-orm";
+import { count, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import {
   auditLogs,
   businessTransactions,
@@ -104,15 +104,11 @@ export async function getMasterDirectory() {
   return { customerRows, supplierRows, materialRows, productRows, mouldRows, designRows };
 }
 
-export async function getCustomerOptions() {
+export async function getActiveCustomerCount() {
   const database = getDatabase();
-  if (!database) return [];
-  return database
-    .select({ id: customers.id, name: customers.displayName, code: customers.code })
-    .from(customers)
-    .where(eq(customers.status, "active"))
-    .orderBy(customers.displayName)
-    .limit(200);
+  if (!database) return 0;
+  const [result] = await database.select({ total: count() }).from(customers).where(eq(customers.status, "active"));
+  return Number(result?.total ?? 0);
 }
 
 export async function getDesignFile(id: string) {

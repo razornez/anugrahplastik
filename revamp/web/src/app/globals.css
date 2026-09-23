@@ -1650,6 +1650,129 @@ body {
   min-width: 120px;
   background: #1ab55c;
 }
+.transaction-create button:disabled,
+.transaction-create input:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+.transaction-create__customer {
+  position: relative;
+}
+.customer-combobox {
+  position: relative;
+  display: block;
+}
+.customer-combobox__results {
+  position: absolute;
+  z-index: 24;
+  top: calc(100% + 7px);
+  right: 0;
+  left: 0;
+  overflow: auto;
+  max-height: 260px;
+  border: 1px solid #d9e4ef;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 18px 36px -22px rgba(5, 21, 41, 0.6);
+}
+.customer-combobox__results button,
+.customer-combobox__hint {
+  display: grid;
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-bottom: 1px solid #edf1f6;
+  background: #fff;
+  padding: 9px 11px;
+  color: var(--admin-ink);
+  text-align: left;
+}
+.customer-combobox__results button {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.customer-combobox__results button:last-child {
+  border-bottom: 0;
+}
+.customer-combobox__results button:hover,
+.customer-combobox__results button.is-active {
+  background: #edf5ff;
+}
+.customer-combobox__results strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.customer-combobox__results small,
+.customer-combobox__hint {
+  color: #62728a;
+  font-size: 10px;
+  font-weight: 700;
+}
+.customer-combobox__hint {
+  align-items: center;
+  color: #62728a;
+}
+.transaction-create__message {
+  grid-column: 1 / -1;
+  margin: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.transaction-create__message--error {
+  background: #fff1f0;
+  color: #a44640;
+}
+.transaction-create__message--success {
+  background: #e9f9ef;
+  color: #197342;
+}
+.operations-error {
+  max-width: 620px;
+  padding: 56px 0;
+}
+.operations-error h1 {
+  margin: 8px 0;
+  color: var(--admin-ink);
+  font-family: var(--font-archivo), sans-serif;
+  font-size: clamp(30px, 4vw, 44px);
+  letter-spacing: -1.5px;
+}
+.operations-error > p:not(.eyebrow) {
+  color: var(--admin-muted);
+  line-height: 1.65;
+}
+.operations-error > div {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+}
+.operations-error button,
+.operations-error a {
+  display: inline-grid;
+  min-height: 44px;
+  align-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: var(--admin-blue);
+  padding: 0 15px;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+.operations-error a {
+  background: #edf5ff;
+  color: #1767d1;
+}
 .operations-notice,
 .operations-footnote {
   margin: -7px 0 18px;

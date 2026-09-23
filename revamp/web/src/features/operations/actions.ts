@@ -158,29 +158,76 @@ export async function createMould(formData: FormData) {
   refreshOperations();
 }
 
-export async function createTransaction(formData: FormData) {
-  const user = await actor("operations");
-  const input = z
+export type CreateTransactionState = {
+  status: "idle" | "error" | "success";
+  message?: string;
+  transactionId?: string;
+};
+
+export async function createTransaction(
+  _previousState: CreateTransactionState,
+  formData: FormData,
+): Promise<CreateTransactionState> {
+  const parsed = z
     .object({ customerId: z.string().uuid(), title: z.string().min(4).max(220) })
-    .parse({ customerId: value(formData, "customerId"), title: value(formData, "title") });
-  const database = getDatabase();
-  if (!database) throw new Error("Database belum terhubung.");
-  const year = new Date().getFullYear();
-  const [counter] = await database
-    .insert(transactionNumberCounters)
-    .values({ referenceYear: year, lastValue: 1 })
-    .onConflictDoUpdate({
-      target: transactionNumberCounters.referenceYear,
-      set: { lastValue: sql`${transactionNumberCounters.lastValue} + 1`, updatedAt: new Date() },
-    })
-    .returning({ lastValue: transactionNumberCounters.lastValue });
-  const referenceNo = `TRX-${year}-${String(counter.lastValue).padStart(5, "0")}`;
-  const [record] = await database
-    .insert(businessTransactions)
-    .values({ referenceNo, customerId: input.customerId, ownerId: user.id, title: input.title })
-    .returning({ id: businessTransactions.id });
-  await writeAudit(user.id, "transaction.created", "transaction", record.id, { referenceNo });
-  refreshOperations();
+    .safeParse({ customerId: value(formData, "customerId"), title: value(formData, "title") });
+
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "Pilih customer dari daftar, lalu isi judul pekerjaan minimal 4 karakter.",
+    };
+  }
+
+  try {
+    const user = await actor("operations");
+    const database = getDatabase();
+    if (!database) return { status: "error", message: "Data belum dapat diakses. Coba lagi sesaat lagi." };
+
+    const year = new Date().getFullYear();
+    const transaction = await database.transaction(async (tx) => {
+      const [counter] = await tx
+        .insert(transactionNumberCounters)
+        .values({ referenceYear: year, lastValue: 1 })
+        .onConflictDoUpdate({
+          target: transactionNumberCounters.referenceYear,
+          set: { lastValue: sql`${transactionNumberCounters.lastValue} + 1`, updatedAt: new Date() },
+        })
+        .returning({ lastValue: transactionNumberCounters.lastValue });
+
+      if (!counter) throw new Error("Nomor transaksi belum dapat dibuat.");
+
+      const referenceNo = `TRX-${year}-${String(counter.lastValue).padStart(5, "0")}`;
+      const [record] = await tx
+        .insert(businessTransactions)
+        .values({ referenceNo, customerId: parsed.data.customerId, ownerId: user.id, title: parsed.data.title })
+        .returning({ id: businessTransactions.id });
+
+      if (!record) throw new Error("Transaksi belum dapat disimpan.");
+
+      await tx.insert(auditLogs).values({
+        actorId: user.id,
+        action: "transaction.created",
+        entityType: "transaction",
+        entityId: record.id,
+        metadata: { referenceNo },
+      });
+
+      return record;
+    });
+
+    refreshOperations();
+    return {
+      status: "success",
+      message: "Transaksi berhasil dibuat. Menyiapkan halaman pekerjaan.",
+      transactionId: transaction.id,
+    };
+  } catch {
+    return {
+      status: "error",
+      message: "Transaksi belum tersimpan. Periksa data lalu coba lagi.",
+    };
+  }
 }
 
 export async function recordTransactionPayment(formData: FormData) {

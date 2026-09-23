@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { createTransaction } from "@/features/operations/actions";
-import { getCustomerOptions, getOperationsOverview } from "@/features/operations/service";
+import { TransactionCreateForm } from "@/components/transaction-create-form";
+import { getActiveCustomerCount, getOperationsOverview } from "@/features/operations/service";
 import { requireOperationsAccess } from "@/features/operations/access";
 
 function stageLabel(value: string) {
@@ -16,7 +16,7 @@ function stageLabel(value: string) {
 
 export default async function TransactionsPage() {
   const user = await requireOperationsAccess();
-  const [overview, customers] = await Promise.all([getOperationsOverview(), getCustomerOptions()]);
+  const [overview, customerCount] = await Promise.all([getOperationsOverview(), getActiveCustomerCount()]);
 
   return (
     <section className="operations-page">
@@ -28,29 +28,10 @@ export default async function TransactionsPage() {
             Setiap transaksi menyatukan dokumen, pembayaran, produksi, pengiriman, dan aktivitas dalam satu nomor kerja.
           </p>
         </div>
-        <form className="transaction-create" action={createTransaction}>
-          <label>
-            Customer
-            <select name="customerId" required defaultValue="">
-              <option value="" disabled>
-                Pilih customer
-              </option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.code} · {customer.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Judul pekerjaan
-            <input name="title" placeholder="Contoh: Reproduksi cover gear" required />
-          </label>
-          <button type="submit">Buat transaksi</button>
-        </form>
+        <TransactionCreateForm customerCount={customerCount} />
       </header>
 
-      {!customers.length ? (
+      {!customerCount ? (
         <p className="operations-notice">Tambahkan customer di Data master sebelum membuat transaksi pertama.</p>
       ) : null}
       <div className="transaction-workspace">

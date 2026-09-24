@@ -15,6 +15,7 @@ import {
   products,
   suppliers,
   transactionFinancialEntries,
+  transactionLines,
   transactionNumberCounters,
 } from "@/lib/database/schema";
 
@@ -259,6 +260,11 @@ export async function createTransaction(
 
     const year = new Date().getFullYear();
     const transaction = await database.transaction(async (tx) => {
+      const [customer] = await tx
+        .select({ id: customers.id })
+        .from(customers)
+        .where(and(eq(customers.id, parsed.data.customerId), eq(customers.status, "active")));
+      if (!customer) throw new Error("Customer yang dipilih tidak aktif atau tidak ditemukan.");
       const [counter] = await tx
         .insert(transactionNumberCounters)
         .values({ referenceYear: year, lastValue: 1 })
@@ -362,18 +368,32 @@ export async function releaseProduction(formData: FormData) {
   const transactionId = z.string().uuid().parse(value(formData, "transactionId"));
   const database = getDatabase();
   if (!database) throw new Error("Database belum terhubung.");
-  const [funds] = await database
-    .select({
-      total: sql<string>`coalesce(sum(${transactionFinancialEntries.amount}) filter (where ${transactionFinancialEntries.direction} = 'in' and ${transactionFinancialEntries.status} = 'verified'), 0)`,
-    })
-    .from(transactionFinancialEntries)
-    .where(eq(transactionFinancialEntries.transactionId, transactionId));
-  if (Number(funds?.total ?? 0) <= 0) throw new Error("Produksi hanya dapat dilepas setelah pembayaran terverifikasi.");
+  const [[funds], [transaction], [lineCount]] = await Promise.all([
+    database
+      .select({
+        total: sql<string>`coalesce(sum(${transactionFinancialEntries.amount}) filter (where ${transactionFinancialEntries.direction} = 'in' and ${transactionFinancialEntries.status} = 'verified'), 0)`,
+      })
+      .from(transactionFinancialEntries)
+      .where(eq(transactionFinancialEntries.transactionId, transactionId)),
+    database
+      .select({ dueAt: businessTransactions.dueAt, customerId: businessTransactions.customerId })
+      .from(businessTransactions)
+      .where(eq(businessTransactions.id, transactionId)),
+    database
+      .select({ total: sql<number>`count(*)` })
+      .from(transactionLines)
+      .where(eq(transactionLines.transactionId, transactionId)),
+  ]);
+  if (!transaction) throw new Error("Transaksi tidak ditemukan.");
   await database
     .update(businessTransactions)
-    .set({ fulfilmentStatus: "released", paymentStatus: "verified", updatedAt: new Date() })
+    .set({ fulfilmentStatus: "released", updatedAt: new Date() })
     .where(and(eq(businessTransactions.id, transactionId), sql`${businessTransactions.cancelledAt} is null`));
-  await writeAudit(user.id, "transaction.production_released", "transaction", transactionId);
+  await writeAudit(user.id, "transaction.production_released", "transaction", transactionId, {
+    hasVerifiedPayment: Number(funds?.total ?? 0) > 0,
+    hasLineItem: Number(lineCount?.total ?? 0) > 0,
+    hasTargetDate: Boolean(transaction.dueAt),
+  });
   revalidatePath(`/admin/transactions/${transactionId}`);
 }
 

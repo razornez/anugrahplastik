@@ -92,6 +92,7 @@ export const leads = pgTable("leads", {
   message: text("message").notNull(),
   status: varchar("status", { length: 32 }).default("new").notNull(),
   source: varchar("source", { length: 64 }).default("website").notNull(),
+  dataClass: varchar("data_class", { length: 16 }).default("production").notNull(),
   landingPath: varchar("landing_path", { length: 500 }),
   referrer: varchar("referrer", { length: 1000 }),
   attribution: jsonb("attribution"),
@@ -136,7 +137,11 @@ export const analyticsSessions = pgTable(
   "analytics_sessions",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    anonymousId: varchar("anonymous_id", { length: 72 }).notNull().unique(),
+    /** Stable opaque visitor key. It never contains customer identity. */
+    anonymousId: varchar("anonymous_id", { length: 72 }).notNull(),
+    /** Per-tab/session key; a visitor can have several sessions. */
+    sessionKey: varchar("session_key", { length: 72 }).notNull().unique(),
+    trafficClass: varchar("traffic_class", { length: 16 }).notNull().default("public"),
     landingPath: varchar("landing_path", { length: 500 }).notNull(),
     referrer: varchar("referrer", { length: 1000 }),
     sourceName: varchar("source_name", { length: 120 }).notNull().default("Langsung"),
@@ -179,6 +184,7 @@ export const analyticsEvents = pgTable(
     sectionKey: varchar("section_key", { length: 100 }),
     elementKey: varchar("element_key", { length: 160 }),
     metadata: jsonb("metadata"),
+    conversionId: varchar("conversion_id", { length: 72 }),
     sequence: integer("sequence").notNull().default(1),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -400,6 +406,7 @@ export const businessTransactions = pgTable(
       .references(() => customers.id, { onDelete: "restrict" }),
     ownerId: uuid("owner_id").references(() => users.id, { onDelete: "set null" }),
     title: varchar("title", { length: 220 }).notNull(),
+    dataClass: varchar("data_class", { length: 16 }).notNull().default("production"),
     commercialStatus: varchar("commercial_status", { length: 32 }).notNull().default("quotation"),
     paymentStatus: varchar("payment_status", { length: 32 }).notNull().default("awaiting_invoice"),
     fulfilmentStatus: varchar("fulfilment_status", { length: 32 }).notNull().default("not_released"),

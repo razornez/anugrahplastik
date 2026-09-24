@@ -5,6 +5,9 @@ import { analyticsConsent } from "./analytics-consent";
 import type { AnalyticsBatch, AnalyticsEvent, AnalyticsEventName } from "@/features/analytics/schema";
 
 const anonymousKey = "ap-analytics-anonymous-id-v1";
+const sessionKey = "ap-analytics-session-id-v1";
+const sessionLastActiveKey = "ap-analytics-session-active-v1";
+const sessionTimeoutMs = 30 * 60 * 1_000;
 const scrollMilestones = [25, 50, 75, 90] as const;
 
 type TrackDetail = Omit<AnalyticsEvent, "path" | "occurredAt">;
@@ -18,13 +21,31 @@ function anonymousId() {
   return created;
 }
 
+function currentSessionId() {
+  const existing = window.sessionStorage.getItem(sessionKey);
+  const lastActive = Number(window.sessionStorage.getItem(sessionLastActiveKey) ?? 0);
+  if (existing && Date.now() - lastActive < sessionTimeoutMs) {
+    window.sessionStorage.setItem(sessionLastActiveKey, String(Date.now()));
+    return existing;
+  }
+  const created = crypto.randomUUID();
+  window.sessionStorage.setItem(sessionKey, created);
+  window.sessionStorage.setItem(sessionLastActiveKey, String(Date.now()));
+  return created;
+}
+
 function currentPath() {
   return window.location.pathname;
 }
 
 function sendBatch(events: AnalyticsEvent[], useBeacon = false) {
   if (!analyticsConsent() || events.length === 0) return;
-  const payload: AnalyticsBatch = { anonymousId: anonymousId(), events, consentVersion: "v1" };
+  const payload: AnalyticsBatch = {
+    anonymousId: anonymousId(),
+    sessionKey: currentSessionId(),
+    events,
+    consentVersion: "v1",
+  };
   const body = JSON.stringify(payload);
 
   if (useBeacon && navigator.sendBeacon) {
@@ -79,6 +100,7 @@ export function AnalyticsTracker() {
 
       let formStarted = false;
       let formSubmitted = false;
+      let lastVisibleAt = document.visibilityState === "visible" ? Date.now() : null;
       let activeSection: string | undefined;
       const observedSections = new Set<string>();
       const sectionTimers = new Map<string, number>();
@@ -91,6 +113,11 @@ export function AnalyticsTracker() {
       const track = (name: AnalyticsEventName, detail: Partial<TrackDetail> = {}, useBeacon = false) => {
         queue.push({ name, path: currentPath(), ...detail, occurredAt: new Date().toISOString() });
         if (useBeacon || queue.length >= 10) flush(useBeacon);
+      };
+
+      const onVisibility = () => {
+        if (document.visibilityState === "visible") lastVisibleAt = Date.now();
+        else lastVisibleAt = null;
       };
 
       track("page_view");
@@ -152,14 +179,23 @@ export function AnalyticsTracker() {
         const detail = (event as CustomEvent<TrackDetail>).detail;
         if (!detail) return;
         if (detail.name === "form_submit") formSubmitted = true;
-        track(detail.name, detail);
+        if (document.visibilityState === "visible" || detail.name === "form_submit") track(detail.name, detail);
       };
 
       const onPageHide = () => {
         if (formStarted && !formSubmitted) {
           track("form_abandon", { sectionKey: "ap-contact", elementKey: "request-form" }, true);
         }
-        track("page_leave", { sectionKey: activeSection }, true);
+        track(
+          "page_leave",
+          {
+            sectionKey: activeSection,
+            metadata: lastVisibleAt
+              ? { active_seconds: Math.min(1_800, Math.max(0, Math.round((Date.now() - lastVisibleAt) / 1_000))) }
+              : undefined,
+          },
+          true,
+        );
         flush(true);
       };
 
@@ -170,6 +206,7 @@ export function AnalyticsTracker() {
       root.addEventListener("focusin", onFormFocus);
       window.addEventListener("ap:analytics-track", onCustomTrack);
       window.addEventListener("pagehide", onPageHide);
+      document.addEventListener("visibilitychange", onVisibility);
       onScroll();
 
       dispose = () => {
@@ -178,6 +215,7 @@ export function AnalyticsTracker() {
         root.removeEventListener("focusin", onFormFocus);
         window.removeEventListener("ap:analytics-track", onCustomTrack);
         window.removeEventListener("pagehide", onPageHide);
+        document.removeEventListener("visibilitychange", onVisibility);
         sectionTimers.forEach((timer) => window.clearTimeout(timer));
         sectionObserver.disconnect();
         window.clearInterval(interval);

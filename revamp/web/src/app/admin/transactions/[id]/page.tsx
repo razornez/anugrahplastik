@@ -54,6 +54,20 @@ function rupiah(value: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
 }
 
+function quantity(value: string | number | null) {
+  return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 3 }).format(Number(value ?? 0));
+}
+
+function batchStatusLabel(value: string) {
+  const labels: Record<string, string> = {
+    planned: "Direncanakan",
+    in_progress: "Produksi berjalan",
+    awaiting_approval: "Menunggu persetujuan sampel",
+    completed: "Selesai",
+  };
+  return labels[value] ?? "Status belum dikenali";
+}
+
 function dateText(value: Date | null) {
   return value
     ? value.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })
@@ -197,7 +211,13 @@ export default async function TransactionDetailPage({
   const deliveryDocuments = transaction.documents.filter((document) =>
     ["delivery_note", "bast"].includes(document.type),
   );
-  const eligibleForProduction = totals.receivedAmount > 0;
+  const releaseChecks = [
+    { label: "Customer aktif", ready: Boolean(header.customerName) },
+    { label: "Nilai dan item tersedia", ready: transaction.lines.length > 0 && totals.quotedAmount > 0 },
+    { label: "Target pekerjaan ditetapkan", ready: Boolean(header.dueAt) },
+    { label: "Pembayaran terverifikasi", ready: totals.receivedAmount > 0 },
+  ];
+  const missingReleaseChecks = releaseChecks.filter((item) => !item.ready);
 
   return (
     <section className="transaction-workspace-page">
@@ -399,12 +419,12 @@ export default async function TransactionDetailPage({
                     <p className="eyebrow">Status produksi &amp; pengiriman</p>
                     <h3>{statusLabel("fulfilment", header.fulfilmentStatus)}</h3>
                     <p>
-                      {eligibleForProduction
-                        ? "Pembayaran terverifikasi tersedia. Periksa status lalu lepaskan pekerjaan saat siap."
-                        : "Produksi dapat dimulai setelah pembayaran customer terverifikasi."}
+                      {missingReleaseChecks.length
+                        ? "Ada data yang belum lengkap. Administrator tetap dapat melanjutkan setelah meninjaunya."
+                        : "Data utama sudah siap. Lepaskan pekerjaan saat tim produksi siap menerima."}
                     </p>
                   </div>
-                  {user.role === "admin" && eligibleForProduction && header.fulfilmentStatus !== "released" ? (
+                  {user.role === "admin" && header.fulfilmentStatus !== "released" ? (
                     <form action={releaseProduction}>
                       <input name="transactionId" type="hidden" value={header.id} />
                       <button className="primary-action" type="submit">
@@ -413,6 +433,17 @@ export default async function TransactionDetailPage({
                     </form>
                   ) : null}
                 </section>
+                {missingReleaseChecks.length ? (
+                  <section className="transaction-release-warning" aria-label="Pemeriksaan sebelum produksi">
+                    <strong>Periksa sebelum melepas ke produksi</strong>
+                    <p>Produksi tetap dapat diteruskan sesuai kebijakan, tetapi data berikut belum lengkap:</p>
+                    <ul>
+                      {missingReleaseChecks.map((item) => (
+                        <li key={item.label}>{item.label}</li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
                 <div className="transaction-stage-grid">
                   <section className="transaction-workspace-card">
                     <p className="eyebrow">Produksi</p>
@@ -425,10 +456,11 @@ export default async function TransactionDetailPage({
                             <div>
                               <strong>{batch.productName ?? batch.batchNo}</strong>
                               <small>
-                                {batch.mouldName ?? "Mould belum dipilih"} · rencana {batch.plannedQuantity ?? 0} pcs
+                                {batch.mouldName ?? "Mould belum dipilih"} · rencana {quantity(batch.plannedQuantity)}{" "}
+                                pcs
                               </small>
                             </div>
-                            <em>{batch.status}</em>
+                            <em>{batchStatusLabel(batch.status)}</em>
                           </article>
                         ))}
                       </div>

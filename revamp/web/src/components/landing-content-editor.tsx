@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { LandingContent } from "@/features/content/landing-content";
 
 type SectionId =
@@ -301,6 +301,15 @@ export function LandingContentEditor({ action, content, message }: Props) {
   const activeIndex = sections.findIndex((section) => section.id === activeSectionId);
   const activeSection = sections[activeIndex] ?? sections[0];
   const hasLocalChanges = useMemo(() => JSON.stringify(draft) !== JSON.stringify(content), [content, draft]);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!hasLocalChanges) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasLocalChanges]);
   const selectSection = (id: SectionId) => {
     setActiveSectionId(id);
     setMobileView("edit");
@@ -418,6 +427,12 @@ export function LandingContentEditor({ action, content, message }: Props) {
           </button>
         </div>
       </aside>
+      <div className="landing-editor__mobile-save" aria-live="polite">
+        <span>{hasLocalChanges ? "Perubahan belum disimpan" : "Semua perubahan tersimpan"}</span>
+        <button disabled={!hasLocalChanges} name="action" type="submit" value="draft">
+          Simpan
+        </button>
+      </div>
       {sections
         .flatMap((section) => section.fields)
         .filter((item) => !activeSection.fields.includes(item))

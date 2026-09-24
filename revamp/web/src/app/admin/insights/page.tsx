@@ -25,8 +25,19 @@ function queryString(filters: ReportFilters, session?: string, cursor?: string, 
 }
 
 function duration(seconds: number | null) {
-  if (!seconds) return "Belum selesai";
+  if (!seconds) return "Belum ada durasi aktif";
   return seconds < 60 ? `${seconds} dtk` : `${Math.round(seconds / 60)} mnt`;
+}
+
+function timestamp(value: Date) {
+  return value.toLocaleString("id-ID", {
+    timeZone: "Asia/Jakarta",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function deviceLabel(device: string) {
@@ -149,6 +160,17 @@ export default async function InsightsPage({
         <button type="submit">Terapkan</button>
       </form>
 
+      {filters.device !== "all" || filters.city || filters.source || filters.outcome ? (
+        <div className="visitor-filter-chips" aria-label="Filter aktif">
+          <strong>Filter aktif</strong>
+          {filters.device !== "all" ? <span>{deviceLabel(filters.device)}</span> : null}
+          {filters.city ? <span>{filters.city}</span> : null}
+          {filters.source ? <span>{filters.source}</span> : null}
+          {filters.outcome ? <span>{filters.outcome}</span> : null}
+          <Link href={`/admin/insights?days=${filters.days}`}>Reset</Link>
+        </div>
+      ) : null}
+
       <div className="visitor-stat-row">
         <article>
           <span>Pengunjung</span>
@@ -167,6 +189,9 @@ export default async function InsightsPage({
           <strong>{report.totals.whatsappClicks}</strong>
         </article>
       </div>
+      <p className="visitor-filter-context">
+        Angka di bawah dihitung dari {report.totals.sessions} kunjungan publik sesuai periode dan filter aktif.
+      </p>
 
       <div className="visitor-report__grid">
         <section className="journey-list" aria-label="Daftar perjalanan kunjungan">
@@ -191,7 +216,7 @@ export default async function InsightsPage({
                   <strong>{journey.cityName ?? "Lokasi belum tersedia"}</strong>
                   <small>
                     {journey.browserName ?? "Browser tidak diketahui"} · {journey.sourceName} ·{" "}
-                    {duration(journey.durationSeconds)}
+                    {duration(journey.durationSeconds)} · {timestamp(journey.createdAt)} WIB
                   </small>
                 </span>
                 <span className="journey-outcome">{journey.outcome}</span>
@@ -244,6 +269,14 @@ export default async function InsightsPage({
                   <dt>Hasil</dt>
                   <dd>{selected.outcome}</dd>
                 </div>
+                <div>
+                  <dt>Mulai</dt>
+                  <dd>{timestamp(selected.createdAt)} WIB</dd>
+                </div>
+                <div>
+                  <dt>Durasi aktif</dt>
+                  <dd>{duration(selected.durationSeconds)}</dd>
+                </div>
               </dl>
               <ol className="journey-timeline">
                 {selected.events.map((event) => (
@@ -253,7 +286,7 @@ export default async function InsightsPage({
                       <strong>{eventLabel(event.name)}</strong>
                       <small>{eventDetail(event)}</small>
                     </div>
-                    <time>{event.occurredAt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</time>
+                    <time>{timestamp(event.occurredAt)} WIB</time>
                   </li>
                 ))}
               </ol>

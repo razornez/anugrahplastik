@@ -74,6 +74,7 @@ function initialTrend(days: number) {
 function sessionConditions(filters: ReportFilters, since: Date) {
   return and(
     gte(analyticsSessions.createdAt, since),
+    eq(analyticsSessions.trafficClass, "public"),
     filters.device !== "all" ? eq(analyticsSessions.deviceCategory, filters.device) : undefined,
     filters.city ? eq(analyticsSessions.cityName, filters.city) : undefined,
     filters.source ? eq(analyticsSessions.sourceName, filters.source) : undefined,
@@ -88,6 +89,17 @@ async function eventSessions(filters: ReportFilters, since: Date, eventName: str
     .from(analyticsEvents)
     .innerJoin(analyticsSessions, eq(analyticsEvents.sessionId, analyticsSessions.id))
     .where(and(sessionConditions(filters, since), eq(analyticsEvents.name, eventName)));
+  return Number(row?.total ?? 0);
+}
+
+async function uniqueFormConversions(filters: ReportFilters, since: Date) {
+  const database = getDatabase();
+  if (!database) return 0;
+  const [row] = await database
+    .select({ total: countDistinct(analyticsEvents.conversionId) })
+    .from(analyticsEvents)
+    .innerJoin(analyticsSessions, eq(analyticsEvents.sessionId, analyticsSessions.id))
+    .where(and(sessionConditions(filters, since), eq(analyticsEvents.name, "form_submit")));
   return Number(row?.total ?? 0);
 }
 
@@ -146,7 +158,7 @@ export async function getAnalyticsReport(
     database
       .selectDistinct({ sourceName: analyticsSessions.sourceName })
       .from(analyticsSessions)
-      .where(gte(analyticsSessions.createdAt, since))
+      .where(and(gte(analyticsSessions.createdAt, since), eq(analyticsSessions.trafficClass, "public")))
       .orderBy(analyticsSessions.sourceName)
       .limit(60),
     database
@@ -175,7 +187,7 @@ export async function getAnalyticsReport(
       .where(and(conditions, cursorCondition))
       .orderBy(...order)
       .limit(26),
-    eventSessions(filters, since, "form_submit"),
+    uniqueFormConversions(filters, since),
     eventSessions(filters, since, "cta_click"),
     eventSessions(filters, since, "whatsapp_click"),
     eventSessions(filters, since, "section_engaged"),
@@ -184,7 +196,13 @@ export async function getAnalyticsReport(
   const citiesForFilter = await database
     .selectDistinct({ cityName: analyticsSessions.cityName })
     .from(analyticsSessions)
-    .where(and(gte(analyticsSessions.createdAt, since), sql`${analyticsSessions.cityName} is not null`))
+    .where(
+      and(
+        gte(analyticsSessions.createdAt, since),
+        eq(analyticsSessions.trafficClass, "public"),
+        sql`${analyticsSessions.cityName} is not null`,
+      ),
+    )
     .orderBy(analyticsSessions.cityName)
     .limit(60);
   const hasAdjacent = sessionsPage.length > 25;

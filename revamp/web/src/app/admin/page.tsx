@@ -57,6 +57,29 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
         </nav>
       </header>
 
+      <section className="workspace-priority-strip" aria-label="Ringkasan tindakan hari ini">
+        <article>
+          <span>Perlu ditindaklanjuti</span>
+          <strong>{overview?.current.unassigned ?? 0}</strong>
+          <p>prospek belum memiliki penanggung jawab</p>
+          <Link href="/admin/prospects">Buka prospek →</Link>
+        </article>
+        {user.role !== "content" ? (
+          <article>
+            <span>Order berjalan</span>
+            <strong>{overview?.operations.openOrders ?? 0}</strong>
+            <p>{overview?.operations.paymentAttention ?? 0} pekerjaan belum berstatus pembayaran terverifikasi</p>
+            <Link href="/admin/transactions">Buka transaksi →</Link>
+          </article>
+        ) : null}
+        <article>
+          <span>Kinerja pemasaran</span>
+          <strong>{report.totals.forms}</strong>
+          <p>lead unik valid dalam periode yang dipilih</p>
+          <Link href={user.role === "content" ? "/admin/content" : "/admin/insights"}>Lihat rincian →</Link>
+        </article>
+      </section>
+
       <section className="marketing-pulse">
         <div className="pulse-copy">
           <p className="eyebrow">Ringkasan pemasaran · {label}</p>

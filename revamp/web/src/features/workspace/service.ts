@@ -1,5 +1,13 @@
-import { and, asc, count, desc, eq, gte, ilike, isNull, lt, or, sql } from "drizzle-orm";
-import { analyticsEvents, analyticsSessions, auditLogs, leadNotes, leads, users } from "@/lib/database/schema";
+import { and, asc, count, countDistinct, desc, eq, gte, ilike, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  analyticsEvents,
+  analyticsSessions,
+  auditLogs,
+  businessTransactions,
+  leadNotes,
+  leads,
+  users,
+} from "@/lib/database/schema";
 import { getDatabase } from "@/lib/database/client";
 import { decodeTimeCursor, encodeTimeCursor } from "@/lib/pagination/cursor";
 
@@ -25,9 +33,13 @@ async function eventCount(name: string | null, start: Date, end?: Date) {
     ? and(gte(analyticsEvents.occurredAt, start), lt(analyticsEvents.occurredAt, end))
     : gte(analyticsEvents.occurredAt, start);
   const rows = await database
-    .select({ total: count() })
+    .select({
+      total:
+        name === "form_submit" ? countDistinct(analyticsEvents.conversionId) : countDistinct(analyticsEvents.sessionId),
+    })
     .from(analyticsEvents)
-    .where(condition ? and(condition, range) : range);
+    .innerJoin(analyticsSessions, eq(analyticsEvents.sessionId, analyticsSessions.id))
+    .where(and(condition, range, eq(analyticsSessions.trafficClass, "public")));
   return Number(rows[0]?.total ?? 0);
 }
 
@@ -36,39 +48,79 @@ export async function getWorkspaceOverview(period: WorkspacePeriod) {
   const { start, prior } = workspaceRange(period);
   if (!database) return null;
 
-  const [sessions, formSubmits, ctaClicks, whatsappClicks, newLeads, unassigned, recentLeads, activity] =
-    await Promise.all([
-      database.select({ total: count() }).from(analyticsSessions).where(gte(analyticsSessions.createdAt, start)),
-      eventCount("form_submit", start),
-      eventCount("cta_click", start),
-      eventCount("whatsapp_click", start),
-      database.select({ total: count() }).from(leads).where(gte(leads.createdAt, start)),
-      database.select({ total: count() }).from(leads).where(isNull(leads.assignedUserId)),
-      database
-        .select({
-          id: leads.id,
-          name: leads.name,
-          message: leads.message,
-          source: leads.source,
-          createdAt: leads.createdAt,
-          assignedName: users.name,
-        })
-        .from(leads)
-        .leftJoin(users, eq(leads.assignedUserId, users.id))
-        .orderBy(desc(leads.createdAt))
-        .limit(5),
-      database
-        .select({
-          action: auditLogs.action,
-          entityType: auditLogs.entityType,
-          createdAt: auditLogs.createdAt,
-          actorName: users.name,
-        })
-        .from(auditLogs)
-        .leftJoin(users, eq(auditLogs.actorId, users.id))
-        .orderBy(desc(auditLogs.createdAt))
-        .limit(5),
-    ]);
+  const [
+    sessions,
+    formSubmits,
+    ctaClicks,
+    whatsappClicks,
+    newLeads,
+    unassigned,
+    recentLeads,
+    activity,
+    openOrders,
+    paymentAttention,
+  ] = await Promise.all([
+    database
+      .select({ total: count() })
+      .from(analyticsSessions)
+      .where(and(gte(analyticsSessions.createdAt, start), eq(analyticsSessions.trafficClass, "public"))),
+    eventCount("form_submit", start),
+    eventCount("cta_click", start),
+    eventCount("whatsapp_click", start),
+    database
+      .select({ total: count() })
+      .from(leads)
+      .where(and(gte(leads.createdAt, start), eq(leads.dataClass, "production"))),
+    database
+      .select({ total: count() })
+      .from(leads)
+      .where(and(isNull(leads.assignedUserId), eq(leads.dataClass, "production"))),
+    database
+      .select({
+        id: leads.id,
+        name: leads.name,
+        message: leads.message,
+        source: leads.source,
+        createdAt: leads.createdAt,
+        assignedName: users.name,
+      })
+      .from(leads)
+      .leftJoin(users, eq(leads.assignedUserId, users.id))
+      .where(eq(leads.dataClass, "production"))
+      .orderBy(desc(leads.createdAt))
+      .limit(5),
+    database
+      .select({
+        action: auditLogs.action,
+        entityType: auditLogs.entityType,
+        createdAt: auditLogs.createdAt,
+        actorName: users.name,
+      })
+      .from(auditLogs)
+      .leftJoin(users, eq(auditLogs.actorId, users.id))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(5),
+    database
+      .select({ total: count() })
+      .from(businessTransactions)
+      .where(
+        and(
+          eq(businessTransactions.dataClass, "production"),
+          isNull(businessTransactions.cancelledAt),
+          sql`${businessTransactions.commercialStatus} <> 'completed'`,
+        ),
+      ),
+    database
+      .select({ total: count() })
+      .from(businessTransactions)
+      .where(
+        and(
+          eq(businessTransactions.dataClass, "production"),
+          isNull(businessTransactions.cancelledAt),
+          sql`${businessTransactions.paymentStatus} <> 'verified'`,
+        ),
+      ),
+  ]);
 
   const current = {
     sessions: Number(sessions[0]?.total ?? 0),
@@ -82,13 +134,23 @@ export async function getWorkspaceOverview(period: WorkspacePeriod) {
     database
       .select({ total: count() })
       .from(analyticsSessions)
-      .where(and(gte(analyticsSessions.createdAt, prior), lt(analyticsSessions.createdAt, start))),
+      .where(
+        and(
+          gte(analyticsSessions.createdAt, prior),
+          lt(analyticsSessions.createdAt, start),
+          eq(analyticsSessions.trafficClass, "public"),
+        ),
+      ),
     eventCount("form_submit", prior, start),
   ]);
 
   return {
     current,
     comparison: { sessions: Number(priorSessions[0]?.total ?? 0), forms: priorForms },
+    operations: {
+      openOrders: Number(openOrders[0]?.total ?? 0),
+      paymentAttention: Number(paymentAttention[0]?.total ?? 0),
+    },
     recentLeads,
     activity,
   };
@@ -110,6 +172,7 @@ export async function getProspects(
   const cursorId = cursor?.id ?? "";
   const backwards = query.direction === "previous";
   const filters = and(
+    eq(leads.dataClass, "production"),
     query.status ? eq(leads.status, query.status) : undefined,
     query.search
       ? or(ilike(leads.name, `%${query.search.slice(0, 120)}%`), ilike(leads.phone, `%${query.search.slice(0, 120)}%`))

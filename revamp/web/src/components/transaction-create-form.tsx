@@ -16,6 +16,7 @@ export function TransactionCreateForm({ customerCount }: TransactionCreateFormPr
   const router = useRouter();
   const listId = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [state, formAction, isPending] = useActionState(createTransaction, { status: "idle" });
   const [query, setQuery] = useState("");
@@ -113,10 +114,15 @@ export function TransactionCreateForm({ customerCount }: TransactionCreateFormPr
 
   return (
     <>
-      <button className="transaction-create-trigger" onClick={openDialog} type="button">
+      <button className="transaction-create-trigger" onClick={openDialog} ref={triggerRef} type="button">
         Buat transaksi
       </button>
-      <dialog aria-labelledby="transaction-create-title" className="transaction-create-dialog" ref={dialogRef}>
+      <dialog
+        aria-labelledby="transaction-create-title"
+        className="transaction-create-dialog"
+        onClose={() => triggerRef.current?.focus()}
+        ref={dialogRef}
+      >
         <div className="transaction-create-dialog__head">
           <div>
             <p className="eyebrow">Transaksi baru</p>
@@ -129,7 +135,7 @@ export function TransactionCreateForm({ customerCount }: TransactionCreateFormPr
         </div>
         <form className="transaction-create" action={formAction} aria-busy={isPending}>
           <label className="transaction-create__customer">
-            Customer
+            Customer <b aria-hidden="true">*</b>
             <span className="customer-combobox">
               <input
                 aria-activedescendant={activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined}
@@ -177,6 +183,13 @@ export function TransactionCreateForm({ customerCount }: TransactionCreateFormPr
                 </span>
               ) : null}
             </span>
+            {selected ? (
+              <small className="customer-combobox__selected">
+                Dipilih: {selected.name} · {selected.code}
+              </small>
+            ) : (
+              <small>Pilih customer aktif dari hasil pencarian.</small>
+            )}
           </label>
           <label>
             Kebutuhan pekerjaan
@@ -191,7 +204,7 @@ export function TransactionCreateForm({ customerCount }: TransactionCreateFormPr
             <button className="transaction-create__cancel" onClick={closeDialog} type="button">
               Batal
             </button>
-            <button disabled={!customerCount || isPending} type="submit">
+            <button disabled={!customerCount || !selected || isPending} type="submit">
               {isPending ? "Menyimpan…" : "Buat dan buka penawaran"}
             </button>
           </div>

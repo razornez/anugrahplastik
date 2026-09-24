@@ -179,6 +179,18 @@ export function LandingInteractions() {
           }),
         });
         if (!response.ok) throw new Error("Lead tidak tersimpan");
+        const payload = (await response.json()) as { conversionId?: string };
+        if (!payload.conversionId) throw new Error("Konversi belum dapat dicatat");
+        window.dispatchEvent(
+          new CustomEvent("ap:analytics-track", {
+            detail: {
+              name: "form_submit",
+              sectionKey: "ap-contact",
+              elementKey: "request-form",
+              conversionId: payload.conversionId,
+            },
+          }),
+        );
       } catch {
         form.dataset.submitError = "true";
         return;
@@ -192,11 +204,6 @@ export function LandingInteractions() {
         `Kebutuhan: ${need || "-"}`,
         `Pesan: ${inquiry}`,
       ].join("\n");
-      window.dispatchEvent(
-        new CustomEvent("ap:analytics-track", {
-          detail: { name: "form_submit", sectionKey: "ap-contact", elementKey: "request-form" },
-        }),
-      );
       window.open(whatsappUrl(message), "_blank", "noopener,noreferrer");
     };
     form?.addEventListener("submit", submitForm);

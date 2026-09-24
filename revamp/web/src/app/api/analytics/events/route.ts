@@ -33,6 +33,8 @@ export async function POST(request: Request) {
       locationContext(request.headers),
     ]);
     const batch = parsed.data;
+    const host = request.headers.get("host")?.toLowerCase() ?? "";
+    const trafficClass = host.startsWith("127.0.0.1") || host.startsWith("localhost") ? "internal" : "public";
     const priority = batch.events.some((event) => ["form_submit", "whatsapp_click", "cta_click"].includes(event.name))
       ? 1
       : 0;
@@ -43,6 +45,7 @@ export async function POST(request: Request) {
         request: {
           landingPath: batch.events[0].path,
           referrer: referrerPath(request.headers.get("referer")),
+          trafficClass,
           device,
           location,
         },

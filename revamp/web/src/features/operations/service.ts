@@ -272,6 +272,7 @@ export async function getTransactionPage(
   const cursorId = cursor?.id ?? "";
   const backwards = query.direction === "previous";
   const conditions = and(
+    eq(businessTransactions.dataClass, "production"),
     query.status ? eq(businessTransactions.commercialStatus, query.status) : undefined,
     query.search
       ? or(

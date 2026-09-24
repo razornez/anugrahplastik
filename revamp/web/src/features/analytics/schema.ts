@@ -25,6 +25,7 @@ export const analyticsEventSchema = z.object({
   sectionKey: shortKey.optional(),
   elementKey: shortKey.optional(),
   metadata: z.record(z.string().max(50), z.union([z.string().max(120), z.number().finite(), z.boolean()])).optional(),
+  conversionId: z.string().uuid().optional(),
   occurredAt: z.string().datetime().optional(),
 });
 
@@ -32,6 +33,7 @@ export type AnalyticsEvent = z.infer<typeof analyticsEventSchema>;
 
 export const analyticsBatchSchema = z.object({
   anonymousId: z.string().uuid(),
+  sessionKey: z.string().uuid(),
   events: z.array(analyticsEventSchema).min(1).max(25),
   consentVersion: z.literal("v1"),
 });

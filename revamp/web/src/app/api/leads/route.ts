@@ -26,17 +26,20 @@ export async function POST(request: Request) {
   }
 
   try {
-    await database.insert(leads).values({
-      name: parsed.data.name,
-      phone: parsed.data.phone,
-      message: parsed.data.message,
-      landingPath: parsed.data.landingPath || null,
-      referrer: request.headers.get("referer"),
-      attribution: parsed.data.attribution ?? null,
-    });
+    const [lead] = await database
+      .insert(leads)
+      .values({
+        name: parsed.data.name,
+        phone: parsed.data.phone,
+        message: parsed.data.message,
+        landingPath: parsed.data.landingPath || null,
+        referrer: request.headers.get("referer"),
+        attribution: parsed.data.attribution ?? null,
+      })
+      .returning({ id: leads.id });
+    if (!lead) throw new Error("Lead tidak dapat dibuat.");
+    return NextResponse.json({ ok: true, conversionId: lead.id }, { status: 201 });
   } catch {
     return NextResponse.json({ message: "Permintaan belum dapat disimpan. Silakan coba lagi." }, { status: 500 });
   }
-
-  return NextResponse.json({ ok: true });
 }

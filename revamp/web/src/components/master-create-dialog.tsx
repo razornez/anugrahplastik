@@ -6,12 +6,18 @@ type Props = { label: string; children: React.ReactNode; action: (formData: Form
 
 export function MasterCreateDialog({ label, children, action }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   return (
     <>
-      <button className="master-primary-action" type="button" onClick={() => dialogRef.current?.showModal()}>
+      <button
+        className="master-primary-action"
+        ref={triggerRef}
+        type="button"
+        onClick={() => dialogRef.current?.showModal()}
+      >
         {label}
       </button>
-      <dialog className="master-dialog" ref={dialogRef} aria-label={label}>
+      <dialog className="master-dialog" ref={dialogRef} aria-label={label} onClose={() => triggerRef.current?.focus()}>
         <form method="dialog" className="master-dialog__close">
           <button type="submit" aria-label="Tutup">
             ×

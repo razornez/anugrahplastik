@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/database/client";
 import { users } from "@/lib/database/schema";
 import { createTeamMember, toggleTeamMember } from "@/features/workspace/team-actions";
+import { PinInput } from "@/components/pin-input";
 
 export const instant = false;
 
@@ -82,7 +83,7 @@ export default async function TeamPage({
             </label>
             <label>
               PIN enam digit
-              <input name="pin" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} required />
+              <PinInput />
             </label>
             <button type="submit">Buat akun</button>
           </form>

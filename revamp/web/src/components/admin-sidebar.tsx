@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import type { Role } from "@/lib/auth/session";
 
 type AdminSidebarProps = {
@@ -71,8 +72,20 @@ function ExternalIcon() {
   );
 }
 
+function MoreIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <circle cx="5" cy="12" r="1.5" />
+      <circle cx="12" cy="12" r="1.5" />
+      <circle cx="19" cy="12" r="1.5" />
+    </svg>
+  );
+}
+
 export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
   const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreButton = useRef<HTMLButtonElement>(null);
   const navigation = [
     { href: "/admin", label: "Beranda", icon: <HomeIcon /> },
     { href: "/admin/prospects", label: "Prospek", icon: <ProspectIcon /> },
@@ -85,7 +98,18 @@ export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
       : []),
     ...(role === "admin" ? [{ href: "/admin/masters", label: "Data master", icon: <MasterIcon /> }] : []),
   ];
-  const mobileNavigation = navigation.filter((item) => item.href !== "/admin/masters");
+  const mobileNavigation = navigation.filter((item) => !["/admin/masters", "/admin/insights"].includes(item.href));
+  const moreNavigation = navigation.filter((item) => ["/admin/masters", "/admin/insights"].includes(item.href));
+
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMoreOpen(false);
+      moreButton.current?.focus();
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, []);
 
   return (
     <aside className="admin-sidebar">
@@ -145,7 +169,54 @@ export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
             <span>{item.label.replace(" landing", "")}</span>
           </Link>
         ))}
+        <button
+          aria-controls="admin-more-sheet"
+          aria-expanded={moreOpen}
+          className={moreOpen ? "is-active" : undefined}
+          onClick={() => setMoreOpen((open) => !open)}
+          ref={moreButton}
+          type="button"
+        >
+          <MoreIcon />
+          <span>Lainnya</span>
+        </button>
       </nav>
+      {moreOpen ? (
+        <div className="admin-more-backdrop" onMouseDown={() => setMoreOpen(false)}>
+          <section
+            aria-label="Menu lainnya"
+            className="admin-more-sheet"
+            id="admin-more-sheet"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="admin-more-sheet__head">
+              <strong>Menu lainnya</strong>
+              <button aria-label="Tutup menu lainnya" onClick={() => setMoreOpen(false)} type="button">
+                ×
+              </button>
+            </div>
+            <nav>
+              {moreNavigation.map((item) => (
+                <Link href={item.href} key={item.href} onClick={() => setMoreOpen(false)}>
+                  {item.icon}
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+              <Link href="/admin/profile" onClick={() => setMoreOpen(false)}>
+                <span className="admin-more-avatar">{name.slice(0, 1).toUpperCase()}</span>
+                <span>Profil & perangkat</span>
+              </Link>
+              <Link href="/" target="_blank" rel="noreferrer">
+                <ExternalIcon />
+                <span>Lihat landing page</span>
+              </Link>
+            </nav>
+            <form action={onLogout}>
+              <button type="submit">Keluar dari ruang kerja</button>
+            </form>
+          </section>
+        </div>
+      ) : null}
     </aside>
   );
 }

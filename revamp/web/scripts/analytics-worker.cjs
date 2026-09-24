@@ -86,15 +86,18 @@ async function processBatch(client, batch) {
   const context = request.device ?? {};
   const location = request.location ?? {};
   const eventAt = asDate(first.occurredAt);
+  const sessionKey = payload.sessionKey ?? batch.anonymous_id;
   const sessionResult = await client.query(
     `INSERT INTO analytics_sessions (
-       anonymous_id, landing_path, referrer, source_name, outcome, device_category, browser_name, operating_system,
+       anonymous_id, session_key, traffic_class, landing_path, referrer, source_name, outcome, device_category, browser_name, operating_system,
        country_name, region_name, city_name, consent_version, consented_at, last_seen_at, created_at
-     ) VALUES ($1, $2, $3, $4, 'Melihat halaman', $5, $6, $7, $8, $9, $10, 'v1', $11, $11, $11)
-     ON CONFLICT (anonymous_id) DO UPDATE SET last_seen_at = GREATEST(analytics_sessions.last_seen_at, EXCLUDED.last_seen_at)
-     RETURNING id, created_at, event_sequence`,
+     ) VALUES ($1, $2, $3, $4, $5, $6, 'Melihat halaman', $7, $8, $9, $10, $11, $12, 'v1', $13, $13, $13)
+     ON CONFLICT (session_key) DO UPDATE SET last_seen_at = GREATEST(analytics_sessions.last_seen_at, EXCLUDED.last_seen_at)
+     RETURNING id, created_at, event_sequence, duration_seconds`,
     [
       batch.anonymous_id,
+      sessionKey,
+      request.trafficClass === "internal" ? "internal" : "public",
       request.landingPath ?? first.path,
       request.referrer ?? null,
       trafficSource(request.referrer ?? null),
@@ -115,8 +118,9 @@ async function processBatch(client, batch) {
     sequence += 1;
     const occurredAt = asDate(event.occurredAt);
     await client.query(
-      `INSERT INTO analytics_events (session_id, name, path, section_key, element_key, metadata, sequence, occurred_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      `INSERT INTO analytics_events (session_id, name, path, section_key, element_key, metadata, conversion_id, sequence, occurred_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT DO NOTHING`,
       [
         session.id,
         event.name,
@@ -124,6 +128,7 @@ async function processBatch(client, batch) {
         event.sectionKey ?? null,
         event.elementKey ?? null,
         event.metadata ?? null,
+        event.conversionId ?? null,
         sequence,
         occurredAt,
       ],
@@ -132,8 +137,9 @@ async function processBatch(client, batch) {
   }
 
   const endedAt = finalEvent?.name === "page_leave" ? finalEvent.occurredAt : null;
+  const activeSeconds = Number(finalEvent?.metadata?.active_seconds ?? 0);
   const durationSeconds = endedAt
-    ? Math.max(0, Math.round((endedAt.getTime() - asDate(session.created_at).getTime()) / 1000))
+    ? Math.min(1_800, Number(session.duration_seconds ?? 0) + Math.max(0, activeSeconds))
     : null;
   await client.query(
     `UPDATE analytics_sessions

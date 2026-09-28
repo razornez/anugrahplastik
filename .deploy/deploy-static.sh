@@ -15,6 +15,11 @@ if [[ "$source_root" != "$expected_source" || "$(realpath "$target_root")" != "$
   echo 'Refusing deployment from an unexpected repository or to an unexpected document root.' >&2
   exit 1
 fi
+tracked_list="$(mktemp)"
+asset_list="$(mktemp)"
+temporary=''
+trap 'rm -f -- "$tracked_list" "$asset_list"; if [[ -n "$temporary" && -f "$temporary" ]]; then rm -f -- "$temporary"; fi' EXIT
+
 if [[ "$(git -C "$source_root" rev-parse --show-toplevel)" != "$source_root" ]]; then
   echo 'Git did not resolve the expected deployment checkout.' >&2
   exit 1
@@ -28,6 +33,13 @@ if [[ ! -f "$target_root/index.html" ]] || ! grep -qi 'Anugrah Plastik' "$target
   exit 1
 fi
 
+git -C "$source_root" ls-files -z > "$tracked_list"
+git -C "$source_root" ls-files -z -- css fonts img js > "$asset_list"
+if [[ ! -s "$tracked_list" || ! -s "$asset_list" ]]; then
+  echo 'Git returned an empty site file list; refusing partial deployment.' >&2
+  exit 1
+fi
+
 # Check the complete checkout before copying even one asset. Git history may
 # contain the revamp, but the checked-out tree must contain public files only.
 while IFS= read -r -d '' relative; do
@@ -35,7 +47,7 @@ while IFS= read -r -d '' relative; do
     .cpanel.yml | .deploy/deploy-static.sh | .deploy/README.md | index.html | css/* | fonts/* | img/* | js/*) ;;
     *) echo "Unexpected tracked path: $relative" >&2; exit 1 ;;
   esac
-done < <(git -C "$source_root" ls-files -z)
+done < "$tracked_list"
 
 for required in css/main.css img/featured/spacer-conduit-bawah-tanah-lokasi-proyek-1.jpg img/featured/spacer-conduit-bawah-tanah-lokasi-proyek-2.jpg; do
   if ! git -C "$source_root" ls-files --error-unmatch -- "$required" >/dev/null 2>&1; then
@@ -79,14 +91,12 @@ validate_file() {
 
 while IFS= read -r -d '' relative; do
   validate_file "$relative"
-done < <(git -C "$source_root" ls-files -z -- css fonts img js)
+done < "$asset_list"
 validate_file index.html
 
 release="$(git -C "$source_root" rev-parse --short=12 HEAD)"
 mkdir -p -m 700 "$HOME/.anugrah-site-backups"
 backup="$(mktemp -d "$HOME/.anugrah-site-backups/$release.XXXXXX")"
-temporary=''
-trap 'if [[ -n "$temporary" && -f "$temporary" ]]; then rm -f -- "$temporary"; fi' EXIT
 
 publish_file() {
   local relative="$1" source="$source_root/$1" destination="$target_root/$1"
@@ -111,7 +121,7 @@ publish_file() {
 # Publish assets first; switch the homepage to the new references last.
 while IFS= read -r -d '' relative; do
   publish_file "$relative"
-done < <(git -C "$source_root" ls-files -z -- css fonts img js)
+done < "$asset_list"
 publish_file index.html
 
 echo "Published $release. Changed-file backup: $backup"

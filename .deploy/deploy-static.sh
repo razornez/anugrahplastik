@@ -23,7 +23,7 @@ fi
 # contain the revamp, but the checked-out tree must contain public files only.
 while IFS= read -r -d '' relative; do
   case "$relative" in
-    .cpanel.yml | .deploy/deploy-static.sh | index.html | css/* | fonts/* | img/* | js/*) ;;
+    .cpanel.yml | .deploy/deploy-static.sh | .deploy/README.md | index.html | css/* | fonts/* | img/* | js/*) ;;
     *) echo "Unexpected tracked path: $relative" >&2; exit 1 ;;
   esac
 done < <(git -C "$source_root" ls-files -z)
@@ -37,7 +37,7 @@ done
 
 validate_file() {
   local relative="$1" source="$source_root/$1" destination="$target_root/$1"
-  local parent
+  local parent probe
   parent="$(realpath -m "$(dirname "$destination")")"
   if [[ ! -f "$source" || -L "$source" || -L "$destination" ]]; then
     echo "Missing or unsafe file: $relative" >&2
@@ -47,6 +47,14 @@ validate_file() {
     "$target_root" | "$target_root"/*) ;;
     *) echo "Destination escapes document root: $relative" >&2; exit 1 ;;
   esac
+  probe="$(dirname "$destination")"
+  while [[ "$probe" != "$target_root" ]]; do
+    if [[ -L "$probe" ]]; then
+      echo "Destination contains a symlink: $relative" >&2
+      exit 1
+    fi
+    probe="$(dirname "$probe")"
+  done
   if [[ -e "$destination" && ! -f "$destination" ]]; then
     echo "Destination is not a regular file: $relative" >&2
     exit 1

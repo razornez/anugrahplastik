@@ -28,14 +28,23 @@ export function workspaceRange(period: WorkspacePeriod) {
 async function eventCount(name: string | null, start: Date, end?: Date) {
   const database = getDatabase();
   if (!database) return 0;
+  if (name === "form_submit") {
+    const range = end
+      ? and(gte(analyticsSessions.createdAt, start), lt(analyticsSessions.createdAt, end))
+      : gte(analyticsSessions.createdAt, start);
+    const [row] = await database
+      .select({ total: countDistinct(analyticsSessions.id) })
+      .from(analyticsSessions)
+      .where(and(range, eq(analyticsSessions.trafficClass, "public"), eq(analyticsSessions.formStatus, "valid")));
+    return Number(row?.total ?? 0);
+  }
   const condition = name ? eq(analyticsEvents.name, name) : undefined;
   const range = end
     ? and(gte(analyticsEvents.occurredAt, start), lt(analyticsEvents.occurredAt, end))
     : gte(analyticsEvents.occurredAt, start);
   const rows = await database
     .select({
-      total:
-        name === "form_submit" ? countDistinct(analyticsEvents.conversionId) : countDistinct(analyticsEvents.sessionId),
+      total: countDistinct(analyticsEvents.sessionId),
     })
     .from(analyticsEvents)
     .innerJoin(analyticsSessions, eq(analyticsEvents.sessionId, analyticsSessions.id))
@@ -175,7 +184,11 @@ export async function getProspects(
     eq(leads.dataClass, "production"),
     query.status ? eq(leads.status, query.status) : undefined,
     query.search
-      ? or(ilike(leads.name, `%${query.search.slice(0, 120)}%`), ilike(leads.phone, `%${query.search.slice(0, 120)}%`))
+      ? or(
+          ilike(leads.name, `%${query.search.slice(0, 120)}%`),
+          ilike(leads.phone, `%${query.search.slice(0, 120)}%`),
+          ilike(leads.email, `%${query.search.slice(0, 120)}%`),
+        )
       : undefined,
     cursorDate
       ? backwards
@@ -195,6 +208,7 @@ export async function getProspects(
         id: leads.id,
         name: leads.name,
         phone: leads.phone,
+        email: leads.email,
         message: leads.message,
         source: leads.source,
         status: leads.status,

@@ -113,14 +113,31 @@ async function processBatch(client, batch) {
   const session = sessionResult.rows[0];
   let sequence = Number(session.event_sequence ?? 0);
   let finalEvent = null;
+  let formStatus = null;
 
   for (const event of payload.events) {
     sequence += 1;
     const occurredAt = asDate(event.occurredAt);
-    await client.query(
+    if (event.name === "form_submit") {
+      if (!event.conversionId) {
+        formStatus = "unverified";
+      } else {
+        const lead = await client.query("SELECT data_class FROM leads WHERE id = $1::uuid LIMIT 1", [
+          event.conversionId,
+        ]);
+        formStatus =
+          lead.rows[0]?.data_class === "production"
+            ? "valid"
+            : lead.rows[0]?.data_class === "test"
+              ? "test"
+              : "not_found";
+      }
+    }
+    const inserted = await client.query(
       `INSERT INTO analytics_events (session_id, name, path, section_key, element_key, metadata, conversion_id, sequence, occurred_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       ON CONFLICT DO NOTHING`,
+       ON CONFLICT DO NOTHING
+       RETURNING id`,
       [
         session.id,
         event.name,
@@ -133,6 +150,12 @@ async function processBatch(client, batch) {
         occurredAt,
       ],
     );
+    if (event.name === "form_submit" && event.conversionId && inserted.rowCount === 0) {
+      const original = await client.query("SELECT session_id FROM analytics_events WHERE conversion_id = $1 LIMIT 1", [
+        event.conversionId,
+      ]);
+      formStatus = original.rows[0]?.session_id === session.id && formStatus === "valid" ? "valid" : "duplicate";
+    }
     finalEvent = { ...event, occurredAt };
   }
 
@@ -147,8 +170,10 @@ async function processBatch(client, batch) {
          last_seen_at = $3,
          last_event_at = $3,
          last_section_key = COALESCE($4, last_section_key),
+         form_status = COALESCE($8, form_status),
          ended_at = COALESCE($5, ended_at),
          duration_seconds = COALESCE($6, duration_seconds),
+         duration_quality = CASE WHEN $5 IS NOT NULL THEN 'measured' ELSE duration_quality END,
          outcome = CASE
            WHEN $7 = 'Form terkirim' OR outcome = 'Form terkirim' THEN 'Form terkirim'
            WHEN $7 = 'Klik WhatsApp' OR outcome = 'Klik WhatsApp' THEN 'Klik WhatsApp'
@@ -165,6 +190,7 @@ async function processBatch(client, batch) {
       endedAt,
       durationSeconds,
       outcomeFor(payload.events),
+      formStatus,
     ],
   );
 }

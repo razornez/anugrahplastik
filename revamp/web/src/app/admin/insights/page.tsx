@@ -8,6 +8,7 @@ import {
   type ReportFilters,
 } from "@/features/analytics/report-service";
 import { getSession } from "@/lib/auth/session";
+import { VisitorFilterPanel } from "@/components/visitor-filter-panel";
 
 export const instant = false;
 
@@ -29,6 +30,11 @@ function duration(seconds: number | null) {
   return seconds < 60 ? `${seconds} dtk` : `${Math.round(seconds / 60)} mnt`;
 }
 
+function activeDuration(seconds: number | null, quality: string) {
+  if (quality !== "measured") return "Data lama — belum terverifikasi";
+  return `${duration(seconds)} · waktu aktif, maks. 30 mnt`;
+}
+
 function timestamp(value: Date) {
   return value.toLocaleString("id-ID", {
     timeZone: "Asia/Jakarta",
@@ -45,6 +51,10 @@ function deviceLabel(device: string) {
   if (device === "desktop") return "Komputer";
   if (device === "tablet") return "Tablet";
   return "Perangkat tidak diketahui";
+}
+
+function outcomeLabel(outcome: string) {
+  return outcome === "Form terkirim" ? "Event kirim form" : outcome;
 }
 
 function eventDetail(event: { sectionKey: string | null; elementKey: string | null }) {
@@ -113,71 +123,17 @@ export default async function InsightsPage({
         </nav>
       </header>
 
-      <form className="visitor-filters" method="get">
-        <input type="hidden" name="days" value={filters.days} />
-        <label>
-          Perangkat
-          <select name="device" defaultValue={filters.device}>
-            <option value="all">Semua perangkat</option>
-            <option value="mobile">Ponsel</option>
-            <option value="desktop">Komputer</option>
-            <option value="tablet">Tablet</option>
-          </select>
-        </label>
-        <label>
-          Lokasi
-          <select name="city" defaultValue={filters.city}>
-            <option value="">Semua lokasi</option>
-            {report.citiesForFilter.map((city) => (
-              <option key={city} value={city}>
-                {city}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Sumber
-          <select name="source" defaultValue={filters.source}>
-            <option value="">Semua sumber</option>
-            {report.sourcesForFilter.map((source) => (
-              <option key={source} value={source}>
-                {source}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Hasil kunjungan
-          <select name="outcome" defaultValue={filters.outcome}>
-            <option value="">Semua hasil</option>
-            <option value="Form terkirim">Form terkirim</option>
-            <option value="Klik WhatsApp">Klik WhatsApp</option>
-            <option value="Form mulai diisi">Form mulai diisi</option>
-            <option value="Tombol minat diklik">Tombol minat diklik</option>
-            <option value="Melihat halaman">Melihat halaman</option>
-          </select>
-        </label>
-        <button type="submit">Terapkan</button>
-      </form>
-
-      {filters.device !== "all" || filters.city || filters.source || filters.outcome ? (
-        <div className="visitor-filter-chips" aria-label="Filter aktif">
-          <strong>Filter aktif</strong>
-          {filters.device !== "all" ? <span>{deviceLabel(filters.device)}</span> : null}
-          {filters.city ? <span>{filters.city}</span> : null}
-          {filters.source ? <span>{filters.source}</span> : null}
-          {filters.outcome ? <span>{filters.outcome}</span> : null}
-          <Link href={`/admin/insights?days=${filters.days}`}>Reset</Link>
-        </div>
-      ) : null}
-
       <div className="visitor-stat-row">
         <article>
           <span>Pengunjung</span>
           <strong>{report.totals.sessions}</strong>
         </article>
         <article>
-          <span>Form masuk</span>
+          <span>Event kirim form</span>
+          <strong>{report.totals.formEvents}</strong>
+        </article>
+        <article>
+          <span>Lead valid tersimpan</span>
           <strong>{report.totals.forms}</strong>
         </article>
         <article>
@@ -189,9 +145,45 @@ export default async function InsightsPage({
           <strong>{report.totals.whatsappClicks}</strong>
         </article>
       </div>
+      <VisitorFilterPanel
+        days={filters.days}
+        device={filters.device}
+        city={filters.city}
+        source={filters.source}
+        outcome={filters.outcome}
+        cities={report.citiesForFilter}
+        sources={report.sourcesForFilter}
+        activeCount={
+          [filters.device !== "all", Boolean(filters.city), Boolean(filters.source), Boolean(filters.outcome)].filter(
+            Boolean,
+          ).length
+        }
+      />
+
+      {filters.device !== "all" || filters.city || filters.source || filters.outcome ? (
+        <div className="visitor-filter-chips" aria-label="Filter aktif">
+          <strong>Filter aktif</strong>
+          {filters.device !== "all" ? <span>{deviceLabel(filters.device)}</span> : null}
+          {filters.city ? <span>{filters.city}</span> : null}
+          {filters.source ? <span>{filters.source}</span> : null}
+          {filters.outcome ? <span>{outcomeLabel(filters.outcome)}</span> : null}
+          <Link href={`/admin/insights?days=${filters.days}`}>Reset</Link>
+        </div>
+      ) : null}
+
       <p className="visitor-filter-context">
-        Angka di bawah dihitung dari {report.totals.sessions} kunjungan publik sesuai periode dan filter aktif.
+        Event form adalah sesi yang mengirim event dari browser. Lead valid dihitung dari permintaan yang benar-benar
+        tersimpan dan bukan data uji.
       </p>
+      {report.totals.formEvents > report.totals.forms ? (
+        <aside className="visitor-data-quality" role="status">
+          <strong>Ada event yang belum cocok dengan lead tersimpan.</strong>
+          <span>
+            {report.totals.formEvents - report.totals.forms} event form belum dapat diverifikasi sebagai lead valid.
+            Data lama atau tidak lengkap tetap terlihat di perjalanan, tetapi tidak dihitung sebagai lead.
+          </span>
+        </aside>
+      ) : null}
 
       <div className="visitor-report__grid">
         <section className="journey-list" aria-label="Daftar perjalanan kunjungan">
@@ -216,10 +208,14 @@ export default async function InsightsPage({
                   <strong>{journey.cityName ?? "Lokasi belum tersedia"}</strong>
                   <small>
                     {journey.browserName ?? "Browser tidak diketahui"} · {journey.sourceName} ·{" "}
-                    {duration(journey.durationSeconds)} · {timestamp(journey.createdAt)} WIB
+                    {activeDuration(journey.durationSeconds, journey.durationQuality)} · {timestamp(journey.createdAt)}{" "}
+                    WIB
                   </small>
                 </span>
-                <span className="journey-outcome">{journey.outcome}</span>
+                <span className="journey-outcome">
+                  {journey.outcome}
+                  {journey.formStatus ? <small>{journey.formStatus}</small> : null}
+                </span>
               </Link>
             ))
           ) : (
@@ -267,7 +263,10 @@ export default async function InsightsPage({
                 </div>
                 <div>
                   <dt>Hasil</dt>
-                  <dd>{selected.outcome}</dd>
+                  <dd>
+                    {selected.outcome}
+                    {selected.formStatus ? ` · ${selected.formStatus}` : ""}
+                  </dd>
                 </div>
                 <div>
                   <dt>Mulai</dt>
@@ -275,7 +274,7 @@ export default async function InsightsPage({
                 </div>
                 <div>
                   <dt>Durasi aktif</dt>
-                  <dd>{duration(selected.durationSeconds)}</dd>
+                  <dd>{activeDuration(selected.durationSeconds, selected.durationQuality)}</dd>
                 </div>
               </dl>
               <ol className="journey-timeline">

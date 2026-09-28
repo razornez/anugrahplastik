@@ -6,11 +6,15 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 export function proxy(request: NextRequest) {
   const response = NextResponse.next();
-  if (request.nextUrl.pathname.startsWith("/admin") || request.nextUrl.pathname.startsWith("/api/admin")) {
+  if (
+    request.nextUrl.pathname.startsWith("/admin") ||
+    request.nextUrl.pathname.startsWith("/api/admin") ||
+    request.nextUrl.pathname.startsWith("/api/integrations")
+  ) {
     response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet");
     response.headers.set("Cache-Control", "private, no-store");
   }
   return response;
 }
 
-export const config = { matcher: ["/admin/:path*", "/api/admin/:path*"] };
+export const config = { matcher: ["/admin/:path*", "/api/admin/:path*", "/api/integrations/:path*"] };

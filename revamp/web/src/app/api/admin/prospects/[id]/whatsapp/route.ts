@@ -14,6 +14,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
   const [lead] = await database.select().from(leads).where(eq(leads.id, id));
   if (!lead) return NextResponse.redirect(new URL("/admin/prospects", request.url));
+  if (!lead.phone)
+    return NextResponse.redirect(new URL(`/admin/prospects?selected=${lead.id}&error=no-phone`, request.url));
   await database.transaction(async (transaction) => {
     await transaction
       .insert(auditLogs)

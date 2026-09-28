@@ -30,6 +30,15 @@ export function storageRoot() {
     : join(process.cwd(), "storage", "private");
 }
 
+export function privateFilePath(relativePath: string) {
+  const root = resolve(storageRoot());
+  const absolutePath = resolve(root, relativePath);
+  if (absolutePath === root || !absolutePath.startsWith(`${root}${process.platform === "win32" ? "\\" : "/"}`)) {
+    throw new Error("Lokasi file privat tidak valid.");
+  }
+  return absolutePath;
+}
+
 export function safeOriginalName(value: string) {
   const trimmed = basename(value)
     .replace(/[^a-zA-Z0-9._() -]/g, "_")

@@ -25,13 +25,15 @@ export type VisitorJourney = {
   outcome: string;
   lastSectionKey: string | null;
   durationSeconds: number | null;
+  durationQuality: string;
+  formStatus: string | null;
   createdAt: Date;
 };
 export type VisitorJourneyDetail = VisitorJourney & { events: EventRecord[] };
 export type AnalyticsReport = {
   available: boolean;
   filters: ReportFilters;
-  totals: { sessions: number; forms: number; ctaClicks: number; whatsappClicks: number };
+  totals: { sessions: number; forms: number; formEvents: number; ctaClicks: number; whatsappClicks: number };
   trend: Array<{ date: string; sessions: number; forms: number }>;
   devices: Array<{ key: string; label: string; total: number }>;
   cities: Array<{ key: string; total: number }>;
@@ -48,7 +50,7 @@ export type AnalyticsReport = {
 const emptyReport = (filters: ReportFilters): AnalyticsReport => ({
   available: false,
   filters,
-  totals: { sessions: 0, forms: 0, ctaClicks: 0, whatsappClicks: 0 },
+  totals: { sessions: 0, forms: 0, formEvents: 0, ctaClicks: 0, whatsappClicks: 0 },
   trend: [],
   devices: [],
   cities: [],
@@ -94,13 +96,15 @@ async function eventSessions(filters: ReportFilters, since: Date, eventName: str
 
 async function uniqueFormConversions(filters: ReportFilters, since: Date) {
   const database = getDatabase();
-  if (!database) return 0;
+  if (!database) return { events: 0, leads: 0 };
   const [row] = await database
-    .select({ total: countDistinct(analyticsEvents.conversionId) })
-    .from(analyticsEvents)
-    .innerJoin(analyticsSessions, eq(analyticsEvents.sessionId, analyticsSessions.id))
-    .where(and(sessionConditions(filters, since), eq(analyticsEvents.name, "form_submit")));
-  return Number(row?.total ?? 0);
+    .select({
+      events: countDistinct(analyticsSessions.id),
+      leads: sql<number>`count(distinct ${analyticsSessions.id}) filter (where ${analyticsSessions.formStatus} = 'valid')`,
+    })
+    .from(analyticsSessions)
+    .where(and(sessionConditions(filters, since), eq(analyticsSessions.outcome, "Form terkirim")));
+  return { events: Number(row?.events ?? 0), leads: Number(row?.leads ?? 0) };
 }
 
 export async function getAnalyticsReport(
@@ -135,8 +139,9 @@ export async function getAnalyticsReport(
     cityRows,
     sourceRows,
     trendRows,
+    leadTrendRows,
     sessionsPage,
-    forms,
+    formMetrics,
     ctaClicks,
     whatsappClicks,
     engaged,
@@ -165,10 +170,17 @@ export async function getAnalyticsReport(
       .select({
         date: sql<string>`to_char(${analyticsSessions.createdAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD')`,
         sessions: count(),
-        forms: sql<number>`count(*) filter (where ${analyticsSessions.outcome} = 'Form terkirim')`,
       })
       .from(analyticsSessions)
       .where(conditions)
+      .groupBy(sql`to_char(${analyticsSessions.createdAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD')`),
+    database
+      .select({
+        date: sql<string>`to_char(${analyticsSessions.createdAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD')`,
+        forms: count(),
+      })
+      .from(analyticsSessions)
+      .where(and(sessionConditions(filters, since), eq(analyticsSessions.formStatus, "valid")))
       .groupBy(sql`to_char(${analyticsSessions.createdAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD')`),
     database
       .select({
@@ -179,8 +191,10 @@ export async function getAnalyticsReport(
         cityName: analyticsSessions.cityName,
         sourceName: analyticsSessions.sourceName,
         outcome: analyticsSessions.outcome,
+        formStatus: analyticsSessions.formStatus,
         lastSectionKey: analyticsSessions.lastSectionKey,
         durationSeconds: analyticsSessions.durationSeconds,
+        durationQuality: analyticsSessions.durationQuality,
         createdAt: analyticsSessions.createdAt,
       })
       .from(analyticsSessions)
@@ -211,15 +225,22 @@ export async function getAnalyticsReport(
   const pointByDate = new Map(trend.map((point) => [point.date, point]));
   trendRows.forEach((row) => {
     const point = pointByDate.get(row.date);
-    if (point) {
-      point.sessions = Number(row.sessions);
-      point.forms = Number(row.forms);
-    }
+    if (point) point.sessions = Number(row.sessions);
+  });
+  leadTrendRows.forEach((row) => {
+    const point = pointByDate.get(row.date);
+    if (point) point.forms = Number(row.forms);
   });
   return {
     available: true,
     filters,
-    totals: { sessions: Number(totalRows[0]?.total ?? 0), forms, ctaClicks, whatsappClicks },
+    totals: {
+      sessions: Number(totalRows[0]?.total ?? 0),
+      forms: formMetrics.leads,
+      formEvents: formMetrics.events,
+      ctaClicks,
+      whatsappClicks,
+    },
     trend,
     devices: deviceRows
       .map((row) => ({ key: row.key, label: deviceLabel(row.key), total: Number(row.total) }))
@@ -230,9 +251,13 @@ export async function getAnalyticsReport(
       { label: "Melihat bagian halaman", total: engaged },
       { label: "Menekan tombol minat", total: ctaClicks },
       { label: "Mulai isi formulir", total: started },
-      { label: "Form terkirim", total: forms },
+      { label: "Event kirim form", total: formMetrics.events },
+      { label: "Lead valid tersimpan", total: formMetrics.leads },
     ],
-    journeys: shown,
+    journeys: shown.map((journey) => ({
+      ...journey,
+      formStatus: journey.outcome === "Form terkirim" ? formStatusLabel(journey.formStatus) : null,
+    })),
     citiesForFilter: citiesForFilter.flatMap((row) => (row.cityName ? [row.cityName] : [])),
     sourcesForFilter: sourceRows.map((row) => row.sourceName),
     hasNext: backwards ? Boolean(page.cursor) : hasAdjacent,
@@ -240,6 +265,14 @@ export async function getAnalyticsReport(
     nextCursor: shown.length ? encodeTimeCursor(shown.at(-1)!) : null,
     previousCursor: shown.length ? encodeTimeCursor(shown[0]) : null,
   };
+}
+
+function formStatusLabel(value: string | null) {
+  if (value === "valid") return "Lead valid tersimpan";
+  if (value === "duplicate") return "Pengiriman berulang — lead dihitung satu kali";
+  if (value === "test") return "Data uji — tidak masuk angka lead";
+  if (value === "not_found") return "Lead tidak ditemukan saat diverifikasi";
+  return "Event form terkirim — belum terverifikasi";
 }
 
 export async function getAnalyticsJourney(id: string): Promise<VisitorJourneyDetail | null> {
@@ -254,12 +287,14 @@ export async function getAnalyticsJourney(id: string): Promise<VisitorJourneyDet
       cityName: analyticsSessions.cityName,
       sourceName: analyticsSessions.sourceName,
       outcome: analyticsSessions.outcome,
+      formStatus: analyticsSessions.formStatus,
       lastSectionKey: analyticsSessions.lastSectionKey,
       durationSeconds: analyticsSessions.durationSeconds,
+      durationQuality: analyticsSessions.durationQuality,
       createdAt: analyticsSessions.createdAt,
     })
     .from(analyticsSessions)
-    .where(eq(analyticsSessions.id, id));
+    .where(and(eq(analyticsSessions.id, id), eq(analyticsSessions.trafficClass, "public")));
   if (!session) return null;
   const events = await database
     .select({
@@ -273,5 +308,9 @@ export async function getAnalyticsJourney(id: string): Promise<VisitorJourneyDet
     .from(analyticsEvents)
     .where(eq(analyticsEvents.sessionId, id))
     .orderBy(analyticsEvents.sequence);
-  return { ...session, events };
+  return {
+    ...session,
+    events,
+    formStatus: session.outcome === "Form terkirim" ? formStatusLabel(session.formStatus) : null,
+  };
 }

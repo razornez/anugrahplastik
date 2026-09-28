@@ -44,7 +44,12 @@ export default async function ProspectsPage({
         <aside className="prospect-list" aria-label="Daftar prospek">
           <form className="prospect-list-head" method="get">
             <strong>{data.prospects.length} prospek</strong>
-            <input name="q" defaultValue={query.q} placeholder="Cari nama atau nomor" aria-label="Cari prospek" />
+            <input
+              name="q"
+              defaultValue={query.q}
+              placeholder="Cari nama, telepon, atau email"
+              aria-label="Cari prospek"
+            />
             <select name="status" defaultValue={query.status ?? ""} aria-label="Status prospek">
               <option value="">Semua status</option>
               <option value="new">Baru</option>
@@ -71,6 +76,16 @@ export default async function ProspectsPage({
               <time>{prospect.createdAt.toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</time>
             </Link>
           ))}
+          {!data.prospects.length ? (
+            <div className="prospect-empty">
+              <p className="empty-copy">
+                {query.q || query.status
+                  ? `Tidak ada prospek yang cocok${query.q ? ` dengan “${query.q}”` : " dengan filter ini"}.`
+                  : "Belum ada permintaan customer yang masuk."}
+              </p>
+              {query.q || query.status ? <Link href="/admin/prospects">Hapus pencarian dan filter</Link> : null}
+            </div>
+          ) : null}
           <nav className="directory-pagination" aria-label="Pindah halaman prospek">
             {data.hasPrevious ? (
               <Link
@@ -110,17 +125,25 @@ export default async function ProspectsPage({
                 <div>
                   <p className="eyebrow">{data.selected.source}</p>
                   <h2>{data.selected.name}</h2>
-                  <a
-                    href={`https://wa.me/${data.selected.phone.replace(/\D/g, "").replace(/^0/, "62")}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {data.selected.phone}
-                  </a>
+                  {data.selected.phone ? (
+                    <a
+                      href={`https://wa.me/${data.selected.phone.replace(/\D/g, "").replace(/^0/, "62")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {data.selected.phone}
+                    </a>
+                  ) : data.selected.email ? (
+                    <a href={`mailto:${data.selected.email}`}>{data.selected.email}</a>
+                  ) : (
+                    <span>Kontak belum tersedia</span>
+                  )}
                 </div>
-                <a className="wa-button" href={`/api/admin/prospects/${data.selected.id}/whatsapp`}>
-                  Buka WhatsApp
-                </a>
+                {data.selected.phone ? (
+                  <a className="wa-button" href={`/api/admin/prospects/${data.selected.id}/whatsapp`}>
+                    Buka WhatsApp
+                  </a>
+                ) : null}
               </div>
               <p className="lead-message">{data.selected.message}</p>
               <form className="assignment-form" action={assignProspect}>

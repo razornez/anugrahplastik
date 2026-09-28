@@ -1,0 +1,1 @@
+ALTER TABLE "analytics_sessions" ADD COLUMN "form_status" varchar(24);

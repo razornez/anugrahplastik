@@ -15,6 +15,7 @@ import {
   products,
   suppliers,
   transactionFinancialEntries,
+  transactionInvoices,
   transactionLines,
   transactionNumberCounters,
 } from "@/lib/database/schema";
@@ -406,7 +407,7 @@ const transactionTrackSchema = z.discriminatedUnion("track", [
   }),
   z.object({
     track: z.literal("payment"),
-    status: z.enum(["awaiting_invoice", "payment_recorded", "verified"]),
+    status: z.enum(["awaiting_invoice", "payment_recorded", "partial", "verified"]),
     reason: z.string().min(3).max(240),
     transactionId: z.string().uuid(),
   }),
@@ -438,6 +439,48 @@ export async function updateTransactionTrackStatus(formData: FormData) {
       .from(businessTransactions)
       .where(eq(businessTransactions.id, input.transactionId));
     if (!current) throw new Error("Transaksi tidak ditemukan.");
+
+    if (input.track === "payment") {
+      const [invoiceTotal] = await transaction
+        .select({ total: sql<string>`coalesce(sum(${transactionInvoices.amount}), 0)` })
+        .from(transactionInvoices)
+        .where(eq(transactionInvoices.transactionId, input.transactionId));
+      const [verifiedPayments] = await transaction
+        .select({ total: sql<string>`coalesce(sum(${transactionFinancialEntries.amount}), 0)` })
+        .from(transactionFinancialEntries)
+        .where(
+          and(
+            eq(transactionFinancialEntries.transactionId, input.transactionId),
+            eq(transactionFinancialEntries.kind, "customer_payment"),
+            eq(transactionFinancialEntries.direction, "in"),
+            eq(transactionFinancialEntries.status, "verified"),
+          ),
+        );
+      const [pendingPayments] = await transaction
+        .select({ total: sql<number>`count(*)` })
+        .from(transactionFinancialEntries)
+        .where(
+          and(
+            eq(transactionFinancialEntries.transactionId, input.transactionId),
+            eq(transactionFinancialEntries.kind, "customer_payment"),
+            eq(transactionFinancialEntries.direction, "in"),
+            sql`${transactionFinancialEntries.status} <> 'verified'`,
+          ),
+        );
+      const invoiced = Number(invoiceTotal?.total ?? 0);
+      const received = Number(verifiedPayments?.total ?? 0);
+      const pending = Number(pendingPayments?.total ?? 0);
+      const consistent =
+        (input.status === "awaiting_invoice" && invoiced === 0 && pending === 0 && received === 0) ||
+        (input.status === "payment_recorded" && pending > 0) ||
+        (input.status === "partial" && received > 0 && received < invoiced) ||
+        (input.status === "verified" && invoiced > 0 && received >= invoiced);
+      if (!consistent) {
+        throw new Error(
+          "Status pembayaran tidak sesuai dengan tagihan dan pembayaran yang tercatat. Periksa ringkasan pembayaran terlebih dahulu.",
+        );
+      }
+    }
 
     const previousStatus =
       input.track === "commercial"

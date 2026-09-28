@@ -82,6 +82,35 @@ function MoreIcon() {
   );
 }
 
+function MailIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <rect x="3.75" y="5.5" width="16.5" height="13" rx="2" />
+      <path d="m4.5 7 7.5 5.5L19.5 7" />
+    </svg>
+  );
+}
+
+function MarketingIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M4 19.5V4.5M4 19.5h16M8 16v-4m4 4V7m4 9v-6" />
+      <path d="m7.5 8.5 4-4 3 2 4-3" />
+    </svg>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M4 6.5h16M4 12h16M4 17.5h16" />
+      <circle cx="9" cy="6.5" r="2" />
+      <circle cx="15" cy="12" r="2" />
+      <circle cx="8" cy="17.5" r="2" />
+    </svg>
+  );
+}
+
 export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -92,14 +121,25 @@ export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
     ...(role === "admin" || role === "sales"
       ? [{ href: "/admin/transactions", label: "Transaksi", icon: <TransactionIcon /> }]
       : []),
+    ...(role === "admin" || role === "sales" ? [{ href: "/admin/email", label: "Email CS", icon: <MailIcon /> }] : []),
+    ...(role === "admin" || role === "sales"
+      ? [{ href: "/admin/marketing", label: "Pemasaran", icon: <MarketingIcon /> }]
+      : []),
     { href: "/admin/content", label: "Konten landing", icon: <ContentIcon /> },
     ...(role === "admin" || role === "sales"
       ? [{ href: "/admin/insights", label: "Laporan pengunjung", icon: <InsightIcon /> }]
       : []),
     ...(role === "admin" ? [{ href: "/admin/masters", label: "Data master", icon: <MasterIcon /> }] : []),
+    ...(role === "admin"
+      ? [{ href: "/admin/settings/integrations", label: "Koneksi layanan", icon: <SettingsIcon /> }]
+      : []),
   ];
-  const mobileNavigation = navigation.filter((item) => !["/admin/masters", "/admin/insights"].includes(item.href));
-  const moreNavigation = navigation.filter((item) => ["/admin/masters", "/admin/insights"].includes(item.href));
+  const mobilePriority =
+    role === "content"
+      ? ["/admin", "/admin/content"]
+      : ["/admin", "/admin/prospects", "/admin/transactions", "/admin/email"];
+  const mobileNavigation = navigation.filter((item) => mobilePriority.includes(item.href));
+  const moreNavigation = navigation.filter((item) => !mobilePriority.includes(item.href));
 
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
@@ -202,6 +242,12 @@ export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
                   <span>{item.label}</span>
                 </Link>
               ))}
+              {role === "admin" ? (
+                <Link href="/admin/team" onClick={() => setMoreOpen(false)}>
+                  <ProspectIcon />
+                  <span>Kelola tim</span>
+                </Link>
+              ) : null}
               <Link href="/admin/profile" onClick={() => setMoreOpen(false)}>
                 <span className="admin-more-avatar">{name.slice(0, 1).toUpperCase()}</span>
                 <span>Profil & perangkat</span>

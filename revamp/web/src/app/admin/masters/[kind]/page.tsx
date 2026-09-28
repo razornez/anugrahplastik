@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { MasterCreateDialog } from "@/components/master-create-dialog";
+import { DesignUploadForm } from "@/components/design-upload-form";
 import {
   createCustomer,
   createMaterial,
@@ -10,6 +11,7 @@ import {
 } from "@/features/operations/actions";
 import {
   getMasterDirectoryPage,
+  getDesignUploadOptions,
   masterKinds,
   type DirectoryQuery,
   type MasterKind,
@@ -121,9 +123,9 @@ function CreateAction({ kind }: { kind: MasterKind }) {
       </MasterCreateDialog>
     );
   return (
-    <Link className="master-primary-action" href="/admin/masters/designs">
-      Kelola file 3D
-    </Link>
+    <a className="master-primary-action" href="#design-upload">
+      Unggah file 3D
+    </a>
   );
 }
 
@@ -147,6 +149,7 @@ export default async function MasterDirectoryPage({
     direction: query.direction === "previous" ? "previous" : "next",
   };
   const result = await getMasterDirectoryPage(rawKind, filters);
+  const designOptions = rawKind === "designs" ? await getDesignUploadOptions() : [];
   const label = labels[rawKind];
   return (
     <section className="operations-page master-directory">
@@ -189,6 +192,16 @@ export default async function MasterDirectoryPage({
         </select>
         <button type="submit">Terapkan</button>
       </form>
+      {rawKind === "designs" ? (
+        <section aria-labelledby="design-upload-title" className="design-upload-panel" id="design-upload">
+          <div>
+            <p className="eyebrow">File privat</p>
+            <h2 id="design-upload-title">Tambah file 3D</h2>
+            <p>File disimpan di ruang kerja internal dan harus ditautkan ke barang, customer, atau mould.</p>
+          </div>
+          <DesignUploadForm options={designOptions} />
+        </section>
+      ) : null}
       <section className="directory-list">
         <div className="directory-list__head">
           <strong>{result?.rows.length ?? 0} data pada halaman ini</strong>
@@ -207,7 +220,18 @@ export default async function MasterDirectoryPage({
             </article>
           ))
         ) : (
-          <p className="empty-copy">Belum ada {label.singular} yang sesuai pencarian.</p>
+          <div className="directory-empty">
+            <p className="empty-copy">
+              {filters.query || filters.status
+                ? `Tidak ada ${label.singular} yang cocok dengan pencarian atau filter ini.`
+                : `Belum ada ${label.singular} yang tersimpan.`}
+            </p>
+            {filters.query || filters.status ? (
+              <Link href={linkFor(rawKind, { order: filters.order })}>Hapus pencarian dan filter</Link>
+            ) : rawKind === "designs" ? (
+              <a href="#design-upload">Mulai unggah file 3D</a>
+            ) : null}
+          </div>
         )}
       </section>
       <nav className="directory-pagination" aria-label="Pindah halaman daftar">

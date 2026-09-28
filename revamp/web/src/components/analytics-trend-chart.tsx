@@ -19,13 +19,13 @@ export function AnalyticsTrendChart({ points }: { points: TrendPoint[] }) {
       <figcaption>
         <div>
           <p className="eyebrow">Pergerakan harian</p>
-          <h2 id="traffic-chart-title">Kunjungan dan formulir</h2>
+          <h2 id="traffic-chart-title">Kunjungan dan lead valid</h2>
         </div>
         <span className="chart-legend">
-          <i /> Pengunjung <i /> Form masuk
+          <i /> Pengunjung <i /> Lead tersimpan
         </span>
       </figcaption>
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Grafik pengunjung dan formulir per hari">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Grafik pengunjung dan lead valid per hari">
         {[0.25, 0.5, 0.75].map((ratio) => (
           <line key={ratio} x1="0" x2={width} y1={height * ratio} y2={height * ratio} />
         ))}

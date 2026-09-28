@@ -8,6 +8,7 @@ const anonymousKey = "ap-analytics-anonymous-id-v1";
 const sessionKey = "ap-analytics-session-id-v1";
 const sessionLastActiveKey = "ap-analytics-session-active-v1";
 const sessionTimeoutMs = 30 * 60 * 1_000;
+const idleTimeoutMs = 60 * 1_000;
 const scrollMilestones = [25, 50, 75, 90] as const;
 
 type TrackDetail = Omit<AnalyticsEvent, "path" | "occurredAt">;
@@ -100,7 +101,9 @@ export function AnalyticsTracker() {
 
       let formStarted = false;
       let formSubmitted = false;
-      let lastVisibleAt = document.visibilityState === "visible" ? Date.now() : null;
+      let visibleStartedAt = document.visibilityState === "visible" ? Date.now() : null;
+      let lastInteractionAt = Date.now();
+      let activeSeconds = 0;
       let activeSection: string | undefined;
       const observedSections = new Set<string>();
       const sectionTimers = new Map<string, number>();
@@ -116,8 +119,29 @@ export function AnalyticsTracker() {
       };
 
       const onVisibility = () => {
-        if (document.visibilityState === "visible") lastVisibleAt = Date.now();
-        else lastVisibleAt = null;
+        const now = Date.now();
+        if (document.visibilityState === "visible") {
+          visibleStartedAt = now;
+          lastInteractionAt = now;
+        } else {
+          collectActiveTime(now);
+          visibleStartedAt = null;
+        }
+      };
+
+      const collectActiveTime = (now: number) => {
+        if (visibleStartedAt !== null && now - lastInteractionAt <= idleTimeoutMs) {
+          const activeUntil = Math.min(now, lastInteractionAt + idleTimeoutMs);
+          activeSeconds += Math.max(0, Math.floor((activeUntil - visibleStartedAt) / 1_000));
+        }
+        visibleStartedAt = document.visibilityState === "visible" ? now : null;
+      };
+
+      const onInteraction = () => {
+        const now = Date.now();
+        collectActiveTime(now);
+        lastInteractionAt = now;
+        if (document.visibilityState === "visible" && visibleStartedAt === null) visibleStartedAt = now;
       };
 
       track("page_view");
@@ -183,6 +207,7 @@ export function AnalyticsTracker() {
       };
 
       const onPageHide = () => {
+        collectActiveTime(Date.now());
         if (formStarted && !formSubmitted) {
           track("form_abandon", { sectionKey: "ap-contact", elementKey: "request-form" }, true);
         }
@@ -190,9 +215,7 @@ export function AnalyticsTracker() {
           "page_leave",
           {
             sectionKey: activeSection,
-            metadata: lastVisibleAt
-              ? { active_seconds: Math.min(1_800, Math.max(0, Math.round((Date.now() - lastVisibleAt) / 1_000))) }
-              : undefined,
+            metadata: { active_seconds: Math.min(1_800, activeSeconds) },
           },
           true,
         );
@@ -202,6 +225,9 @@ export function AnalyticsTracker() {
       const interval = window.setInterval(() => flush(), 5_000);
 
       window.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("scroll", onInteraction, { passive: true });
+      root.addEventListener("pointerdown", onInteraction);
+      root.addEventListener("keydown", onInteraction);
       root.addEventListener("click", onClick);
       root.addEventListener("focusin", onFormFocus);
       window.addEventListener("ap:analytics-track", onCustomTrack);
@@ -211,6 +237,9 @@ export function AnalyticsTracker() {
 
       dispose = () => {
         window.removeEventListener("scroll", onScroll);
+        window.removeEventListener("scroll", onInteraction);
+        root.removeEventListener("pointerdown", onInteraction);
+        root.removeEventListener("keydown", onInteraction);
         root.removeEventListener("click", onClick);
         root.removeEventListener("focusin", onFormFocus);
         window.removeEventListener("ap:analytics-track", onCustomTrack);

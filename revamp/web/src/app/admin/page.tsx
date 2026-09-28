@@ -75,7 +75,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
         <article>
           <span>Kinerja pemasaran</span>
           <strong>{report.totals.forms}</strong>
-          <p>lead unik valid dalam periode yang dipilih</p>
+          <p>lead valid yang tersimpan dalam periode</p>
           <Link href={user.role === "content" ? "/admin/content" : "/admin/insights"}>Lihat rincian →</Link>
         </article>
       </section>
@@ -84,8 +84,8 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
         <div className="pulse-copy">
           <p className="eyebrow">Ringkasan pemasaran · {label}</p>
           <strong>{report.totals.forms}</strong>
-          <span>form terkirim</span>
-          <small>berdasarkan kunjungan pada periode ini</small>
+          <span>lead valid tersimpan</span>
+          <small>bukan sekadar event kirim form dari browser</small>
         </div>
         <div className="pulse-metrics">
           <div>
@@ -117,6 +117,17 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
           <span>Workshop · Bandung</span>
         </div>
       </section>
+
+      {report.totals.formEvents > report.totals.forms ? (
+        <aside className="visitor-data-quality" role="status">
+          <strong>Periksa data pengiriman form</strong>
+          <span>
+            {report.totals.formEvents} sesi mengirim event form, tetapi {report.totals.forms} lead valid tersimpan.
+            Lihat laporan untuk rincian event lama atau yang belum terverifikasi.
+          </span>
+          {user.role !== "content" ? <Link href="/admin/insights">Buka laporan pengunjung →</Link> : null}
+        </aside>
+      ) : null}
 
       <div className="analytics-overview-grid">
         <AnalyticsTrendChart points={report.trend} />
@@ -233,7 +244,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
         </section>
         <section className="insight-card">
           <p className="eyebrow">Yang perlu diperhatikan</p>
-          <h2>{report.totals.forms > 0 ? "Permintaan mulai masuk." : "Belum ada form terkirim."}</h2>
+          <h2>{report.totals.forms > 0 ? "Permintaan mulai masuk." : "Belum ada lead valid tersimpan."}</h2>
           <p>
             {report.totals.ctaClicks > 0
               ? "Lihat tombol dan bagian halaman yang paling sering menarik minat pengunjung."

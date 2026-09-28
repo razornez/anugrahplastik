@@ -85,20 +85,128 @@ export const portfolioItems = pgTable("portfolio_items", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const leads = pgTable("leads", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  name: varchar("name", { length: 120 }).notNull(),
-  phone: varchar("phone", { length: 32 }).notNull(),
-  message: text("message").notNull(),
-  status: varchar("status", { length: 32 }).default("new").notNull(),
-  source: varchar("source", { length: 64 }).default("website").notNull(),
-  dataClass: varchar("data_class", { length: 16 }).default("production").notNull(),
-  landingPath: varchar("landing_path", { length: 500 }),
-  referrer: varchar("referrer", { length: 1000 }),
-  attribution: jsonb("attribution"),
-  assignedUserId: uuid("assigned_user_id").references(() => users.id, { onDelete: "set null" }),
+export const leads = pgTable(
+  "leads",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: varchar("name", { length: 120 }).notNull(),
+    phone: varchar("phone", { length: 32 }),
+    email: varchar("email", { length: 255 }),
+    message: text("message").notNull(),
+    status: varchar("status", { length: 32 }).default("new").notNull(),
+    source: varchar("source", { length: 64 }).default("website").notNull(),
+    dataClass: varchar("data_class", { length: 16 }).default("production").notNull(),
+    landingPath: varchar("landing_path", { length: 500 }),
+    referrer: varchar("referrer", { length: 1000 }),
+    attribution: jsonb("attribution"),
+    assignedUserId: uuid("assigned_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("leads_email_idx").on(table.email)],
+);
+
+export const integrations = pgTable("integrations", {
+  key: varchar("key", { length: 40 }).primaryKey(),
+  status: varchar("status", { length: 24 }).notNull().default("disconnected"),
+  secretCiphertext: text("secret_ciphertext"),
+  metadata: jsonb("metadata"),
+  lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  lastError: varchar("last_error", { length: 500 }),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const integrationOauthStates = pgTable("integration_oauth_states", {
+  stateHash: varchar("state_hash", { length: 64 }).primaryKey(),
+  actorId: uuid("actor_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const csEmails = pgTable(
+  "cs_emails",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    folder: varchar("folder", { length: 16 }).notNull(),
+    uidValidity: varchar("uid_validity", { length: 40 }).notNull(),
+    uid: integer("uid").notNull(),
+    size: integer("size").notNull().default(0),
+    messageId: varchar("message_id", { length: 500 }),
+    inReplyTo: varchar("in_reply_to", { length: 500 }),
+    fromName: varchar("from_name", { length: 255 }),
+    fromAddress: varchar("from_address", { length: 255 }),
+    toAddress: varchar("to_address", { length: 1000 }),
+    subject: varchar("subject", { length: 998 }).notNull().default("(tanpa subjek)"),
+    preview: varchar("preview", { length: 500 }),
+    bodyCiphertext: text("body_ciphertext"),
+    receivedAt: timestamp("received_at", { withTimezone: true }),
+    linkedLeadId: uuid("linked_lead_id").references(() => leads.id, { onDelete: "set null" }),
+    linkedTransactionId: uuid("linked_transaction_id").references(() => businessTransactions.id, {
+      onDelete: "set null",
+    }),
+    syncAt: timestamp("sync_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("cs_emails_folder_uid_unique").on(table.folder, table.uidValidity, table.uid),
+    index("cs_emails_folder_received_idx").on(table.folder, table.receivedAt),
+    index("cs_emails_from_address_idx").on(table.fromAddress),
+    index("cs_emails_subject_idx").on(table.subject),
+    index("cs_emails_linked_lead_idx").on(table.linkedLeadId),
+    index("cs_emails_linked_transaction_idx").on(table.linkedTransactionId),
+  ],
+);
+
+export const csEmailOutbox = pgTable(
+  "cs_email_outbox",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    toAddress: varchar("to_address", { length: 255 }).notNull(),
+    subject: varchar("subject", { length: 998 }).notNull(),
+    bodyCiphertext: text("body_ciphertext").notNull(),
+    idempotencyKey: varchar("idempotency_key", { length: 80 }).notNull().unique(),
+    status: varchar("status", { length: 24 }).notNull().default("pending"),
+    messageId: varchar("message_id", { length: 500 }),
+    inReplyTo: varchar("in_reply_to", { length: 500 }),
+    linkedEmailId: uuid("linked_email_id").references(() => csEmails.id, { onDelete: "set null" }),
+    linkedLeadId: uuid("linked_lead_id").references(() => leads.id, { onDelete: "set null" }),
+    linkedTransactionId: uuid("linked_transaction_id").references(() => businessTransactions.id, {
+      onDelete: "set null",
+    }),
+    sentBy: uuid("sent_by").references(() => users.id, { onDelete: "set null" }),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("cs_email_outbox_sent_at_idx").on(table.sentAt),
+    index("cs_email_outbox_to_address_idx").on(table.toAddress),
+    index("cs_email_outbox_subject_idx").on(table.subject),
+  ],
+);
+
+export const googleAdsDailyReports = pgTable(
+  "google_ads_daily_reports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    reportDate: date("report_date").notNull(),
+    campaignId: varchar("campaign_id", { length: 40 }).notNull(),
+    campaignName: varchar("campaign_name", { length: 255 }).notNull(),
+    status: varchar("status", { length: 40 }).notNull(),
+    currencyCode: varchar("currency_code", { length: 3 }).notNull().default("IDR"),
+    impressions: integer("impressions").notNull().default(0),
+    clicks: integer("clicks").notNull().default(0),
+    costMicros: varchar("cost_micros", { length: 40 }).notNull().default("0"),
+    conversions: varchar("conversions", { length: 40 }).notNull().default("0"),
+    conversionsValue: varchar("conversions_value", { length: 40 }).notNull().default("0"),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("google_ads_campaign_day_unique").on(table.reportDate, table.campaignId),
+    index("google_ads_report_date_idx").on(table.reportDate),
+    index("google_ads_campaign_date_idx").on(table.campaignId, table.reportDate),
+  ],
+);
 
 export const leadNotes = pgTable(
   "lead_notes",
@@ -146,6 +254,7 @@ export const analyticsSessions = pgTable(
     referrer: varchar("referrer", { length: 1000 }),
     sourceName: varchar("source_name", { length: 120 }).notNull().default("Langsung"),
     outcome: varchar("outcome", { length: 40 }).notNull().default("Melihat halaman"),
+    formStatus: varchar("form_status", { length: 24 }),
     attribution: jsonb("attribution"),
     deviceCategory: varchar("device_category", { length: 20 }).notNull().default("unknown"),
     browserName: varchar("browser_name", { length: 80 }),
@@ -157,6 +266,7 @@ export const analyticsSessions = pgTable(
     lastEventAt: timestamp("last_event_at", { withTimezone: true }),
     endedAt: timestamp("ended_at", { withTimezone: true }),
     durationSeconds: integer("duration_seconds"),
+    durationQuality: varchar("duration_quality", { length: 24 }).notNull().default("unverified"),
     eventSequence: integer("event_sequence").notNull().default(0),
     consentVersion: varchar("consent_version", { length: 20 }).notNull().default("v1"),
     consentedAt: timestamp("consented_at", { withTimezone: true }).defaultNow().notNull(),

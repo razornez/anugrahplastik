@@ -71,6 +71,55 @@
       "when": 1790337600004,
       "tag": "0009_steady_data_quality",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790337600005,
+      "tag": "0010_analytics_duration_quality",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790337600006,
+      "tag": "0011_analytics_conversion_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790337600007,
+      "tag": "0012_marketing_email_integrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790343656376,
+      "tag": "0013_persistent_integration_connections",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790345100000,
+      "tag": "0014_email_body_cache",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790348700000,
+      "tag": "0015_google_ads_conversion_value",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790348700001,
+      "tag": "0016_google_ads_campaign_filter_index",
+      "breakpoints": true
     }
   ]
 }

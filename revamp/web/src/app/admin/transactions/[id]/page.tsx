@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { randomUUID } from "node:crypto";
 import { notFound } from "next/navigation";
 import {
   recordTransactionPayment,
@@ -6,8 +7,10 @@ import {
   updateTransactionTrackStatus,
   verifyTransactionPayment,
 } from "@/features/operations/actions";
+import { sendTransactionDocument } from "@/features/integrations/actions";
 import { requireOperationsAccess } from "@/features/operations/access";
 import { getTransactionDetail } from "@/features/operations/service";
+import { transactionMainStage, transactionStatusLabel } from "@/features/operations/transaction-status";
 
 export const instant = false;
 
@@ -31,20 +34,24 @@ const stages: Record<TransactionStage, { label: string; shortLabel: string; desc
   },
 };
 
-const stageStatusOptions: Record<TransactionStage, Array<{ value: string; label: string }>> = {
+const stageStatusOptions: Record<TransactionStage, Array<{ value: string; label: string; disabled?: boolean }>> = {
   commercial: [
     { value: "quotation", label: "Menyiapkan penawaran" },
     { value: "po_received", label: "PO diterima" },
     { value: "contract", label: "Kontrak / invoice" },
     { value: "completed", label: "Komersial selesai" },
+    { value: "cancelled", label: "Dibatalkan" },
   ],
   payment: [
     { value: "awaiting_invoice", label: "Belum ada tagihan" },
+    { value: "awaiting_payment", label: "Menunggu pembayaran", disabled: true },
     { value: "payment_recorded", label: "Menunggu verifikasi" },
+    { value: "partial", label: "Dibayar sebagian" },
     { value: "verified", label: "Terverifikasi" },
   ],
   fulfilment: [
     { value: "not_released", label: "Belum dilepas" },
+    { value: "sample", label: "Sampel dalam proses", disabled: true },
     { value: "released", label: "Sudah dilepas ke produksi" },
     { value: "completed", label: "Produksi & pengiriman selesai" },
   ],
@@ -89,14 +96,58 @@ function documentLabel(type: string) {
   return labels[type] ?? type;
 }
 
+function SendDocumentEmail({
+  transactionId,
+  documentId,
+  documentName,
+  customerEmail,
+  referenceNo,
+}: {
+  transactionId: string;
+  documentId: string;
+  documentName: string;
+  customerEmail: string | null;
+  referenceNo: string;
+}) {
+  if (!customerEmail)
+    return <small className="transaction-email-missing">Email customer belum diisi pada data pelanggan.</small>;
+  return (
+    <details className="transaction-document-email">
+      <summary>Kirim lewat email</summary>
+      <form action={sendTransactionDocument}>
+        <input type="hidden" name="transactionId" value={transactionId} />
+        <input type="hidden" name="documentId" value={documentId} />
+        <input type="hidden" name="to" value={customerEmail} />
+        <input type="hidden" name="idempotencyKey" value={randomUUID()} />
+        <label>
+          Ke<strong>{customerEmail}</strong>
+        </label>
+        <label>
+          Subjek
+          <input name="subject" defaultValue={`${documentName} · ${referenceNo}`} maxLength={998} required />
+        </label>
+        <label>
+          Pesan
+          <textarea
+            name="body"
+            defaultValue={`Yth. ${customerEmail},\n\nBersama email ini kami sampaikan ${documentName.toLowerCase()} untuk pekerjaan ${referenceNo}.\n\nSalam,\nAnugrah Plastik`}
+            maxLength={20000}
+            required
+            rows={4}
+          />
+        </label>
+        <button type="submit">Kirim dokumen</button>
+      </form>
+    </details>
+  );
+}
+
 function statusLabel(stage: TransactionStage, value: string) {
-  return stageStatusOptions[stage].find((option) => option.value === value)?.label ?? value.replaceAll("_", " ");
+  return transactionStatusLabel(stage, value);
 }
 
 function getSuggestedStage(status: { paymentStatus: string; fulfilmentStatus: string }): TransactionStage {
-  if (["released", "completed"].includes(status.fulfilmentStatus)) return "fulfilment";
-  if (["payment_recorded", "verified"].includes(status.paymentStatus)) return "payment";
-  return "commercial";
+  return transactionMainStage(status);
 }
 
 function stageStatus(
@@ -131,10 +182,12 @@ function StageNavigation({
   id,
   activeStage,
   header,
+  returnTo,
 }: {
   id: string;
   activeStage: TransactionStage;
   header: { commercialStatus: string; paymentStatus: string; fulfilmentStatus: string };
+  returnTo: string;
 }) {
   return (
     <nav aria-label="Tahap transaksi" className="transaction-stage-nav">
@@ -144,7 +197,7 @@ function StageNavigation({
           <Link
             aria-current={isActive ? "page" : undefined}
             className={isActive ? "is-active" : undefined}
-            href={`/admin/transactions/${id}?stage=${stage}`}
+            href={`/admin/transactions/${id}?stage=${stage}&returnTo=${encodeURIComponent(returnTo)}`}
             key={stage}
           >
             <span className="transaction-stage-nav__number">0{index + 1}</span>
@@ -169,8 +222,17 @@ function StageManager({ id, stage, currentStatus }: { id: string; stage: Transac
         <label>
           Status {stages[stage].label.toLowerCase()}
           <select defaultValue={currentStatus} name="status">
+            {!stageStatusOptions[stage].some((option) => option.value === currentStatus) ? (
+              <option value={currentStatus} disabled>
+                Status perlu ditinjau
+              </option>
+            ) : null}
             {stageStatusOptions[stage].map((option) => (
-              <option key={option.value} value={option.value}>
+              <option
+                key={option.value}
+                value={option.value}
+                disabled={option.disabled || option.value === "cancelled"}
+              >
                 {option.label}
               </option>
             ))}
@@ -191,10 +253,11 @@ export default async function TransactionDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ stage?: string }>;
+  searchParams: Promise<{ stage?: string; returnTo?: string; email?: string }>;
 }) {
   const user = await requireOperationsAccess();
   const [{ id }, query] = await Promise.all([params, searchParams]);
+  const returnTo = query.returnTo?.startsWith("/admin/transactions?") ? query.returnTo : "/admin/transactions";
   const transaction = await getTransactionDetail(id);
   if (!transaction) notFound();
 
@@ -222,7 +285,7 @@ export default async function TransactionDetailPage({
   return (
     <section className="transaction-workspace-page">
       <header className="transaction-workspace-head">
-        <Link href="/admin/transactions">← Semua transaksi</Link>
+        <Link href={returnTo}>← Semua transaksi</Link>
         <div className="transaction-workspace-head__body">
           <div>
             <p className="eyebrow">{header.referenceNo}</p>
@@ -232,10 +295,21 @@ export default async function TransactionDetailPage({
           <span className="transaction-status">Tahap utama: {stages[suggestedStage].label}</span>
         </div>
       </header>
+      {query.email === "sent" ? (
+        <p className="integration-success" role="status">
+          Dokumen diserahkan ke server email untuk dikirim.
+        </p>
+      ) : null}
+      {query.email === "check" ? (
+        <p className="integration-alert" role="alert">
+          Status pengiriman belum pasti. Periksa Email terkirim atau webmail sebelum mengirim ulang agar tidak terjadi
+          duplikasi.
+        </p>
+      ) : null}
 
       <div className="transaction-workspace-layout">
         <main>
-          <StageNavigation activeStage={activeStage} header={header} id={header.id} />
+          <StageNavigation activeStage={activeStage} header={header} id={header.id} returnTo={returnTo} />
 
           <section className="transaction-stage-focus">
             <div className="transaction-stage-focus__intro">
@@ -320,6 +394,15 @@ export default async function TransactionDetailPage({
                               <small>{document.documentNo ?? document.originalName ?? "Belum bernomor"}</small>
                             </div>
                             <em>{document.status}</em>
+                            {document.storagePath ? (
+                              <SendDocumentEmail
+                                customerEmail={header.customerEmail}
+                                documentId={document.id}
+                                documentName={documentLabel(document.type)}
+                                referenceNo={header.referenceNo}
+                                transactionId={header.id}
+                              />
+                            ) : null}
                           </article>
                         ))}
                       </div>
@@ -493,6 +576,15 @@ export default async function TransactionDetailPage({
                               <small>{document.documentNo ?? document.originalName ?? "Belum bernomor"}</small>
                             </div>
                             <em>{document.status}</em>
+                            {document.storagePath ? (
+                              <SendDocumentEmail
+                                customerEmail={header.customerEmail}
+                                documentId={document.id}
+                                documentName={documentLabel(document.type)}
+                                referenceNo={header.referenceNo}
+                                transactionId={header.id}
+                              />
+                            ) : null}
                           </article>
                         ))}
                       </div>

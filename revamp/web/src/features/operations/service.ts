@@ -262,6 +262,44 @@ export async function getActiveCustomerCount() {
   return Number(result?.total ?? 0);
 }
 
+export async function getDesignUploadOptions() {
+  const database = getDatabase();
+  if (!database) return [];
+  const [customerRows, productRows, mouldRows] = await Promise.all([
+    database
+      .select({ id: customers.id, code: customers.code, name: customers.displayName })
+      .from(customers)
+      .where(eq(customers.status, "active"))
+      .orderBy(customers.displayName)
+      .limit(200),
+    database
+      .select({ id: products.id, code: products.sku, name: products.name })
+      .from(products)
+      .where(eq(products.status, "active"))
+      .orderBy(products.name)
+      .limit(200),
+    database
+      .select({ id: moulds.id, code: moulds.code, name: moulds.name })
+      .from(moulds)
+      .where(eq(moulds.status, "active"))
+      .orderBy(moulds.name)
+      .limit(200),
+  ]);
+  return [
+    ...productRows.map((item) => ({
+      id: item.id,
+      type: "product" as const,
+      label: `${item.name} · ${item.code} — Barang`,
+    })),
+    ...customerRows.map((item) => ({
+      id: item.id,
+      type: "customer" as const,
+      label: `${item.name} · ${item.code} — Customer`,
+    })),
+    ...mouldRows.map((item) => ({ id: item.id, type: "mould" as const, label: `${item.name} · ${item.code} — Mould` })),
+  ];
+}
+
 export async function getTransactionPage(
   query: { search?: string; status?: string; cursor?: string; direction?: "next" | "previous" } = {},
 ) {

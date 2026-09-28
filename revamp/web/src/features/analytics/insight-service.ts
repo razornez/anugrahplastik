@@ -11,7 +11,8 @@ export type AnalyticsInsight = {
   sessions: number;
   events: number;
   formStarts: number;
-  formSubmits: number;
+  formEvents: number;
+  validLeads: number;
   whatsappClicks: number;
   topSections: InsightRow[];
   topCtas: InsightRow[];
@@ -24,7 +25,8 @@ const emptyInsight = (days: number): AnalyticsInsight => ({
   sessions: 0,
   events: 0,
   formStarts: 0,
-  formSubmits: 0,
+  formEvents: 0,
+  validLeads: 0,
   whatsappClicks: 0,
   topSections: [],
   topCtas: [],
@@ -45,14 +47,16 @@ export async function getAnalyticsInsight(days = 7): Promise<AnalyticsInsight> {
       .select({ sessions: countDistinct(analyticsSessions.id), events: count(analyticsEvents.id) })
       .from(analyticsSessions)
       .leftJoin(analyticsEvents, eq(analyticsEvents.sessionId, analyticsSessions.id))
-      .where(gte(analyticsSessions.createdAt, since)),
+      .where(and(gte(analyticsSessions.createdAt, since), eq(analyticsSessions.trafficClass, "public"))),
     database
       .select({ key: analyticsEvents.sectionKey, total: count() })
       .from(analyticsEvents)
+      .innerJoin(analyticsSessions, eq(analyticsEvents.sessionId, analyticsSessions.id))
       .where(
         and(
           eq(analyticsEvents.name, "section_engaged"),
           gte(analyticsEvents.occurredAt, since),
+          eq(analyticsSessions.trafficClass, "public"),
           isNotNull(analyticsEvents.sectionKey),
         ),
       )
@@ -62,10 +66,12 @@ export async function getAnalyticsInsight(days = 7): Promise<AnalyticsInsight> {
     database
       .select({ key: analyticsEvents.elementKey, total: count() })
       .from(analyticsEvents)
+      .innerJoin(analyticsSessions, eq(analyticsEvents.sessionId, analyticsSessions.id))
       .where(
         and(
           eq(analyticsEvents.name, "cta_click"),
           gte(analyticsEvents.occurredAt, since),
+          eq(analyticsSessions.trafficClass, "public"),
           isNotNull(analyticsEvents.elementKey),
         ),
       )
@@ -75,10 +81,12 @@ export async function getAnalyticsInsight(days = 7): Promise<AnalyticsInsight> {
     database
       .select({ key: analyticsEvents.sectionKey, total: count() })
       .from(analyticsEvents)
+      .innerJoin(analyticsSessions, eq(analyticsEvents.sessionId, analyticsSessions.id))
       .where(
         and(
           eq(analyticsEvents.name, "page_leave"),
           gte(analyticsEvents.occurredAt, since),
+          eq(analyticsSessions.trafficClass, "public"),
           isNotNull(analyticsEvents.sectionKey),
         ),
       )
@@ -90,13 +98,39 @@ export async function getAnalyticsInsight(days = 7): Promise<AnalyticsInsight> {
 
   const countFor = (name: string) =>
     database
-      .select({ total: count() })
+      .select({ total: countDistinct(analyticsEvents.sessionId) })
       .from(analyticsEvents)
-      .where(and(eq(analyticsEvents.name, name), gte(analyticsEvents.occurredAt, since)));
+      .innerJoin(analyticsSessions, eq(analyticsEvents.sessionId, analyticsSessions.id))
+      .where(
+        and(
+          eq(analyticsEvents.name, name),
+          gte(analyticsEvents.occurredAt, since),
+          eq(analyticsSessions.trafficClass, "public"),
+        ),
+      );
 
-  const [formStarts, formSubmits, whatsappClicks] = await Promise.all([
+  const [formStarts, formEvents, validLeads, whatsappClicks] = await Promise.all([
     countFor("form_start"),
-    countFor("form_submit"),
+    database
+      .select({ total: countDistinct(analyticsSessions.id) })
+      .from(analyticsSessions)
+      .where(
+        and(
+          eq(analyticsSessions.outcome, "Form terkirim"),
+          gte(analyticsSessions.createdAt, since),
+          eq(analyticsSessions.trafficClass, "public"),
+        ),
+      ),
+    database
+      .select({ total: countDistinct(analyticsSessions.id) })
+      .from(analyticsSessions)
+      .where(
+        and(
+          eq(analyticsSessions.formStatus, "valid"),
+          gte(analyticsSessions.createdAt, since),
+          eq(analyticsSessions.trafficClass, "public"),
+        ),
+      ),
     countFor("whatsapp_click"),
   ]);
 
@@ -106,7 +140,8 @@ export async function getAnalyticsInsight(days = 7): Promise<AnalyticsInsight> {
     sessions: Number(summary?.sessions ?? 0),
     events: Number(summary?.events ?? 0),
     formStarts: Number(formStarts[0]?.total ?? 0),
-    formSubmits: Number(formSubmits[0]?.total ?? 0),
+    formEvents: Number(formEvents[0]?.total ?? 0),
+    validLeads: Number(validLeads[0]?.total ?? 0),
     whatsappClicks: Number(whatsappClicks[0]?.total ?? 0),
     topSections: toRows(topSections.map((row) => ({ key: row.key, total: Number(row.total) }))),
     topCtas: toRows(topCtas.map((row) => ({ key: row.key, total: Number(row.total) }))),
@@ -122,7 +157,8 @@ export function analyticsWhatsappReport(insight: AnalyticsInsight) {
     "",
     `Kunjungan tercatat: ${insight.sessions}`,
     `Interaksi di halaman: ${insight.events}`,
-    `Form mulai diisi / terkirim: ${insight.formStarts} / ${insight.formSubmits}`,
+    `Form mulai diisi: ${insight.formStarts}`,
+    `Event kirim form / lead valid tersimpan: ${insight.formEvents} / ${insight.validLeads}`,
     `Klik WhatsApp: ${insight.whatsappClicks}`,
     "",
     `Bagian yang paling diperhatikan: ${list(insight.topSections, sectionLabel)}`,

@@ -59,7 +59,7 @@ export function DesignUploadForm({ options }: { options: LinkOption[] }) {
       </label>
       <label>
         Tautkan ke
-        <select name="target" required defaultValue="">
+        <select name="target" required defaultValue="" disabled={!options.length || busy}>
           <option value="" disabled>
             Pilih tujuan
           </option>
@@ -70,10 +70,11 @@ export function DesignUploadForm({ options }: { options: LinkOption[] }) {
           ))}
         </select>
       </label>
-      <button type="submit" disabled={busy}>
+      <button type="submit" disabled={busy || !options.length}>
         {busy ? "Menyimpan…" : "Upload privat"}
       </button>
       <small>File sumber maksimal 100 MB. Preview STL, OBJ, atau GLB maksimal 25 MB.</small>
+      {!options.length ? <p>Tambahkan barang, customer, atau mould aktif sebelum mengunggah file.</p> : null}
       {message ? <p role="status">{message}</p> : null}
     </form>
   );

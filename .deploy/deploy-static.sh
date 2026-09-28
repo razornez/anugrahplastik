@@ -101,6 +101,11 @@ backup="$(mktemp -d "$HOME/.anugrah-site-backups/$release.XXXXXX")"
 publish_file() {
   local relative="$1" source="$source_root/$1" destination="$target_root/$1"
   local parent="$(dirname "$destination")"
+  # Repair the featured directory created by the earlier partial release with
+  # the private script umask. Only this known public image directory is widened.
+  if [[ "$parent" == "$target_root/img/featured" && -d "$parent" && ! -L "$parent" && "$(stat -c '%a' "$parent")" == 700 ]]; then
+    chmod 755 "$parent"
+  fi
   if [[ -f "$destination" ]] && cmp -s "$source" "$destination"; then
     return
   fi
@@ -111,7 +116,7 @@ publish_file() {
   else
     printf 'created\t%s\n' "$relative" >> "$backup/manifest.tsv"
   fi
-  mkdir -p "$parent"
+  (umask 022; mkdir -p -m 755 "$parent")
   temporary="$(mktemp "$parent/.anugrah-stage.XXXXXXXX")"
   cp -p -- "$source" "$temporary"
   mv -f -- "$temporary" "$destination"

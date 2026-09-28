@@ -2,12 +2,21 @@
 set -euo pipefail
 umask 077
 
+# cPanel may invoke deployment with Git environment variables pointing at its
+# deployment context. They override `git -C` and can make ls-files appear empty.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR
+unset GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+
 source_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 expected_source=/home/u9433102/anugrahplastik-site-git
 target_root=/home/u9433102/public_html
 
 if [[ "$source_root" != "$expected_source" || "$(realpath "$target_root")" != "$target_root" ]]; then
   echo 'Refusing deployment from an unexpected repository or to an unexpected document root.' >&2
+  exit 1
+fi
+if [[ "$(git -C "$source_root" rev-parse --show-toplevel)" != "$source_root" ]]; then
+  echo 'Git did not resolve the expected deployment checkout.' >&2
   exit 1
 fi
 if [[ -n "$(git -C "$source_root" status --porcelain)" ]]; then
@@ -27,6 +36,13 @@ while IFS= read -r -d '' relative; do
     *) echo "Unexpected tracked path: $relative" >&2; exit 1 ;;
   esac
 done < <(git -C "$source_root" ls-files -z)
+
+for required in css/main.css img/featured/spacer-conduit-bawah-tanah-lokasi-proyek-1.jpg img/featured/spacer-conduit-bawah-tanah-lokasi-proyek-2.jpg; do
+  if ! git -C "$source_root" ls-files --error-unmatch -- "$required" >/dev/null 2>&1; then
+    echo "Required site asset is not tracked: $required" >&2
+    exit 1
+  fi
+done
 
 for directory in css fonts img js; do
   if [[ ! -d "$source_root/$directory" || -L "$target_root/$directory" ]]; then

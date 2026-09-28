@@ -1490,3 +1490,104 @@ textarea.form-control {
         right: 15px;
     }
 }
+
+/* Featured conduit spacer on the legacy landing page. */
+#spacer-conduit {
+    background: #f3f9fc;
+    scroll-margin-top: 78px;
+}
+
+#spacer-conduit .sec-title {
+    margin: 0 auto 36px;
+    max-width: 760px;
+}
+
+.featured-product-label {
+    color: #007bb8;
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+#spacer-conduit .sec-title h2 {
+    margin-top: 12px;
+}
+
+.featured-product-photos {
+    display: grid;
+    gap: 22px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0 auto;
+    max-width: 980px;
+}
+
+#spacer-conduit .featured-product-photo {
+    background: #fff;
+    border: 1px solid #dceaf2;
+    box-shadow: 0 10px 24px rgba(22, 65, 93, 0.09);
+    display: block;
+    margin: 0;
+    width: auto;
+}
+
+.featured-product-photo a,
+.featured-product-photo picture,
+.featured-product-photo img {
+    display: block;
+    width: 100%;
+}
+
+.featured-product-photo img {
+    height: auto;
+}
+
+.featured-product-photo figcaption {
+    color: #475e6d;
+    font-size: 14px;
+    padding: 14px 18px;
+    text-align: left;
+}
+
+.featured-product-photo a:focus,
+.featured-product-cta:focus {
+    outline: 3px solid #005d8a;
+    outline-offset: 3px;
+}
+
+.featured-product-action {
+    margin-bottom: 28px;
+}
+
+.featured-product-cta {
+    align-items: center;
+    background: #008ecb;
+    color: #fff;
+    display: inline-flex;
+    font-weight: 700;
+    justify-content: center;
+    min-height: 48px;
+    padding: 12px 24px;
+}
+
+.featured-product-cta:hover,
+.featured-product-cta:focus {
+    background: #006da4;
+    color: #fff;
+}
+
+@media (max-width: 767px) {
+    #spacer-conduit {
+        padding: 56px 0;
+    }
+
+    .featured-product-photos {
+        grid-template-columns: minmax(0, 1fr);
+        max-width: 480px;
+    }
+
+    .featured-product-cta {
+        width: 100%;
+    }
+}

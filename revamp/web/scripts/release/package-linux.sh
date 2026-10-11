@@ -57,7 +57,7 @@ find "$release_root" -type f \( -name '.env' -o -name '.env.*' \) -print -quit |
 )
 mkdir -p "$(dirname "$output_path")"
 tar -C "$stage_root" --sort=name --owner=0 --group=0 --numeric-owner -czf "$output_path" anugrahplastik-release
-tar -tzf "$output_path" | grep -E '(^|/)(\.env($|\.)|storage/|tmp/|output/)' && {
+tar -tzf "$output_path" | grep -E '(^|/)(\.env($|\.)|app/(storage|tmp|output)/)' && {
   echo "Release archive contains forbidden local files." >&2
   exit 1
 } || true

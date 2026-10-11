@@ -33,6 +33,12 @@ cp -a "$project_root/.next/standalone/." "$release_root/app/"
 cp -a "$project_root/.next/static" "$release_root/app/.next/static"
 cp -a "$project_root/public" "$release_root/app/public"
 cp -a "$project_root/drizzle" "$release_root/app/drizzle"
+# The standalone trace includes database modules needed by the web server, but
+# the independent migration runner is not traced by Next. Copy its two runtime
+# entry packages as real directories so the VPS never needs pnpm or a build.
+mkdir -p "$release_root/app/node_modules"
+cp -aL "$project_root/node_modules/drizzle-orm" "$release_root/app/node_modules/drizzle-orm"
+cp -aL "$project_root/node_modules/pg" "$release_root/app/node_modules/pg"
 install -D -m 0755 "$project_root/scripts/release/migrate-production.mjs" "$release_root/app/scripts/release/migrate-production.mjs"
 install -D -m 0755 "$project_root/scripts/analytics-worker.cjs" "$release_root/app/scripts/analytics-worker.cjs"
 install -D -m 0755 "$project_root/scripts/run-integrations-sync.mjs" "$release_root/app/scripts/run-integrations-sync.mjs"

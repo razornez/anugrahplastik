@@ -1,10 +1,18 @@
 import Busboy from "busboy";
 import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getSession } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/database/client";
-import { auditLogs, productDesignFiles } from "@/lib/database/schema";
+import {
+  auditLogs,
+  businessTransactions,
+  customers,
+  materials,
+  moulds,
+  productDesignFiles,
+  products,
+} from "@/lib/database/schema";
 import {
   createFileDigest,
   designFormat,
@@ -54,6 +62,39 @@ async function usedStorageBytes() {
   return Number(row?.total ?? 0);
 }
 
+async function validateLinks(database: NonNullable<ReturnType<typeof getDatabase>>, fields: Record<string, string>) {
+  const checks = await Promise.all([
+    fields.productId
+      ? database.select({ id: products.id }).from(products).where(eq(products.id, fields.productId)).limit(1)
+      : Promise.resolve([]),
+    fields.mouldId
+      ? database.select({ id: moulds.id }).from(moulds).where(eq(moulds.id, fields.mouldId)).limit(1)
+      : Promise.resolve([]),
+    fields.customerId
+      ? database.select({ id: customers.id }).from(customers).where(eq(customers.id, fields.customerId)).limit(1)
+      : Promise.resolve([]),
+    fields.transactionId
+      ? database
+          .select({ id: businessTransactions.id })
+          .from(businessTransactions)
+          .where(eq(businessTransactions.id, fields.transactionId))
+          .limit(1)
+      : Promise.resolve([]),
+    fields.materialId
+      ? database.select({ id: materials.id }).from(materials).where(eq(materials.id, fields.materialId)).limit(1)
+      : Promise.resolve([]),
+  ]);
+  if (
+    checks.some(
+      (rows, index) =>
+        [fields.productId, fields.mouldId, fields.customerId, fields.transactionId, fields.materialId][index] &&
+        !rows.length,
+    )
+  ) {
+    throw new Error("Data yang dipilih sudah tidak tersedia. Muat ulang halaman lalu pilih kembali.");
+  }
+}
+
 async function readDesign(request: Request): Promise<{ fields: Record<string, string>; file: UploadedDesign }> {
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.startsWith("multipart/form-data")) throw new Error("Gunakan formulir upload.");
@@ -67,7 +108,7 @@ async function readDesign(request: Request): Promise<{ fields: Record<string, st
   const fileWrites: Promise<void>[] = [];
   const completion = new Promise<void>((resolve, reject) => {
     busboy.on("field", (name, value) => {
-      fields[name] = value.slice(0, 500);
+      fields[name] = value.slice(0, name === "description" ? 1000 : 500);
     });
     busboy.on("file", (_name, stream, info) => {
       if (written || writeError) {
@@ -159,6 +200,7 @@ export async function POST(request: Request) {
       fields.fileKind === "preview" ? "preview" : fields.fileKind === "reference" ? "reference" : "source";
     const links = [fields.productId, fields.mouldId, fields.customerId, fields.transactionId].filter(Boolean);
     if (!links.length) throw new Error("Tautkan file ke barang, mould, customer, atau transaksi.");
+    await validateLinks(database, fields);
     const [record] = await database
       .insert(productDesignFiles)
       .values({
@@ -166,6 +208,8 @@ export async function POST(request: Request) {
         mouldId: fields.mouldId || null,
         customerId: fields.customerId || null,
         transactionId: fields.transactionId || null,
+        materialId: fields.materialId || null,
+        description: fields.description?.trim().slice(0, 1000) || null,
         origin,
         fileKind,
         format: file.format,
@@ -186,6 +230,8 @@ export async function POST(request: Request) {
         format: file.format,
         byteSize: file.byteSize,
         origin,
+        materialId: fields.materialId || null,
+        hasDescription: Boolean(fields.description?.trim()),
         capacityWarning: currentUsage + file.byteSize >= storageWarningAt,
       },
     });

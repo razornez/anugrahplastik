@@ -1,0 +1,73 @@
+# Rilis VPS Anugrah Plastik
+
+Dokumen ini adalah prosedur rilis pertama ke VPS bersama. Rilis tidak boleh
+dimulai hanya karena artefak CI tersedia: backup/restore, kapasitas, domain,
+dan perubahan DNS tetap merupakan gate terpisah.
+
+## Batas dan arsitektur
+
+- App berjalan sebagai user Linux `anugrahplastik`, di loopback port `3050`.
+- PostgreSQL memakai database dan role khusus; tidak memakai database atau role
+  aplikasi lain di VPS.
+- Media privat berada di `/var/lib/anugrahplastik/private`, di luar release dan
+  web root.
+- Release berada di `/srv/anugrahplastik/releases/<commit>-<run>/app`; symlink
+  `/srv/anugrahplastik/current` hanya boleh diganti setelah canary lokal lulus.
+- Nginx adalah satu-satunya ingress publik. `/api/health` hanya untuk loopback.
+- Email CS dan Google Ads scheduler tidak diaktifkan pada rilis pertama.
+
+## Gate sebelum cutover
+
+1. Jalankan `ops/audit-vps.sh` dari artefak pada VPS dan catat CPU, RAM, swap,
+   disk, inode, port, unit aktif, ukuran release, serta ukuran database per
+   database. Jangan restart atau membersihkan layanan lain.
+2. Pastikan setelah menyisakan release aktif, satu rollback, backup DB+media,
+   dan cushion 5 GiB, disk masih aman. RAM headroom harus stabil minimal 2 GiB
+   tanpa swap yang bertambah. Bila gagal, tunda cutover.
+3. Buat backup pasangan database dan media lokal. Unduh ulang, cocokkan
+   checksum, lalu restore ke database terisolasi dan uji login, konten, file
+   privat, transaksi, Finance, serta Email CS cache.
+4. Inventaris media yang direstore hanya dari storage privat operasional. Jangan
+   membawa `storage/backups`, `tmp`, `output`, screenshot review, fixture, atau
+   seed demo ke VPS.
+5. Konfigurasi `/etc/anugrahplastik/web.env` sebagai root-only (`0600`) dari
+   `.env.example`. Isi secret production melalui secret manager; jangan pernah
+   memasukkan secret ke artefak, command history, Git, ataupun jurnal.
+6. Buat sertifikat origin via DNS challenge sebelum apex/`www` dipindahkan.
+   Hanya record web yang berubah; MX, SPF, DKIM, dan DMARC cPanel dipertahankan.
+
+## Paket dan pemasangan
+
+1. Jalankan workflow **Package Anugrah Plastik VPS release** secara manual pada
+   SHA kandidat. Workflow Linux menjalankan format check, lint, typecheck,
+   seluruh test, build, lalu mengunggah TAR dan SHA-256.
+2. Di VPS, verifikasi checksum TAR sebelum ekstraksi ke direktori release baru.
+   Jangan build atau menjalankan `pnpm install` pada VPS.
+3. Salin unit dari `ops/systemd/`, template Nginx dari `ops/nginx/`, kemudian
+   baca ulang unit/Nginx yang sudah ada sebelum memasangnya. Ganti
+   `__DOMAIN__`; jangan memakai template tanpa sertifikat valid.
+4. Restore database dan media yang telah terverifikasi. Jalankan
+   `node scripts/release/migrate-production.mjs` dari release baru satu kali;
+   eksekusi kedua harus selesai tanpa perubahan.
+5. Arahkan symlink `current` ke release baru, kemudian mulai web dan worker
+   analitik. Pastikan `curl http://127.0.0.1:3050/api/health` memberi `200` dan
+   jurnal service bersih sebelum Nginx/DNS diubah.
+6. Pasang Nginx, lakukan smoke melalui host override, lalu ubah apex/`www`
+   pada jendela rilis. Uji HTTPS, redirect, cookie login, upload media privat,
+   dan halaman publik dari jaringan luar.
+
+## Scheduler integrasi
+
+- Timer integrasi sengaja hanya disediakan sebagai template dan **tidak
+  di-enable** saat rilis pertama.
+- Enable timer Email CS hanya setelah IMAP 993 dan SMTP 465 berhasil diuji dari
+  VPS serta koneksi tersimpan dapat disinkronkan.
+- Google Ads scheduler tetap nonaktif sampai OAuth Production, Developer Token,
+  probe akses, dan rekonsiliasi laporan tujuh hari dinyatakan lulus.
+
+## Rollback
+
+Jika health, log, atau smoke gagal, arahkan `current` ke release sebelumnya dan
+restart hanya `anugrahplastik-web` serta `anugrahplastik-analytics`. Jangan
+menjalankan rollback schema/data otomatis. Perubahan database hanya dipulihkan
+dari backup pasangan yang sudah diuji.

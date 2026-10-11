@@ -9,6 +9,8 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // Local QA renderer uses an isolated Next build directory.
+    ".next-qa/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

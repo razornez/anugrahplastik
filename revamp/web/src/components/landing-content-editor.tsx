@@ -1,11 +1,22 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import type { LandingContent } from "@/features/content/landing-content";
 
 type SectionId =
-  "seo" | "topbar" | "hero" | "about" | "why" | "process" | "material" | "portfolio" | "faq" | "contact" | "footer";
+  | "seo"
+  | "topbar"
+  | "hero"
+  | "about"
+  | "why"
+  | "process"
+  | "material"
+  | "portfolio"
+  | "evidence"
+  | "faq"
+  | "contact"
+  | "footer";
 
 type FieldBinding = {
   name: string;
@@ -207,6 +218,15 @@ const sections: SectionDefinition[] = [
     ],
   },
   {
+    id: "evidence",
+    label: "Bukti & galeri",
+    eyebrow: "Bukti nyata",
+    title: "Kapabilitas, proses, dan galeri kategori",
+    description:
+      "Tampilkan hanya bukti yang sudah disetujui. Kategori publik wajib memiliki gambar, alt text, dan produk.",
+    fields: [],
+  },
+  {
     id: "faq",
     label: "FAQ",
     eyebrow: "Pertanyaan umum",
@@ -292,12 +312,36 @@ const sections: SectionDefinition[] = [
   },
 ];
 
-type Props = { action: (formData: FormData) => void | Promise<void>; content: LandingContent; message: string };
+type Revision = { id: string; version: number; action: string; createdAt: Date; actorName: string | null };
+type Props = {
+  action: (formData: FormData) => void | Promise<void>;
+  restoreAction: (revisionId: string, formData: FormData) => void | Promise<void>;
+  content: LandingContent;
+  message: string;
+  version: number;
+  publishedAt: Date | null;
+  updatedAt: Date | null;
+  hasUnpublishedDraft: boolean;
+  revisions: Revision[];
+  canEdit: boolean;
+};
 
-export function LandingContentEditor({ action, content, message }: Props) {
+export function LandingContentEditor({
+  action,
+  restoreAction,
+  content,
+  message,
+  version,
+  publishedAt,
+  updatedAt,
+  hasUnpublishedDraft,
+  revisions,
+  canEdit,
+}: Props) {
   const [draft, setDraft] = useState(content);
   const [activeSectionId, setActiveSectionId] = useState<SectionId>("hero");
   const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
+  const [publishOpen, setPublishOpen] = useState(false);
   const activeIndex = sections.findIndex((section) => section.id === activeSectionId);
   const activeSection = sections[activeIndex] ?? sections[0];
   const hasLocalChanges = useMemo(() => JSON.stringify(draft) !== JSON.stringify(content), [content, draft]);
@@ -316,18 +360,54 @@ export function LandingContentEditor({ action, content, message }: Props) {
   };
   const previous = () => selectSection(sections[Math.max(0, activeIndex - 1)].id);
   const next = () => selectSection(sections[Math.min(sections.length - 1, activeIndex + 1)].id);
+  const selectEditorView = (view: "edit" | "preview") => setMobileView(view);
+  const onViewTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const views = ["edit", "preview"] as const;
+    const currentIndex = views.indexOf(mobileView);
+    const nextView =
+      event.key === "ArrowRight" || event.key === "ArrowDown"
+        ? views[(currentIndex + 1) % views.length]
+        : event.key === "ArrowLeft" || event.key === "ArrowUp"
+          ? views[(currentIndex - 1 + views.length) % views.length]
+          : event.key === "Home"
+            ? views[0]
+            : event.key === "End"
+              ? views[views.length - 1]
+              : null;
+
+    if (!nextView) return;
+
+    event.preventDefault();
+    selectEditorView(nextView);
+    requestAnimationFrame(() => document.getElementById(`landing-editor-${nextView}-tab`)?.focus());
+  };
 
   return (
     <form action={action} className={`landing-editor landing-editor--${mobileView}`}>
-      <div className="landing-editor__mobile-controls" aria-label="Cara melihat editor">
+      <input name="content-json" type="hidden" value={JSON.stringify(draft)} />
+      <input name="expected-version" type="hidden" value={version} />
+      <div className="landing-editor__mobile-controls" aria-label="Kontrol editor">
         <div className="landing-editor__view-tabs" role="tablist" aria-label="Tampilan editor">
-          <button aria-selected={mobileView === "edit"} onClick={() => setMobileView("edit")} role="tab" type="button">
+          <button
+            aria-controls="landing-editor-edit"
+            aria-selected={mobileView === "edit"}
+            id="landing-editor-edit-tab"
+            onClick={() => selectEditorView("edit")}
+            onKeyDown={onViewTabKeyDown}
+            role="tab"
+            tabIndex={mobileView === "edit" ? 0 : -1}
+            type="button"
+          >
             Edit
           </button>
           <button
+            aria-controls="landing-editor-preview"
             aria-selected={mobileView === "preview"}
-            onClick={() => setMobileView("preview")}
+            id="landing-editor-preview-tab"
+            onClick={() => selectEditorView("preview")}
+            onKeyDown={onViewTabKeyDown}
             role="tab"
+            tabIndex={mobileView === "preview" ? 0 : -1}
             type="button"
           >
             Preview
@@ -345,7 +425,15 @@ export function LandingContentEditor({ action, content, message }: Props) {
         </label>
       </div>
       <nav className="landing-editor__index" aria-label="Bagian halaman">
-        <p>Bagian halaman</p>
+        <div className="landing-editor__index-head">
+          <p>Bagian halaman</p>
+          <span aria-label={`${activeIndex + 1} dari ${sections.length} bagian dipilih`}>
+            {activeIndex + 1}/{sections.length}
+          </span>
+        </div>
+        <div aria-hidden="true" className="landing-editor__index-progress">
+          <i style={{ width: `${((activeIndex + 1) / sections.length) * 100}%` }} />
+        </div>
         {sections.map((section, index) => (
           <button
             aria-current={section.id === activeSectionId ? "step" : undefined}
@@ -359,16 +447,35 @@ export function LandingContentEditor({ action, content, message }: Props) {
           </button>
         ))}
       </nav>
-      <section className="landing-editor__form" aria-labelledby={`section-${activeSection.id}`}>
-        <div className="admin-status" role="status">
-          {message}
+      <section
+        className="landing-editor__form"
+        aria-labelledby="landing-editor-edit-tab"
+        id="landing-editor-edit"
+        role="tabpanel"
+        tabIndex={0}
+      >
+        <div className="landing-editor__context">
+          <div className="landing-editor__version" aria-label="Status konten">
+            <span className={hasUnpublishedDraft ? "is-draft" : "is-public"}>
+              {hasUnpublishedDraft ? "Draft aktif" : "Selaras dengan publik"}
+            </span>
+            <strong>Versi {version || "baru"}</strong>
+            {updatedAt ? (
+              <small>
+                Diperbarui {updatedAt.toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })} WIB
+              </small>
+            ) : null}
+          </div>
+          <p className="landing-editor__safety" role="status">
+            {message}
+          </p>
         </div>
         <div className="landing-editor__section-head">
           <p className="eyebrow">{activeSection.eyebrow}</p>
           <h2 id={`section-${activeSection.id}`}>{activeSection.title}</h2>
           <p>{activeSection.description}</p>
         </div>
-        <div className="landing-editor__fields">
+        <fieldset className="landing-editor__fields" disabled={!canEdit}>
           {activeSection.fields.map((item) => (
             <label key={item.name}>
               {item.label}
@@ -390,7 +497,10 @@ export function LandingContentEditor({ action, content, message }: Props) {
               )}
             </label>
           ))}
-        </div>
+          {activeSectionId === "evidence" ? (
+            <EvidenceFields content={draft} onChange={setDraft} disabled={!canEdit} />
+          ) : null}
+        </fieldset>
         <div className="landing-editor__step-actions">
           <button disabled={activeIndex === 0} onClick={previous} type="button">
             ← Sebelumnya
@@ -403,36 +513,97 @@ export function LandingContentEditor({ action, content, message }: Props) {
           </button>
         </div>
       </section>
-      <aside className="landing-editor__preview" aria-label="Mini landing untuk melihat perubahan">
+      <aside
+        className="landing-editor__preview"
+        aria-label="Mini landing untuk melihat perubahan"
+        aria-labelledby="landing-editor-preview-tab"
+        id="landing-editor-preview"
+        role="tabpanel"
+        tabIndex={0}
+      >
         <div className="landing-editor__preview-head">
           <div>
-            <p className="eyebrow">Mini landing</p>
-            <h2>Letak perubahan</h2>
+            <p className="eyebrow">Pratinjau langsung</p>
+            <h2>Lihat sebelum tayang</h2>
           </div>
           <span className={hasLocalChanges ? "is-unsaved" : ""}>
             {hasLocalChanges ? "Belum disimpan" : "Tersimpan"}
           </span>
         </div>
-        <p className="landing-editor__preview-note">Klik bagian mana pun untuk mulai mengubahnya.</p>
+        <p className="landing-editor__preview-note">
+          Bagian berbingkai biru sesuai dengan bagian yang sedang Anda edit.
+        </p>
         <MiniLandingPreview activeSectionId={activeSectionId} content={draft} onSelect={selectSection} />
         <div className="landing-editor__publish">
           <a href="/preview/landing" rel="noreferrer" target="_blank">
             Buka landing penuh ↗
           </a>
-          <button name="action" type="submit" value="draft">
+          <button disabled={!canEdit || !hasLocalChanges} name="action" type="submit" value="draft">
             Simpan rancangan
           </button>
-          <button name="action" type="submit" value="publish">
+          <button
+            disabled={!canEdit || !hasLocalChanges}
+            onClick={(event) => {
+              event.preventDefault();
+              setPublishOpen(true);
+            }}
+            type="button"
+          >
             Terbitkan ke halaman utama
           </button>
         </div>
+        <details className="landing-editor__history" aria-label="Riwayat revisi">
+          <summary>
+            Riwayat revisi <span>{revisions.length || 0}</span>
+          </summary>
+          {revisions.length ? (
+            revisions.slice(0, 5).map((revision) => (
+              <div key={revision.id}>
+                <span>
+                  v{revision.version} ·{" "}
+                  {revision.action === "publish" || revision.action === "restore" ? "Terbit" : "Draft"}
+                </span>
+                <small>{revision.actorName ?? "Pengguna"}</small>
+                {canEdit ? (
+                  <button formAction={restoreAction.bind(null, revision.id)} type="submit">
+                    Pulihkan & terbitkan
+                  </button>
+                ) : null}
+              </div>
+            ))
+          ) : (
+            <p>Belum ada riwayat tersimpan.</p>
+          )}
+          {publishedAt ? (
+            <small>
+              Publik terakhir: {publishedAt.toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })} WIB
+            </small>
+          ) : null}
+        </details>
       </aside>
       <div className="landing-editor__mobile-save" aria-live="polite">
         <span>{hasLocalChanges ? "Perubahan belum disimpan" : "Semua perubahan tersimpan"}</span>
-        <button disabled={!hasLocalChanges} name="action" type="submit" value="draft">
+        <button disabled={!canEdit || !hasLocalChanges} name="action" type="submit" value="draft">
           Simpan
         </button>
       </div>
+      {publishOpen ? (
+        <div className="landing-editor__confirm" role="dialog" aria-modal="true" aria-labelledby="publish-title">
+          <div>
+            <p className="eyebrow">Konfirmasi publikasi</p>
+            <h2 id="publish-title">Terbitkan versi berikutnya?</h2>
+            <p>Perubahan draft akan segera menggantikan isi landing page publik.</p>
+            <span>
+              <button onClick={() => setPublishOpen(false)} type="button">
+                Kembali
+              </button>
+              <button name="action" type="submit" value="publish">
+                Terbitkan sekarang
+              </button>
+            </span>
+          </div>
+        </div>
+      ) : null}
       {sections
         .flatMap((section) => section.fields)
         .filter((item) => !activeSection.fields.includes(item))
@@ -563,6 +734,421 @@ function MiniLandingPreview({
         <strong>AP</strong>
         <span>{content.footer.description}</span>
       </button>
+    </div>
+  );
+}
+
+function EvidenceFields({
+  content,
+  onChange,
+  disabled,
+}: {
+  content: LandingContent;
+  onChange: React.Dispatch<React.SetStateAction<LandingContent>>;
+  disabled: boolean;
+}) {
+  const set = <K extends keyof LandingContent>(key: K, value: LandingContent[K]) =>
+    onChange((current) => ({ ...current, [key]: value }));
+  return (
+    <div className="landing-editor__evidence">
+      <p>Gunakan informasi yang dapat dibuktikan. Kategori hanya tampil publik jika semua detailnya lengkap.</p>
+      <fieldset>
+        <legend>Kapabilitas</legend>
+        {content.capabilities.map((item, index) => (
+          <div className="landing-editor__repeat" key={`cap-${index}`}>
+            <input
+              aria-label={`Judul kapabilitas ${index + 1}`}
+              disabled={disabled}
+              value={item.title}
+              onChange={(event) =>
+                set(
+                  "capabilities",
+                  content.capabilities.map((value, position) =>
+                    position === index ? { ...value, title: event.target.value } : value,
+                  ),
+                )
+              }
+            />
+            <textarea
+              aria-label={`Penjelasan kapabilitas ${index + 1}`}
+              disabled={disabled}
+              value={item.description}
+              onChange={(event) =>
+                set(
+                  "capabilities",
+                  content.capabilities.map((value, position) =>
+                    position === index ? { ...value, description: event.target.value } : value,
+                  ),
+                )
+              }
+            />
+            <input
+              aria-label={`Bukti kapabilitas ${index + 1}`}
+              disabled={disabled}
+              value={item.proof}
+              onChange={(event) =>
+                set(
+                  "capabilities",
+                  content.capabilities.map((value, position) =>
+                    position === index ? { ...value, proof: event.target.value } : value,
+                  ),
+                )
+              }
+              placeholder="Bukti, mis. pemeriksaan QC setiap batch"
+            />
+          </div>
+        ))}
+        {content.capabilities.length < 6 ? (
+          <button
+            disabled={disabled}
+            type="button"
+            onClick={() => set("capabilities", [...content.capabilities, { title: "", description: "", proof: "" }])}
+          >
+            + Tambah kapabilitas
+          </button>
+        ) : null}
+      </fieldset>
+      <fieldset>
+        <legend>Galeri kategori</legend>
+        {content.galleryCategories.map((item, index) => (
+          <div className="landing-editor__repeat" key={`gallery-${index}`}>
+            <input
+              aria-label={`Judul kategori ${index + 1}`}
+              disabled={disabled}
+              value={item.title}
+              onChange={(event) =>
+                set(
+                  "galleryCategories",
+                  content.galleryCategories.map((value, position) =>
+                    position === index ? { ...value, title: event.target.value } : value,
+                  ),
+                )
+              }
+              placeholder="Judul kategori"
+            />
+            <input
+              aria-label={`Slug kategori ${index + 1}`}
+              disabled={disabled}
+              value={item.slug}
+              onChange={(event) =>
+                set(
+                  "galleryCategories",
+                  content.galleryCategories.map((value, position) =>
+                    position === index
+                      ? { ...value, slug: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") }
+                      : value,
+                  ),
+                )
+              }
+              placeholder="slug-kategori"
+            />
+            <input
+              aria-label={`Path gambar kategori ${index + 1}`}
+              disabled={disabled}
+              value={item.imagePath}
+              onChange={(event) =>
+                set(
+                  "galleryCategories",
+                  content.galleryCategories.map((value, position) =>
+                    position === index ? { ...value, imagePath: event.target.value } : value,
+                  ),
+                )
+              }
+              placeholder="/images-webp/...webp"
+            />
+            <input
+              aria-label={`Alt gambar kategori ${index + 1}`}
+              disabled={disabled}
+              value={item.altText}
+              onChange={(event) =>
+                set(
+                  "galleryCategories",
+                  content.galleryCategories.map((value, position) =>
+                    position === index ? { ...value, altText: event.target.value } : value,
+                  ),
+                )
+              }
+              placeholder="Deskripsi gambar"
+            />
+            <textarea
+              aria-label={`Produk kategori ${index + 1}`}
+              disabled={disabled}
+              value={item.products.join("\n")}
+              onChange={(event) =>
+                set(
+                  "galleryCategories",
+                  content.galleryCategories.map((value, position) =>
+                    position === index
+                      ? {
+                          ...value,
+                          products: event.target.value
+                            .split("\n")
+                            .map((product) => product.trim())
+                            .filter(Boolean)
+                            .slice(0, 6),
+                        }
+                      : value,
+                  ),
+                )
+              }
+              placeholder="Satu produk per baris (maks. 6)"
+            />
+            <label>
+              <input
+                checked={item.isPublished}
+                disabled={disabled}
+                type="checkbox"
+                onChange={(event) =>
+                  set(
+                    "galleryCategories",
+                    content.galleryCategories.map((value, position) =>
+                      position === index ? { ...value, isPublished: event.target.checked } : value,
+                    ),
+                  )
+                }
+              />{" "}
+              Tampilkan di landing
+            </label>
+          </div>
+        ))}
+        {content.galleryCategories.length < 12 ? (
+          <button
+            disabled={disabled}
+            type="button"
+            onClick={() =>
+              set("galleryCategories", [
+                ...content.galleryCategories,
+                {
+                  title: "",
+                  slug: "",
+                  imagePath: "",
+                  altText: "",
+                  products: [],
+                  ctaLabel: "Selengkapnya",
+                  isPublished: false,
+                },
+              ])
+            }
+          >
+            + Tambah kategori
+          </button>
+        ) : null}
+      </fieldset>
+      <fieldset>
+        <legend>Langkah proses</legend>
+        {content.processSteps.map((item, index) => (
+          <div className="landing-editor__repeat" key={`step-${index}`}>
+            <input
+              aria-label={`Judul langkah ${index + 1}`}
+              disabled={disabled}
+              value={item.title}
+              onChange={(event) =>
+                set(
+                  "processSteps",
+                  content.processSteps.map((value, position) =>
+                    position === index ? { ...value, title: event.target.value } : value,
+                  ),
+                )
+              }
+              placeholder="Judul langkah"
+            />
+            <textarea
+              aria-label={`Penjelasan langkah ${index + 1}`}
+              disabled={disabled}
+              value={item.description}
+              onChange={(event) =>
+                set(
+                  "processSteps",
+                  content.processSteps.map((value, position) =>
+                    position === index ? { ...value, description: event.target.value } : value,
+                  ),
+                )
+              }
+              placeholder="Penjelasan singkat"
+            />
+          </div>
+        ))}
+        {content.processSteps.length < 6 ? (
+          <button
+            disabled={disabled}
+            type="button"
+            onClick={() => set("processSteps", [...content.processSteps, { title: "", description: "" }])}
+          >
+            + Tambah langkah
+          </button>
+        ) : null}
+      </fieldset>
+      <fieldset>
+        <legend>Testimoni yang disetujui</legend>
+        {content.testimonials.map((item, index) => (
+          <div className="landing-editor__repeat" key={`testimonial-${index}`}>
+            <input
+              aria-label={`Nama testimoni ${index + 1}`}
+              disabled={disabled}
+              value={item.name}
+              onChange={(event) =>
+                set(
+                  "testimonials",
+                  content.testimonials.map((value, position) =>
+                    position === index ? { ...value, name: event.target.value } : value,
+                  ),
+                )
+              }
+              placeholder="Nama / perusahaan"
+            />
+            <input
+              aria-label={`Peran testimoni ${index + 1}`}
+              disabled={disabled}
+              value={item.role}
+              onChange={(event) =>
+                set(
+                  "testimonials",
+                  content.testimonials.map((value, position) =>
+                    position === index ? { ...value, role: event.target.value } : value,
+                  ),
+                )
+              }
+              placeholder="Peran atau industri"
+            />
+            <textarea
+              aria-label={`Kutipan testimoni ${index + 1}`}
+              disabled={disabled}
+              value={item.quote}
+              onChange={(event) =>
+                set(
+                  "testimonials",
+                  content.testimonials.map((value, position) =>
+                    position === index ? { ...value, quote: event.target.value } : value,
+                  ),
+                )
+              }
+              placeholder="Kutipan yang telah disetujui"
+            />
+            <label>
+              <input
+                checked={item.isPublished}
+                disabled={disabled}
+                type="checkbox"
+                onChange={(event) =>
+                  set(
+                    "testimonials",
+                    content.testimonials.map((value, position) =>
+                      position === index ? { ...value, isPublished: event.target.checked } : value,
+                    ),
+                  )
+                }
+              />{" "}
+              Tampilkan di landing
+            </label>
+          </div>
+        ))}
+        {content.testimonials.length < 12 ? (
+          <button
+            disabled={disabled}
+            type="button"
+            onClick={() =>
+              set("testimonials", [...content.testimonials, { name: "", role: "", quote: "", isPublished: false }])
+            }
+          >
+            + Tambah testimoni
+          </button>
+        ) : null}
+      </fieldset>
+      <fieldset>
+        <legend>Insight pilihan</legend>
+        {content.featuredInsights.map((item, index) => (
+          <div className="landing-editor__repeat" key={`insight-${index}`}>
+            <input
+              aria-label={`Kategori insight ${index + 1}`}
+              disabled={disabled}
+              value={item.category}
+              onChange={(event) =>
+                set(
+                  "featuredInsights",
+                  content.featuredInsights.map((value, position) =>
+                    position === index ? { ...value, category: event.target.value } : value,
+                  ),
+                )
+              }
+              placeholder="Kategori"
+            />
+            <input
+              aria-label={`Judul insight ${index + 1}`}
+              disabled={disabled}
+              value={item.title}
+              onChange={(event) =>
+                set(
+                  "featuredInsights",
+                  content.featuredInsights.map((value, position) =>
+                    position === index ? { ...value, title: event.target.value } : value,
+                  ),
+                )
+              }
+              placeholder="Judul insight"
+            />
+            <input
+              aria-label={`Slug insight ${index + 1}`}
+              disabled={disabled}
+              value={item.slug}
+              onChange={(event) =>
+                set(
+                  "featuredInsights",
+                  content.featuredInsights.map((value, position) =>
+                    position === index
+                      ? { ...value, slug: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") }
+                      : value,
+                  ),
+                )
+              }
+              placeholder="slug-insight"
+            />
+            <textarea
+              aria-label={`Ringkasan insight ${index + 1}`}
+              disabled={disabled}
+              value={item.excerpt}
+              onChange={(event) =>
+                set(
+                  "featuredInsights",
+                  content.featuredInsights.map((value, position) =>
+                    position === index ? { ...value, excerpt: event.target.value } : value,
+                  ),
+                )
+              }
+              placeholder="Ringkasan insight"
+            />
+            <label>
+              <input
+                checked={item.isPublished}
+                disabled={disabled}
+                type="checkbox"
+                onChange={(event) =>
+                  set(
+                    "featuredInsights",
+                    content.featuredInsights.map((value, position) =>
+                      position === index ? { ...value, isPublished: event.target.checked } : value,
+                    ),
+                  )
+                }
+              />{" "}
+              Tampilkan di landing
+            </label>
+          </div>
+        ))}
+        {content.featuredInsights.length < 3 ? (
+          <button
+            disabled={disabled}
+            type="button"
+            onClick={() =>
+              set("featuredInsights", [
+                ...content.featuredInsights,
+                { slug: "", category: "", title: "", excerpt: "", isPublished: false },
+              ])
+            }
+          >
+            + Tambah insight
+          </button>
+        ) : null}
+      </fieldset>
     </div>
   );
 }

@@ -7,8 +7,43 @@ Koneksi eksternal dijalankan dari server. Kata sandi mailbox dan refresh token G
 1. Isi `INTEGRATIONS_ENCRYPTION_KEY` dengan 64 karakter heksadesimal acak (32 byte) pada environment server.
 2. Jalankan migrasi database dan restart aplikasi.
 3. Masuk sebagai administrator, buka **Lainnya → Koneksi layanan**, lalu masukkan kata sandi `cs@anugrahplastik.com` langsung pada form dan pilih **Uji dan simpan koneksi**.
-4. Form akan memeriksa IMAP TLS `mail.anugrahplastik.com:993` dan SMTP TLS `mail.anugrahplastik.com:465` sebelum menyimpan rahasia. Kata sandi tidak dicatat ke audit atau log.
-5. Jadwalkan `POST https://anugrahplastik.com/api/integrations/sync` setiap lima menit dengan header `Authorization: Bearer <INTEGRATIONS_CRON_TOKEN>`. Endpoint mengimpor metadata email 90 hari pertama dan sesudahnya hanya UID baru. Isi email diambil saat dibuka; lampiran hanya ditawarkan untuk diunduh setelah membuka email dan tidak disimpan otomatis.
+4. Isi `CS_MAIL_HOST`, `CS_MAIL_IMAP_PORT`, dan `CS_MAIL_SMTP_PORT` pada environment server dari halaman cPanel **Set Up Mail Client**. Untuk cPanel yang saat ini digunakan, host yang perlu diverifikasi adalah `srv145.niagahoster.com`; jangan memakai hostname web VPS apabila mailbox masih berada di cPanel.
+5. Form akan memeriksa IMAP TLS dan SMTP TLS dari konfigurasi server tersebut sebelum menyimpan rahasia. Kata sandi tidak dicatat ke audit atau log.
+6. Jadwalkan `POST https://anugrahplastik.com/api/integrations/sync` setiap lima menit dengan header `Authorization: Bearer <INTEGRATIONS_CRON_TOKEN>`. Endpoint mengimpor metadata email 90 hari pertama dan sesudahnya hanya UID baru. Isi email diambil saat dibuka; lampiran hanya ditawarkan untuk diunduh setelah membuka email dan tidak disimpan otomatis.
+
+### Scheduler VPS
+
+Jangan mempertahankan socket IMAP terus-menerus. Gunakan runner `scripts/run-integrations-sync.mjs` dari scheduler VPS setiap lima menit; runner membuka koneksi hanya saat diperlukan dan mengembalikan exit code nonzero bila layanan yang tersambung gagal. Simpan `INTEGRATIONS_CRON_TOKEN` serta `INTEGRATIONS_SYNC_URL` hanya pada environment service VPS.
+
+Sebelum timer diaktifkan, uji dari VPS bahwa `CS_MAIL_HOST:CS_MAIL_IMAP_PORT` dan `CS_MAIL_HOST:CS_MAIL_SMTP_PORT` dapat dijangkau, lalu jalankan uji koneksi dari **Koneksi layanan**. Timeout terjadi sebelum autentikasi sehingga bukan bukti kata sandi salah; periksa layanan IMAP/SMTP serta firewall cPanel terlebih dahulu. Isi `INTEGRATIONS_CRON_TOKEN`, URL HTTPS `INTEGRATIONS_SYNC_URL` (atau `APP_ORIGIN`), dan `INTEGRATIONS_ENCRYPTION_KEY` pada environment VPS sebelum menjalankan timer.
+
+Timer yang sehat melapor setiap lima menit. Halaman Email CS menampilkan waktu berhasil terakhir, percobaan terakhir, dan pembaruan berikutnya. Jika heartbeat tidak ada selama lebih dari 15 menit, data ditandai belum terbaru tetapi arsip inbox tetap dapat dibaca.
+
+Contoh unit `systemd` (siapkan tetapi **jangan aktifkan** sebelum owner menyetujui deploy):
+
+```ini
+# /etc/systemd/system/anugrah-integrations-sync.service
+[Service]
+Type=oneshot
+WorkingDirectory=/var/www/anugrahplastik/revamp/web
+EnvironmentFile=/etc/anugrahplastik/integrations.env
+ExecStart=/usr/bin/node scripts/run-integrations-sync.mjs
+StandardOutput=append:/var/log/anugrahplastik/integrations-sync.log
+StandardError=append:/var/log/anugrahplastik/integrations-sync.log
+```
+
+```ini
+# /etc/systemd/system/anugrah-integrations-sync.timer
+[Timer]
+OnCalendar=*:0/5
+Persistent=true
+Unit=anugrah-integrations-sync.service
+
+[Install]
+WantedBy=timers.target
+```
+
+Setelah deploy dan pengisian environment privat, aktifkan dengan `systemctl enable --now anugrah-integrations-sync.timer`. Jalankan `systemctl status anugrah-integrations-sync.timer` dan periksa log service setelah aktivasi. UI admin menandai heartbeat terlambat setelah 15 menit. Riwayat eksekusi aman disimpan 30 hari. Jangan menjalankan timer ini dari laptop lokal.
 
 Email yang dikirim melalui admin dicatat di folder **Terkirim**. Jika SMTP mengalami timeout yang statusnya tidak pasti, entri ditahan sebagai **Perlu diperiksa** dan tidak otomatis dikirim ulang untuk mencegah duplikasi. Periksa webmail sebelum mengirim ulang.
 
@@ -19,24 +54,40 @@ Status koneksi berarti kredensial masih tersimpan, bukan jaminan penyedia selalu
 Konfigurasikan server-only environment berikut:
 
 - `GOOGLE_ADS_CLIENT_ID` dan `GOOGLE_ADS_CLIENT_SECRET` dari OAuth client bertipe Web application.
-- Aktifkan Google Ads API dan berikan akses project melalui Google Cloud Console. Alur project-level yang baru tidak memerlukan Developer Token.
+- `GOOGLE_ADS_DEVELOPER_TOKEN` dari API Center MCC. Simpan hanya di secret environment server; token ini dikirim sebagai header pada setiap request Google Ads API.
 - `GOOGLE_ADS_CUSTOMER_ID=6738895829` (angka saja; tanda hubung boleh digunakan).
-- `GOOGLE_ADS_LOGIN_EMAIL=razornez@gmail.com` untuk membantu memilih akun yang benar ketika proses OAuth dibuka.
+- `GOOGLE_ADS_LOGIN_CUSTOMER_ID` adalah ID 10 digit MCC aktif yang sudah ditautkan ke Customer ID di atas.
+- `GOOGLE_ADS_LOGIN_EMAIL=razornez@gmail.com` adalah akun Google owner yang diizinkan menyambungkan OAuth.
 - Lokal: `GOOGLE_ADS_REDIRECT_URI=http://localhost:3100/api/integrations/google-ads/callback`; daftarkan URL yang persis sama pada OAuth client.
 
-Administrator menyambungkan akun melalui **Koneksi layanan → Sambungkan Google Ads**, lalu memberi persetujuan scope laporan `adwords`. Aplikasi hanya meminta laporan kampanye, tidak mengubah iklan atau anggaran. Data laporan disegarkan manual dari menu **Pemasaran**, atau otomatis tiap enam jam lewat endpoint sinkron yang sama. Jika akses API atau token belum siap, halaman menampilkan status perhatian dan tidak mengarang angka.
+Administrator menyambungkan akun melalui **Koneksi layanan → Sambungkan Google Ads**, lalu memberi persetujuan scope laporan `adwords`. Aplikasi hanya meminta laporan kampanye, tidak mengubah iklan atau anggaran. Administrator harus menjalankan **Verifikasi akses API** sebelum memperbarui laporan; browser tidak pernah memulai sinkronisasi otomatis. Scheduler VPS—bila telah disetujui—memakai klaim atomik dan retry terbatas tanpa menghapus laporan lama.
+
+Laporan default memakai tujuh hari kalender lengkap sampai kemarin (WIB). Preset 30/90 hari juga berakhir kemarin; URL/rentang kustom tetap tersedia. Empat metrik default adalah Klik, Impresi, Rata-rata CPC, dan Biaya; Konversi serta Nilai konversi dapat dipilih menggantikannya. CPC dihitung dari total biaya dibagi total klik, bukan rata-rata CPC harian. Tinggi setiap garis memakai skala relatifnya sendiri; tabel terbuka dan CSV menyediakan angka aslinya. Tidak ada kartu saldo billing.
+
+Untuk menguji klaim harian pada database lokal tanpa API eksternal, jalankan `GOOGLE_ADS_DB_TEST=1 node --test tests/google-ads-report.test.cjs` (PowerShell: `$env:GOOGLE_ADS_DB_TEST='1'`). Pengujian membuat dan menghapus schema test unik, memalsukan respons HTTP, dan tidak menulis ke data aplikasi.
 
 Permintaan laporan memakai OAuth dan akses project Google Cloud; aplikasi hanya menjalankan kueri laporan. Ikuti dokumentasi resmi untuk [akses project dan token developer](https://developers.google.com/google-ads/api/docs/api-policy/developer-token), [OAuth web server lokal](https://developers.google.com/identity/protocols/oauth2/web-server), [pelaporan](https://developers.google.com/google-ads/api/docs/reporting/overview), dan [Search/SearchStream](https://developers.google.com/google-ads/api/rest/common/search).
 
-Status koneksi Google Ads juga berarti refresh token masih tersimpan. Kegagalan refresh atau laporan tidak menghapus token; aplikasi menampilkan peringatan agar administrator dapat menyambungkan ulang atau memeriksa akses. Explorer cukup untuk laporan produksi dan memberi batas 2.880 operasi harian. Basic tidak dibutuhkan untuk laporan baca-saja.
+Status koneksi Google Ads berarti refresh token masih tersimpan, bukan bahwa laporan pasti dapat ditarik. Pusat Kesehatan membedakan OAuth, akses project Google Cloud, MCC, dan akses Customer ID supaya tindakan pemulihan tidak salah. Kegagalan refresh atau laporan tidak menghapus token OAuth; aplikasi menampilkan peringatan agar administrator dapat menyambungkan ulang atau memeriksa akses. Explorer cukup untuk laporan produksi dan memberi batas 2.880 operasi harian. Basic tidak dibutuhkan untuk laporan baca-saja.
+
+### MCC dan akses project Google Cloud
+
+1. Buat **Google Ads Manager Account/MCC** baru bernama misalnya `Anugrah Plastik – Reporting Manager`. Jangan mengaktifkan akun MCC yang sudah dibatalkan.
+2. Kirim lalu setujui permintaan penautan antara MCC tersebut dan Customer ID `6738895829`. Tidak perlu mengubah kampanye, anggaran, billing, atau pengguna akun iklan.
+3. Pada project Google Cloud production, aktifkan Google Ads API lalu ajukan akses **Explorer** untuk penggunaan internal baca-saja, kemudian ambil Developer Token dari API Center MCC.
+4. Setelah disetujui, isi `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID`, dan `GOOGLE_ADS_LOGIN_CUSTOMER_ID` di secret environment VPS; restart aplikasi.
+5. Di **Koneksi layanan**, jalankan **Verifikasi akses API**. Aksi ini hanya menguji project Cloud, hierarki MCC, dan akses akun; tidak mengubah laporan tersimpan. Setelah berhasil, jalankan **Perbarui laporan sekarang** dan cocokkan rentang tujuh hari WIB dengan Google Ads UI.
+
+Google mensyaratkan `developer-token` pada setiap request dan `login-customer-id` ketika MCC mengakses akun klien. Gunakan project Google Cloud yang sudah berstatus Explorer. Lihat [autentikasi API](https://developers.google.com/google-ads/api/rest/auth) dan [level akses API](https://developers.google.com/google-ads/api/docs/api-policy/access-levels).
 
 ### Persiapan OAuth production
 
-- Lokal memakai OAuth client terpisah dari production. Di setiap environment, gunakan nama variabel server yang sama (`GOOGLE_ADS_CLIENT_ID` dan `GOOGLE_ADS_CLIENT_SECRET`) dengan nilai client masing-masing; jangan commit atau mengirim rahasia lewat chat.
+- Gunakan Google Cloud project dan OAuth client terpisah untuk lokal/testing dan production. Di setiap environment, gunakan nama variabel server yang sama (`GOOGLE_ADS_CLIENT_ID` dan `GOOGLE_ADS_CLIENT_SECRET`) dengan nilai client masing-masing; jangan commit atau mengirim rahasia lewat chat.
 - Callback production adalah `https://anugrahplastik.com/api/integrations/google-ads/callback`; daftarkan persis pada OAuth client production. Callback lokal tetap memakai `http://localhost:3100/api/integrations/google-ads/callback`.
-- Lengkapi dan tinjau halaman branding, domain terverifikasi, kebijakan privasi, serta syarat penggunaan sebelum mengubah audience ke production atau mengajukan verifikasi. Kebijakan privasi saat ini menjelaskan pemakaian laporan Ads; halaman syarat penggunaan dan review akhir pemilik masih perlu disiapkan.
-- Google menolak permohonan Basic project karena profil merek OAuth belum terverifikasi. Penolakan tersebut berbeda dari akses Explorer yang sudah aktif dan tidak menghalangi laporan yang dibutuhkan.
+- Pilih audience **External** untuk owner Gmail biasa. Lengkapi branding, domain terverifikasi, halaman beranda, kebijakan privasi, syarat penggunaan, alamat kontak developer, dan scope minimum `https://www.googleapis.com/auth/adwords` sebelum menerbitkan consent screen ke Production.
+- Pastikan kebijakan privasi menjelaskan penggunaan laporan Ads internal dan tidak menjanjikan fungsi yang tidak ada. Bila Google meminta verifikasi scope, kirim justifikasi dan video alur sambung → tarik laporan baca-saja.
 - Jangan mengandalkan status Testing untuk koneksi jangka panjang: scope Ads membuat refresh token Testing kedaluwarsa setelah tujuh hari. Google tetap menentukan hasil review production.
+- Setelah branding Production siap, lakukan consent ulang oleh owner untuk menerbitkan refresh token production baru. Token lama tidak dihapus hingga probe API dan satu pembaruan laporan nyata berhasil. Passkey atau verifikasi tambahan ditentukan Google Account; aplikasi tidak dapat dan tidak boleh melewatinya.
 
 ## Rilis dan pemulihan
 

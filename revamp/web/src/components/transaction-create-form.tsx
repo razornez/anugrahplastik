@@ -115,7 +115,7 @@ export function TransactionCreateForm({ customerCount }: TransactionCreateFormPr
   return (
     <>
       <button className="transaction-create-trigger" onClick={openDialog} ref={triggerRef} type="button">
-        Buat transaksi
+        Transaksi baru
       </button>
       <dialog
         aria-labelledby="transaction-create-title"

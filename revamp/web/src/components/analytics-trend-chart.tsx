@@ -1,58 +1,109 @@
 type TrendPoint = { date: string; sessions: number; forms: number };
 
-function pointsFor(values: number[], maximum: number, width: number, height: number) {
-  return values
-    .map((value, index) => {
-      const x = values.length === 1 ? width / 2 : (index / (values.length - 1)) * width;
-      const y = height - (value / maximum) * height;
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(" ");
+function dateLabel(date: string) {
+  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", timeZone: "Asia/Jakarta" }).format(
+    new Date(`${date}T12:00:00+07:00`),
+  );
+}
+
+function groupedPoints(points: TrendPoint[]) {
+  if (points.length <= 7) return points.map((point) => ({ ...point, label: dateLabel(point.date) }));
+  const groups: Array<TrendPoint & { label: string }> = [];
+  for (let index = 0; index < points.length; index += 7) {
+    const week = points.slice(index, index + 7);
+    groups.push({
+      date: week[0].date,
+      label: `${dateLabel(week[0].date)}–${dateLabel(week.at(-1)!.date)}`,
+      sessions: week.reduce((sum, point) => sum + point.sessions, 0),
+      forms: week.reduce((sum, point) => sum + point.forms, 0),
+    });
+  }
+  return groups;
 }
 
 export function AnalyticsTrendChart({ points }: { points: TrendPoint[] }) {
-  const maximum = Math.max(1, ...points.flatMap((point) => [point.sessions, point.forms]));
-  const width = 640;
-  const height = 180;
+  const hasData = points.some((point) => point.sessions > 0 || point.forms > 0);
+  const groups = groupedPoints(points);
+  const maximum = Math.max(1, ...groups.map((point) => point.sessions));
+  const totalSessions = points.reduce((sum, point) => sum + point.sessions, 0);
+  const totalForms = points.reduce((sum, point) => sum + point.forms, 0);
+
   return (
-    <figure className="traffic-chart" aria-labelledby="traffic-chart-title">
+    <figure className="traffic-chart traffic-chart--direct" aria-labelledby="traffic-chart-title">
       <figcaption>
         <div>
-          <p className="eyebrow">Pergerakan harian</p>
-          <h2 id="traffic-chart-title">Kunjungan dan lead valid</h2>
+          <p className="eyebrow">Kunjungan website</p>
+          <h2 id="traffic-chart-title">Kunjungan dan permintaan masuk</h2>
         </div>
-        <span className="chart-legend">
-          <i /> Pengunjung <i /> Lead tersimpan
-        </span>
       </figcaption>
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Grafik pengunjung dan lead valid per hari">
-        {[0.25, 0.5, 0.75].map((ratio) => (
-          <line key={ratio} x1="0" x2={width} y1={height * ratio} y2={height * ratio} />
-        ))}
-        <polyline
-          className="traffic-chart__sessions"
-          points={pointsFor(
-            points.map((point) => point.sessions),
-            maximum,
-            width,
-            height,
-          )}
-        />
-        <polyline
-          className="traffic-chart__forms"
-          points={pointsFor(
-            points.map((point) => point.forms),
-            maximum,
-            width,
-            height,
-          )}
-        />
-      </svg>
-      <div className="traffic-chart__dates" aria-hidden="true">
-        <span>{points[0]?.date.slice(5) ?? "—"}</span>
-        <span>{points[Math.floor(points.length / 2)]?.date.slice(5) ?? "—"}</span>
-        <span>{points.at(-1)?.date.slice(5) ?? "—"}</span>
-      </div>
+      {!hasData ? (
+        <p className="home-empty">Belum ada kunjungan yang tercatat pada periode ini.</p>
+      ) : points.length === 1 ? (
+        <div className="traffic-chart__today">
+          <div>
+            <strong>{totalSessions.toLocaleString("id-ID")}</strong>
+            <span>kunjungan hari ini</span>
+          </div>
+          <div>
+            <strong>{totalForms.toLocaleString("id-ID")}</strong>
+            <span>permintaan valid hari ini</span>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="traffic-chart__note">
+            {points.length > 7 ? "Jumlah per minggu; rincian setiap hari ada di tabel." : "Jumlah per hari."}
+          </p>
+          <div
+            className="traffic-chart__bars"
+            role="group"
+            aria-label="Jumlah kunjungan dan permintaan menurut tanggal"
+          >
+            {groups.map((point) => (
+              <div className="traffic-chart__group" key={point.date}>
+                <div className="traffic-chart__value">
+                  <strong>{point.sessions}</strong>
+                  <span>kunjungan</span>
+                </div>
+                <div className="traffic-chart__bar-track" aria-hidden="true">
+                  <span style={{ height: `${Math.max(5, (point.sessions / maximum) * 100)}%` }} />
+                </div>
+                <div className="traffic-chart__form">
+                  <strong>{point.forms}</strong> permintaan
+                </div>
+                <time dateTime={point.date}>{point.label}</time>
+              </div>
+            ))}
+          </div>
+          {points.length > 7 ? (
+            <details className="traffic-chart__daily" open>
+              <summary>
+                Rincian harian · {totalSessions} kunjungan, {totalForms} permintaan
+              </summary>
+              <div className="traffic-chart__table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Tanggal</th>
+                      <th scope="col">Kunjungan</th>
+                      <th scope="col">Permintaan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {points.map((point) => (
+                      <tr key={point.date}>
+                        <th scope="row">{dateLabel(point.date)}</th>
+                        <td>{point.sessions}</td>
+                        <td>{point.forms}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ) : null}
+        </>
+      )}
     </figure>
   );
 }

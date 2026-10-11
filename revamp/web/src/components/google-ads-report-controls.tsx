@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
-import { refreshGoogleAdsRange } from "@/features/integrations/actions";
+import { useRouter } from "next/navigation";
+import { refreshGoogleAdsRange, runGoogleAdsAccessProbe } from "@/features/integrations/actions";
 import type { AdsMetric } from "./google-ads-trend-chart";
 
 type Campaign = { id: string; name: string; status: string };
@@ -10,11 +11,15 @@ type Props = {
   from: string;
   to: string;
   today: string;
+  completeThrough: string;
   campaigns: Campaign[];
   selectedCampaigns: string[];
   metrics: AdsMetric[];
   interval: "daily" | "weekly" | "monthly";
   compare: boolean;
+  canManageReports: boolean;
+  probeRequired: boolean;
+  accountTimeZone: string;
 };
 
 function shiftDate(value: string, days: number) {
@@ -23,11 +28,11 @@ function shiftDate(value: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function ApplyReportButton() {
+function RefreshReportButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button className="admin-primary-button ads-report-submit" type="submit" disabled={pending}>
-      {pending ? "Mengambil laporan…" : "Terapkan & ambil laporan"}
+    <button className="admin-primary-button ads-report-submit" type="submit" disabled={pending || disabled}>
+      {pending ? "Memperbarui laporan…" : "Perbarui laporan sekarang"}
     </button>
   );
 }
@@ -36,11 +41,13 @@ export function GoogleAdsReportControls(props: Props) {
   const [from, setFrom] = useState(props.from);
   const [to, setTo] = useState(props.to);
   const [campaigns, setCampaigns] = useState(props.selectedCampaigns);
-  const [metrics, setMetrics] = useState<AdsMetric[]>(props.metrics);
   const [interval, setInterval] = useState(props.interval);
   const [compare, setCompare] = useState(props.compare);
+  const [probePending, startProbe] = useTransition();
+  const [probeResult, setProbeResult] = useState<string | null>(null);
+  const router = useRouter();
   const campaignParam = campaigns.join(",");
-  const metricsParam = metrics.join(",");
+  const metricsParam = props.metrics.join(",");
   const shift = (direction: -1 | 1) => {
     const days = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
     const nextFrom = shiftDate(from, days * direction);
@@ -51,29 +58,35 @@ export function GoogleAdsReportControls(props: Props) {
     }
   };
   const choosePreset = (days: number) => {
-    const nextTo = props.today;
+    const nextTo = props.completeThrough;
     const nextFrom = shiftDate(nextTo, -(days - 1));
     setFrom(nextFrom);
     setTo(nextTo);
   };
   const toggleCampaign = (id: string) =>
     setCampaigns((current) => {
-      const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      const selected = current.length ? current : props.campaigns.map((campaign) => campaign.id);
+      const next = selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id];
+      if (!next.length) return current;
       return next.length === props.campaigns.length ? [] : next;
-    });
-  const toggleMetric = (key: AdsMetric) =>
-    setMetrics((current) => {
-      if (current.includes(key)) return current.length > 1 ? current.filter((item) => item !== key) : current;
-      return [...current, key];
     });
   const query = new URLSearchParams({ from, to, interval, compare: compare ? "1" : "0" });
   if (campaigns.length) query.set("campaigns", campaignParam);
-  if (metrics.length) query.set("metrics", metricsParam);
+  if (props.metrics.length) query.set("metrics", metricsParam);
   const exportHref = `/api/admin/marketing/google-ads/export?${query.toString()}`;
+
+  function verifyAccess() {
+    setProbeResult(null);
+    startProbe(async () => {
+      const result = await runGoogleAdsAccessProbe();
+      setProbeResult(result.message);
+      router.refresh();
+    });
+  }
 
   return (
     <div className="ads-report-controls">
-      <form className="ads-report-filter" action={refreshGoogleAdsRange}>
+      <form className="ads-report-filter" action="/admin/marketing" method="get">
         <input type="hidden" name="campaigns" value={campaignParam} />
         <input type="hidden" name="metrics" value={metricsParam} />
         <input type="hidden" name="interval" value={interval} />
@@ -85,7 +98,7 @@ export function GoogleAdsReportControls(props: Props) {
                 key={days}
                 type="button"
                 aria-pressed={
-                  to === props.today &&
+                  to === props.completeThrough &&
                   Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`) === (days - 1) * 86_400_000
                 }
                 onClick={() => choosePreset(days)}
@@ -117,7 +130,9 @@ export function GoogleAdsReportControls(props: Props) {
               onChange={(event) => setTo(event.target.value)}
             />
           </label>
-          <ApplyReportButton />
+          <button className="admin-secondary-button ads-report-submit" type="submit">
+            Terapkan filter
+          </button>
           <div className="ads-report-shift" aria-label="Geser periode">
             <button type="button" aria-label="Periode sebelumnya" onClick={() => shift(-1)}>
               ‹
@@ -165,24 +180,37 @@ export function GoogleAdsReportControls(props: Props) {
           </label>
         </div>
         <div className="ads-report-actions">
-          <fieldset>
-            <legend>Metrik grafik</legend>
-            {(["impressions", "cost", "conversions", "conversionValue"] as AdsMetric[]).map((key) => (
-              <label key={key}>
-                <input type="checkbox" checked={metrics.includes(key)} onChange={() => toggleMetric(key)} />
-                {
-                  { impressions: "Impresi", cost: "Biaya", conversions: "Konversi", conversionValue: "Nilai konversi" }[
-                    key
-                  ]
-                }
-              </label>
-            ))}
-          </fieldset>
           <a className="admin-secondary-button" href={exportHref}>
             Unduh CSV
           </a>
         </div>
       </form>
+      {props.canManageReports ? (
+        <div className="ads-report-provider-actions">
+          <button className="admin-secondary-button" type="button" disabled={probePending} onClick={verifyAccess}>
+            {probePending ? "Memverifikasi akses…" : "Verifikasi akses API"}
+          </button>
+          <form action={refreshGoogleAdsRange}>
+            <input type="hidden" name="from" value={from} />
+            <input type="hidden" name="to" value={to} />
+            <input type="hidden" name="campaigns" value={campaignParam} />
+            <input type="hidden" name="metrics" value={metricsParam} />
+            <input type="hidden" name="interval" value={interval} />
+            <input type="hidden" name="compare" value={compare ? "1" : "0"} />
+            <RefreshReportButton disabled={props.probeRequired} />
+          </form>
+          <span aria-live="polite" className="ads-report-provider-actions__status" role="status">
+            {probeResult ??
+              (props.probeRequired
+                ? "Verifikasi akses API terlebih dahulu sebelum laporan dapat diperbarui."
+                : `Akun Google Ads menggunakan zona waktu ${props.accountTimeZone}.`)}
+          </span>
+        </div>
+      ) : (
+        <p className="ads-report-provider-actions__status">
+          Hanya administrator yang dapat memverifikasi akses atau memperbarui laporan.
+        </p>
+      )}
     </div>
   );
 }

@@ -5,12 +5,9 @@ import { saveCsMailbox } from "@/features/integrations/actions";
 
 export function MailboxSetupForm({ encryptionReady, connected }: { encryptionReady: boolean; connected: boolean }) {
   const [message, action, pending] = useActionState(saveCsMailbox, null);
-  return (
+  const form = (
     <form action={action} className="integration-form">
       <input type="hidden" name="email" value="cs@anugrahplastik.com" />
-      <input type="hidden" name="host" value="mail.anugrahplastik.com" />
-      <input type="hidden" name="imapPort" value="993" />
-      <input type="hidden" name="smtpPort" value="465" />
       <label htmlFor="cs-mail-password">Kata sandi mailbox</label>
       <input
         autoComplete="new-password"
@@ -35,8 +32,21 @@ export function MailboxSetupForm({ encryptionReady, connected }: { encryptionRea
         </p>
       ) : null}
       <button className="admin-primary-button" type="submit" disabled={!encryptionReady || pending}>
-        {pending ? "Menguji koneksi…" : "Uji dan simpan koneksi"}
+        {pending ? "Menguji koneksi…" : connected ? "Uji & perbarui koneksi" : "Uji & sambungkan Email CS"}
       </button>
     </form>
+  );
+
+  if (!connected) return form;
+
+  return (
+    <details className="integration-credential-update">
+      <summary>Perbarui kata sandi mailbox</summary>
+      <p>
+        Gunakan hanya jika kata sandi mailbox berubah atau pemeriksaan ulang tetap gagal. Kredensial lama tetap
+        tersimpan sampai pengujian baru berhasil.
+      </p>
+      {form}
+    </details>
   );
 }

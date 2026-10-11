@@ -23,11 +23,7 @@ export function TransactionResultLink({
       href={href}
       onClick={() => {
         try {
-          const list = document.querySelector<HTMLElement>(".transaction-list");
-          sessionStorage.setItem(
-            scrollStorageKey,
-            JSON.stringify({ url: returnTo, y: window.scrollY, listY: list?.scrollTop ?? 0 }),
-          );
+          sessionStorage.setItem(scrollStorageKey, JSON.stringify({ url: returnTo, y: window.scrollY }));
         } catch {
           // Navigation should continue if browser storage is unavailable.
         }
@@ -40,20 +36,18 @@ export function TransactionResultLink({
 
 export function TransactionListScrollRestorer({ listUrl }: { listUrl: string }) {
   useEffect(() => {
-    const stored = sessionStorage.getItem(scrollStorageKey);
-    if (!stored) return;
-    sessionStorage.removeItem(scrollStorageKey);
     try {
-      const position = JSON.parse(stored) as { url?: string; y?: number; listY?: number };
+      const stored = sessionStorage.getItem(scrollStorageKey);
+      if (!stored) return;
+      sessionStorage.removeItem(scrollStorageKey);
+      const position = JSON.parse(stored) as { url?: string; y?: number };
       if (position.url === listUrl && typeof position.y === "number") {
         requestAnimationFrame(() => {
           window.scrollTo({ top: position.y, behavior: "instant" });
-          const list = document.querySelector<HTMLElement>(".transaction-list");
-          if (list && typeof position.listY === "number") list.scrollTop = position.listY;
         });
       }
     } catch {
-      sessionStorage.removeItem(scrollStorageKey);
+      // Storage restrictions must not prevent rendering or navigation.
     }
   }, [listUrl]);
   return null;

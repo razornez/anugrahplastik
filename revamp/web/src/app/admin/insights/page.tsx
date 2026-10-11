@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { AdminPageHeader } from "@/components/admin-page-header";
 import { redirect } from "next/navigation";
 import { actionLabel, eventLabel, sectionLabel } from "@/features/analytics/display-labels";
 import {
+  createEmptyAnalyticsReport,
   getAnalyticsJourney,
   getAnalyticsReport,
   type DeviceFilter,
@@ -9,21 +11,14 @@ import {
 } from "@/features/analytics/report-service";
 import { getSession } from "@/lib/auth/session";
 import { VisitorFilterPanel } from "@/components/visitor-filter-panel";
+import { MarketingWorkspaceNav } from "@/components/marketing-workspace-nav";
+import { VisitorGeographyMap } from "@/components/visitor-geography-map";
+import { VisitorDailyChart } from "@/components/visitor-daily-chart";
+import { geographyBuckets, geographySummary, visitorQuery } from "@/features/analytics/visitor-report-model";
+import { jakartaReportStart } from "@/features/analytics/report-period";
+import "./visitors.css";
 
 export const instant = false;
-
-function queryString(filters: ReportFilters, session?: string, cursor?: string, direction?: string) {
-  const query = new URLSearchParams();
-  query.set("days", String(filters.days));
-  if (filters.device !== "all") query.set("device", filters.device);
-  if (filters.city) query.set("city", filters.city);
-  if (filters.source) query.set("source", filters.source);
-  if (filters.outcome) query.set("outcome", filters.outcome);
-  if (session) query.set("session", session);
-  if (cursor) query.set("cursor", cursor);
-  if (direction) query.set("direction", direction);
-  return query.toString();
-}
 
 function duration(seconds: number | null) {
   if (!seconds) return "Belum ada durasi aktif";
@@ -54,7 +49,7 @@ function deviceLabel(device: string) {
 }
 
 function outcomeLabel(outcome: string) {
-  return outcome === "Form terkirim" ? "Event kirim form" : outcome;
+  return outcome === "Form terkirim" ? "Mengirim formulir" : outcome;
 }
 
 function eventDetail(event: { sectionKey: string | null; elementKey: string | null }) {
@@ -75,6 +70,9 @@ export default async function InsightsPage({
     session?: string;
     cursor?: string;
     direction?: string;
+    country?: string;
+    region?: string;
+    map?: string;
   }>;
 }) {
   const user = await getSession();
@@ -89,60 +87,118 @@ export default async function InsightsPage({
     city: query.city ?? "",
     source: query.source ?? "",
     outcome: query.outcome ?? "",
+    country: query.country ?? "",
+    region: query.region ?? "",
   };
-  const report = await getAnalyticsReport(filters, {
-    cursor: query.cursor,
-    direction: query.direction === "previous" ? "previous" : "next",
-  });
-  const selected = query.session ? await getAnalyticsJourney(query.session) : null;
+  const now = new Date();
+  const extent = query.map === "world" ? "world" : "indonesia";
+  let report = createEmptyAnalyticsReport(filters, now);
+  let selected = null;
+  try {
+    report = await getAnalyticsReport(
+      filters,
+      { cursor: query.cursor, direction: query.direction === "previous" ? "previous" : "next" },
+      "public",
+      now,
+    );
+    if (query.session && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query.session))
+      selected = await getAnalyticsJourney(query.session, "public", filters, now);
+  } catch {
+    report = { ...createEmptyAnalyticsReport(filters, now), available: false };
+  }
+  const queryString = (value: ReportFilters, session?: string, cursor?: string, direction?: string) =>
+    visitorQuery(value, extent, { session, cursor, direction });
+  const resetFilters: ReportFilters = {
+    days: filters.days,
+    device: "all",
+    city: "",
+    source: "",
+    outcome: "",
+    country: "",
+    region: "",
+  };
+  const activeCount = [
+    filters.device !== "all",
+    filters.city,
+    filters.source,
+    filters.outcome,
+    filters.country,
+    filters.region,
+  ].filter(Boolean).length;
+  const formatDay = (date: Date) =>
+    date.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", year: "numeric" });
+  const periodLabel = `${formatDay(jakartaReportStart(filters.days, now))}–${formatDay(now)} · ${filters.days} hari`;
+  const summary = geographySummary(report.geography);
+  const buckets = geographyBuckets(report.geography, extent).map((bucket) => ({
+    ...bucket,
+    href:
+      bucket.country && (extent === "world" || bucket.region)
+        ? "/admin/insights?" +
+          visitorQuery({ ...filters, country: bucket.country, region: bucket.region, city: "" }, extent)
+        : null,
+  }));
 
   return (
-    <section className="visitor-report" aria-labelledby="visitor-report-title">
-      <header className="visitor-report__head">
-        <div>
-          <p className="eyebrow">Laporan pengunjung</p>
-          <h1 id="visitor-report-title">Cari tahu apa yang dilakukan pengunjung.</h1>
-          <p>
-            Setiap baris adalah satu kunjungan anonim. Nama, nomor WhatsApp, isi formulir, dan IP tidak masuk ke laporan
-            ini.
-          </p>
-        </div>
-        <nav className="period-switch" aria-label="Pilih periode">
-          <Link
-            aria-current={filters.days === 7 ? "page" : undefined}
-            href={"/admin/insights?" + queryString({ ...filters, days: 7 })}
-          >
-            7 hari
-          </Link>
-          <Link
-            aria-current={filters.days === 30 ? "page" : undefined}
-            href={"/admin/insights?" + queryString({ ...filters, days: 30 })}
-          >
-            30 hari
-          </Link>
-        </nav>
-      </header>
+    <section className="visitor-report visitor-workspace" aria-labelledby="visitor-report-title">
+      <AdminPageHeader
+        title="Kunjungan website"
+        titleId="visitor-report-title"
+        description="Tinjau wilayah, sumber, dan aktivitas kunjungan tanpa identitas pribadi."
+        actions={
+          <nav className="period-switch" aria-label="Pilih periode">
+            <Link
+              aria-current={filters.days === 7 ? "page" : undefined}
+              href={"/admin/insights?" + queryString({ ...filters, days: 7 })}
+            >
+              7 hari
+            </Link>
+            <Link
+              aria-current={filters.days === 30 ? "page" : undefined}
+              href={"/admin/insights?" + queryString({ ...filters, days: 30 })}
+            >
+              30 hari
+            </Link>
+          </nav>
+        }
+      />
+      <MarketingWorkspaceNav current="/admin/insights" />
+      <div className="visitor-period-context">
+        <span>{periodLabel} · WIB</span>
+        <span>Termasuk hari ini; data hari ini belum lengkap.</span>
+      </div>
+      {!report.available ? (
+        <aside className="visitor-data-quality" role="alert">
+          <strong>Laporan belum berhasil dimuat.</strong>
+          <span>Koneksi database belum tersedia. Angka di bawah bukan hasil pengukuran.</span>
+          <Link href={"/admin/insights?" + queryString(filters)}>Coba muat kembali →</Link>
+        </aside>
+      ) : null}
 
       <div className="visitor-stat-row">
         <article>
-          <span>Pengunjung</span>
-          <strong>{report.totals.sessions}</strong>
+          <span>Kunjungan website</span>
+          <strong>{report.available ? report.totals.sessions.toLocaleString("id-ID") : "—"}</strong>
+          <small>Sesi selama periode ini</small>
         </article>
         <article>
-          <span>Event kirim form</span>
-          <strong>{report.totals.formEvents}</strong>
+          <span>Percobaan kirim formulir</span>
+          <strong>{report.available ? report.totals.formEvents.toLocaleString("id-ID") : "—"}</strong>
+          <small>Kunjungan yang mengirim form</small>
         </article>
         <article>
-          <span>Lead valid tersimpan</span>
-          <strong>{report.totals.forms}</strong>
+          <span>Permintaan valid tersimpan</span>
+          <strong>{report.available ? report.totals.forms.toLocaleString("id-ID") : "—"}</strong>
+          <small>Sudah cocok dengan data tersimpan</small>
         </article>
         <article>
-          <span>Tombol minat</span>
-          <strong>{report.totals.ctaClicks}</strong>
+          <span>Klik tombol bertanya</span>
+          <strong>{report.available ? report.totals.ctaClicks.toLocaleString("id-ID") : "—"}</strong>
+          <small>Kunjungan yang menekan tombol</small>
         </article>
         <article>
           <span>Klik WhatsApp</span>
-          <strong>{report.totals.whatsappClicks}</strong>
+          <strong>{report.available ? report.totals.whatsappClicks.toLocaleString("id-ID") : "—"}</strong>
+          <small>Kunjungan yang membuka WhatsApp</small>
         </article>
       </div>
       <VisitorFilterPanel
@@ -153,44 +209,106 @@ export default async function InsightsPage({
         outcome={filters.outcome}
         cities={report.citiesForFilter}
         sources={report.sourcesForFilter}
-        activeCount={
-          [filters.device !== "all", Boolean(filters.city), Boolean(filters.source), Boolean(filters.outcome)].filter(
-            Boolean,
-          ).length
-        }
+        activeCount={activeCount}
+        extent={extent}
+        country={filters.country}
+        region={filters.region}
+        countries={report.countriesForFilter}
+        regions={report.regionsForFilter}
       />
 
-      {filters.device !== "all" || filters.city || filters.source || filters.outcome ? (
+      {activeCount ? (
         <div className="visitor-filter-chips" aria-label="Filter aktif">
           <strong>Filter aktif</strong>
           {filters.device !== "all" ? <span>{deviceLabel(filters.device)}</span> : null}
           {filters.city ? <span>{filters.city}</span> : null}
           {filters.source ? <span>{filters.source}</span> : null}
           {filters.outcome ? <span>{outcomeLabel(filters.outcome)}</span> : null}
-          <Link href={`/admin/insights?days=${filters.days}`}>Reset</Link>
+          {filters.country ? <span>{filters.country}</span> : null}
+          {filters.region ? <span>{filters.region}</span> : null}
+          <Link href={"/admin/insights?" + queryString(resetFilters)}>Hapus semua filter</Link>
         </div>
       ) : null}
 
       <p className="visitor-filter-context">
-        Event form adalah sesi yang mengirim event dari browser. Lead valid dihitung dari permintaan yang benar-benar
-        tersimpan dan bukan data uji.
+        Percobaan kirim formulir dicatat oleh browser; permintaan valid hanya dihitung jika berhasil diverifikasi. Data
+        pada laporan ini hanya berasal dari aktivitas website yang tercatat.
       </p>
       {report.totals.formEvents > report.totals.forms ? (
         <aside className="visitor-data-quality" role="status">
-          <strong>Ada event yang belum cocok dengan lead tersimpan.</strong>
+          <strong>Ada pengiriman formulir yang belum terverifikasi.</strong>
           <span>
-            {report.totals.formEvents - report.totals.forms} event form belum dapat diverifikasi sebagai lead valid.
-            Data lama atau tidak lengkap tetap terlihat di perjalanan, tetapi tidak dihitung sebagai lead.
+            {report.totals.formEvents - report.totals.forms} kunjungan mengirim formulir tetapi belum cocok dengan
+            permintaan tersimpan. Aktivitasnya tetap terlihat, tetapi tidak menambah angka permintaan valid.
           </span>
         </aside>
       ) : null}
 
-      <div className="visitor-report__grid">
+      {report.available ? (
+        <>
+          <VisitorGeographyMap
+            key={`${extent}:${queryString(filters)}`}
+            buckets={buckets}
+            extent={extent}
+            summary={summary}
+            indonesiaHref={"/admin/insights?" + visitorQuery(filters, "indonesia")}
+            worldHref={"/admin/insights?" + visitorQuery(filters, "world")}
+          />
+          <div className="visitor-distribution-grid">
+            {[
+              {
+                title: "Perangkat yang digunakan",
+                eyebrow: "Cara membuka website",
+                rows: report.devices.map((row) => ({ label: row.label, total: row.total })),
+                variant: "devices",
+              },
+              {
+                title: "Dari mana kunjungan berasal?",
+                eyebrow: "Sumber kunjungan",
+                rows: report.sources.map((row) => ({ label: row.key, total: row.total })),
+                variant: "sources",
+              },
+            ].map((panel) => (
+              <section className={`visitor-distribution visitor-distribution--${panel.variant}`} key={panel.variant}>
+                <p className="eyebrow">{panel.eyebrow}</p>
+                <h2>{panel.title}</h2>
+                {panel.rows.length ? (
+                  <ul>
+                    {panel.rows.map((row) => (
+                      <li key={row.label}>
+                        <span>
+                          {row.label}
+                          <i aria-hidden="true">
+                            <i
+                              style={{
+                                width: `${(row.total / Math.max(1, ...panel.rows.map((item) => item.total))) * 100}%`,
+                              }}
+                            />
+                          </i>
+                        </span>
+                        <strong>
+                          {row.total.toLocaleString("id-ID")}
+                          <small>kunjungan</small>
+                        </strong>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="empty-copy">Belum ada kunjungan sesuai filter.</p>
+                )}
+              </section>
+            ))}
+          </div>
+          <VisitorDailyChart points={report.trend} />
+        </>
+      ) : null}
+      <div className={`visitor-report__grid${selected ? " visitor-report__grid--selected" : ""}`}>
         <section className="journey-list" aria-label="Daftar perjalanan kunjungan">
           <div className="section-heading">
             <div>
               <p className="eyebrow">Perjalanan kunjungan</p>
-              <h2>{report.journeys.length} kunjungan ditemukan</h2>
+              <h2>{report.available ? report.totals.sessions.toLocaleString("id-ID") : "—"} kunjungan sesuai filter</h2>
+              <p>{report.journeys.length} ditampilkan pada halaman ini.</p>
             </div>
           </div>
           {report.journeys.length ? (
@@ -199,10 +317,38 @@ export default async function InsightsPage({
                 className="journey-row"
                 aria-current={selected?.id === journey.id ? "page" : undefined}
                 key={journey.id}
-                href={"/admin/insights?" + queryString(filters, journey.id, query.cursor, query.direction)}
+                href={
+                  "/admin/insights?" +
+                  queryString(filters, journey.id, query.cursor, query.direction) +
+                  "#visitor-journey-detail"
+                }
               >
                 <span className="journey-device">
-                  {journey.deviceCategory === "mobile" ? "HP" : journey.deviceCategory === "desktop" ? "PC" : "TB"}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                    {journey.deviceCategory === "desktop" ? (
+                      <>
+                        <rect x="3" y="4" width="18" height="13" rx="2" />
+                        <path d="M8 21h8m-4-4v4" />
+                      </>
+                    ) : journey.deviceCategory === "mobile" || journey.deviceCategory === "tablet" ? (
+                      <>
+                        <rect
+                          x={journey.deviceCategory === "mobile" ? "7" : "4"}
+                          y="2"
+                          width={journey.deviceCategory === "mobile" ? "10" : "16"}
+                          height="20"
+                          rx="2"
+                        />
+                        <path d="M10 18h4" />
+                      </>
+                    ) : (
+                      <>
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M12 8v5m0 3v1" />
+                      </>
+                    )}
+                  </svg>
+                  <span className="sr-only">{deviceLabel(journey.deviceCategory)}</span>
                 </span>
                 <span>
                   <strong>{journey.cityName ?? "Lokasi belum tersedia"}</strong>
@@ -213,13 +359,17 @@ export default async function InsightsPage({
                   </small>
                 </span>
                 <span className="journey-outcome">
-                  {journey.outcome}
+                  {outcomeLabel(journey.outcome)}
                   {journey.formStatus ? <small>{journey.formStatus}</small> : null}
                 </span>
               </Link>
             ))
           ) : (
-            <p className="empty-copy">Belum ada kunjungan sesuai filter.</p>
+            <div className="empty-copy">
+              <strong>{report.available ? "Belum ada kunjungan sesuai filter." : "Daftar belum dapat dimuat."}</strong>
+              <p>Kunjungan akan muncul setelah website menerima aktivitas yang tercatat.</p>
+              {activeCount ? <Link href={"/admin/insights?" + queryString(resetFilters)}>Hapus filter →</Link> : null}
+            </div>
           )}
           <nav className="directory-pagination" aria-label="Pindah halaman perjalanan">
             {report.hasPrevious ? (
@@ -243,7 +393,7 @@ export default async function InsightsPage({
             )}
           </nav>
         </section>
-        <aside className="journey-detail">
+        <aside className="journey-detail" id="visitor-journey-detail">
           {selected ? (
             <>
               <p className="eyebrow">Rincian kunjungan</p>
@@ -264,7 +414,7 @@ export default async function InsightsPage({
                 <div>
                   <dt>Hasil</dt>
                   <dd>
-                    {selected.outcome}
+                    {outcomeLabel(selected.outcome)}
                     {selected.formStatus ? ` · ${selected.formStatus}` : ""}
                   </dd>
                 </div>
@@ -277,6 +427,9 @@ export default async function InsightsPage({
                   <dd>{activeDuration(selected.durationSeconds, selected.durationQuality)}</dd>
                 </div>
               </dl>
+              {!selected.events.length ? (
+                <p className="empty-copy">Belum ada rincian tindakan yang tercatat untuk kunjungan ini.</p>
+              ) : null}
               <ol className="journey-timeline">
                 {selected.events.map((event) => (
                   <li key={event.id}>
@@ -291,9 +444,16 @@ export default async function InsightsPage({
               </ol>
             </>
           ) : (
-            <p className="empty-copy">
-              Pilih satu kunjungan untuk melihat perjalanan klik dan bagian halaman yang dibuka.
-            </p>
+            <div className="visitor-detail-prompt">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                <path d="M7 4h10v16H7zM10 8h4m-4 4h4m-4 4h2" />
+              </svg>
+              <div>
+                <h3>Baca aktivitas sebuah kunjungan</h3>
+                <p>Pilih baris di daftar untuk melihat urutan klik dan bagian website yang dibuka.</p>
+                {query.session ? <p>Kunjungan yang diminta tidak tersedia pada sumber data atau filter ini.</p> : null}
+              </div>
+            </div>
           )}
         </aside>
       </div>

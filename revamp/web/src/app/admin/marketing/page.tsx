@@ -1,122 +1,42 @@
 import Link from "next/link";
+import { AdminPageHeader } from "@/components/admin-page-header";
 import { eq } from "drizzle-orm";
-import { GoogleAdsReportControls } from "@/components/google-ads-report-controls";
-import { GoogleAdsTrendChart, type AdsMetric, type AdsPoint } from "@/components/google-ads-trend-chart";
+import { GoogleAdsPerformance } from "@/components/google-ads-performance";
+import { MarketingWorkspaceNav } from "@/components/marketing-workspace-nav";
 import {
-  adsDateInJakarta,
   getGoogleAdsCampaigns,
   getGoogleAdsOverview,
+  isFreshGoogleAdsProbe,
   validateGoogleAdsRange,
 } from "@/features/integrations/google-ads-service";
+import {
+  adsDateLabel as dateLabel,
+  adsDateInTimeZone,
+  averageCpc,
+  completeAdsRange,
+  normalizeAdsMetrics,
+  shiftAdsDate as dateShift,
+  sumAdsRows as sumRows,
+  toAdsChartPoints as toChartPoints,
+} from "@/features/integrations/google-ads-report-model";
 import { getSession } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/database/client";
 import { integrations } from "@/lib/database/schema";
+import {
+  getGoogleAdsReportingConfigurationIssues,
+  isGoogleAdsOAuthConfigured,
+  isGoogleAdsReportingConfigured,
+} from "@/features/integrations/google-ads-config";
+import { getIntegrationHealth, INTEGRATION_HEALTH_STALE_HOURS } from "@/features/integrations/integration-health";
 import { redirect } from "next/navigation";
+import "./marketing-report.css";
 
 export const instant = false;
 
 const number = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 });
-const allowedMetrics: AdsMetric[] = ["impressions", "cost", "conversions", "conversionValue"];
-const metricText: Record<AdsMetric, string> = {
-  impressions: "Impresi",
-  cost: "Biaya",
-  conversions: "Konversi",
-  conversionValue: "Nilai konversi",
-};
-const metricColor: Record<AdsMetric, string> = {
-  impressions: "blue",
-  cost: "red",
-  conversions: "amber",
-  conversionValue: "green",
-};
-
-function dateShift(value: string, days: number) {
-  const date = new Date(`${value}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function dateLabel(value: string) {
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", timeZone: "Asia/Jakarta" }).format(
-    new Date(`${value}T12:00:00Z`),
-  );
-}
 
 function selectedValue(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function sumRows(rows: NonNullable<Awaited<ReturnType<typeof getGoogleAdsOverview>>>["rows"]) {
-  return rows.reduce(
-    (sum, row) => ({
-      impressions: sum.impressions + row.impressions,
-      cost: sum.cost + Number(BigInt(row.costMicros)) / 1_000_000,
-      conversions: sum.conversions + Number(row.conversions),
-      conversionValue: sum.conversionValue + Number(row.conversionsValue),
-    }),
-    { impressions: 0, cost: 0, conversions: 0, conversionValue: 0 },
-  );
-}
-
-function toChartPoints(
-  rows: NonNullable<Awaited<ReturnType<typeof getGoogleAdsOverview>>>["rows"],
-  from: string,
-  to: string,
-  interval: "daily" | "weekly" | "monthly",
-): AdsPoint[] {
-  const daily = new Map<string, AdsPoint["values"]>();
-  for (let cursor = from; cursor <= to; cursor = dateShift(cursor, 1))
-    daily.set(cursor, { impressions: 0, cost: 0, conversions: 0, conversionValue: 0 });
-  for (const row of rows) {
-    const values = daily.get(row.reportDate);
-    if (!values) continue;
-    values.impressions += row.impressions;
-    values.cost += Number(BigInt(row.costMicros)) / 1_000_000;
-    values.conversions += Number(row.conversions);
-    values.conversionValue += Number(row.conversionsValue);
-  }
-  const days = [...daily].map(([date, values]) => ({ date, label: dateLabel(date), values }));
-  if (interval === "daily") return days;
-  if (interval === "weekly") {
-    const result: AdsPoint[] = [];
-    for (let index = 0; index < days.length; index += 7) {
-      const group = days.slice(index, index + 7);
-      result.push({
-        date: group[0].date,
-        label: `${group[0].label}–${group.at(-1)?.label}`,
-        values: group.reduce(
-          (sum, point) => ({
-            impressions: sum.impressions + point.values.impressions,
-            cost: sum.cost + point.values.cost,
-            conversions: sum.conversions + point.values.conversions,
-            conversionValue: sum.conversionValue + point.values.conversionValue,
-          }),
-          { impressions: 0, cost: 0, conversions: 0, conversionValue: 0 },
-        ),
-      });
-    }
-    return result;
-  }
-  const months = new Map<string, AdsPoint>();
-  for (const point of days) {
-    const month = point.date.slice(0, 7);
-    const existing = months.get(month);
-    if (!existing)
-      months.set(month, {
-        ...point,
-        date: month,
-        label: new Intl.DateTimeFormat("id-ID", { month: "short", year: "numeric", timeZone: "Asia/Jakarta" }).format(
-          new Date(`${point.date}T12:00:00Z`),
-        ),
-      });
-    else {
-      existing.values.impressions += point.values.impressions;
-      existing.values.cost += point.values.cost;
-      existing.values.conversions += point.values.conversions;
-      existing.values.conversionValue += point.values.conversionValue;
-    }
-  }
-  return [...months.values()];
 }
 
 export default async function MarketingPage({
@@ -131,12 +51,14 @@ export default async function MarketingPage({
     ? await database.select().from(integrations).where(eq(integrations.key, "google-ads")).limit(1)
     : [];
   const params = await searchParams;
-  const today = adsDateInJakarta();
-  const fallbackTo = today;
-  const fallbackFrom = adsDateInJakarta(29);
+  const metadata = (connection?.metadata ?? {}) as Record<string, unknown>;
+  const accountTimeZone =
+    typeof metadata.adsAccountTimeZone === "string" ? metadata.adsAccountTimeZone : "Asia/Jakarta";
+  const today = adsDateInTimeZone(accountTimeZone);
+  const { from: fallbackFrom, to: fallbackTo } = completeAdsRange(7, new Date(), accountTimeZone);
   let from = selectedValue(params.from) ?? fallbackFrom;
   let to = selectedValue(params.to) ?? fallbackTo;
-  if (!validateGoogleAdsRange(from, to)) {
+  if (!validateGoogleAdsRange(from, to, accountTimeZone)) {
     from = fallbackFrom;
     to = fallbackTo;
   }
@@ -144,10 +66,7 @@ export default async function MarketingPage({
     .split(",")
     .filter((id) => /^\d{1,20}$/.test(id))
     .slice(0, 100);
-  const requestedMetrics = (selectedValue(params.metrics) ?? "")
-    .split(",")
-    .filter((value): value is AdsMetric => allowedMetrics.includes(value as AdsMetric));
-  const metrics = requestedMetrics.length ? [...new Set(requestedMetrics)] : allowedMetrics;
+  const metrics = normalizeAdsMetrics(selectedValue(params.metrics));
   const intervalValue = selectedValue(params.interval);
   const interval = intervalValue === "weekly" || intervalValue === "monthly" ? intervalValue : "daily";
   const compare = selectedValue(params.compare) !== "0";
@@ -155,9 +74,11 @@ export default async function MarketingPage({
   const previousFrom = dateShift(from, -days);
   const previousTo = dateShift(from, -1);
   const [allCurrent, current, previous, campaignOptions] = await Promise.all([
-    getGoogleAdsOverview(from, to),
-    getGoogleAdsOverview(from, to, selectedCampaigns),
-    compare ? getGoogleAdsOverview(previousFrom, previousTo, selectedCampaigns) : Promise.resolve(null),
+    getGoogleAdsOverview(from, to, undefined, accountTimeZone),
+    getGoogleAdsOverview(from, to, selectedCampaigns, accountTimeZone),
+    compare
+      ? getGoogleAdsOverview(previousFrom, previousTo, selectedCampaigns, accountTimeZone)
+      : Promise.resolve(null),
     getGoogleAdsCampaigns(),
   ]);
   const currentRows = current?.rows ?? [];
@@ -169,25 +90,14 @@ export default async function MarketingPage({
     currency: current?.currencyCode ?? "IDR",
     maximumFractionDigits: 0,
   });
-  const metricValues = {
-    impressions: totals.impressions,
-    cost: totals.cost,
-    conversions: totals.conversions,
-    conversionValue: totals.conversionValue,
-  };
-  const previousValues = {
-    impressions: previousTotals.impressions,
-    cost: previousTotals.cost,
-    conversions: previousTotals.conversions,
-    conversionValue: previousTotals.conversionValue,
-  };
-  const chartData = toChartPoints(currentRows, from, to, interval);
+  const chartData = toChartPoints(currentRows, from, to, interval, accountTimeZone);
   const campaigns = new Map<
     string,
     {
       id: string;
       name: string;
       status: string;
+      clicks: number;
       impressions: number;
       cost: number;
       conversions: number;
@@ -199,11 +109,13 @@ export default async function MarketingPage({
       id: row.campaignId,
       name: row.campaignName,
       status: row.status,
+      clicks: 0,
       impressions: 0,
       cost: 0,
       conversions: 0,
       conversionValue: 0,
     };
+    campaign.clicks += row.clicks;
     campaign.impressions += row.impressions;
     campaign.cost += Number(BigInt(row.costMicros)) / 1_000_000;
     campaign.conversions += Number(row.conversions);
@@ -213,20 +125,27 @@ export default async function MarketingPage({
   const campaignRows = [...campaigns.values()]
     .filter((item) => !selectedCampaigns.length || selectedCampaigns.includes(item.id))
     .sort((a, b) => b.cost - a.cost);
-  const periodLabel = `${dateLabel(from)} – ${dateLabel(to)}${days === 30 && to === today ? " · 30 hari terakhir" : ""}`;
+  const periodLabel = `${dateLabel(from, accountTimeZone)}${from.slice(0, 4) !== to.slice(0, 4) ? ` ${from.slice(0, 4)}` : ""} – ${dateLabel(to, accountTimeZone)} ${to.slice(0, 4)} · ${days} hari kalender (${accountTimeZone})`;
+  const reportingReady = isGoogleAdsOAuthConfigured() && isGoogleAdsReportingConfigured();
+  const reportingIssues = getGoogleAdsReportingConfigurationIssues();
+  const adsHealth = getIntegrationHealth({
+    configured: Boolean(connection?.secretCiphertext),
+    configurationReady: reportingReady,
+    lastError: connection?.lastError,
+    lastErrorCode: typeof metadata.lastErrorCode === "string" ? metadata.lastErrorCode : null,
+    lastSyncAt: connection?.lastSyncAt,
+    staleAfterHours: INTEGRATION_HEALTH_STALE_HOURS.googleAds,
+  });
+  const probeRequired = !isFreshGoogleAdsProbe(metadata);
 
   return (
     <section className="admin-page marketing-page">
-      <header className="admin-page-heading marketing-page__heading">
-        <div>
-          <p className="admin-eyebrow">PEMASARAN</p>
-          <h1>Hasil pemasaran</h1>
-          <p>Pantau kinerja iklan dan perilaku pengunjung website dalam satu ruang.</p>
-        </div>
-        <Link className="admin-secondary-button" href="/admin/insights">
-          Laporan pengunjung
-        </Link>
-      </header>
+      <AdminPageHeader
+        className="marketing-page__heading"
+        title="Kinerja Iklan Google"
+        description="Pantau klik, tayangan, biaya, dan konversi pada periode yang telah lengkap."
+      />
+      <MarketingWorkspaceNav current="/admin/marketing" />
       {params.synced ? (
         <p className="integration-success" role="status">
           Laporan Google Ads berhasil diperbarui untuk periode yang dipilih.
@@ -243,63 +162,31 @@ export default async function MarketingPage({
             <p className="admin-eyebrow">GOOGLE ADS · {periodLabel}</p>
             <h2>Performa kampanye</h2>
           </div>
-          <span
-            className={`integration-status is-${connection?.secretCiphertext ? (connection.lastError ? "error" : "connected") : "disconnected"}`}
-          >
-            {connection?.secretCiphertext
-              ? connection.lastError
-                ? "Tersambung · Perlu perhatian"
-                : "Tersambung"
-              : "Belum tersambung"}
-          </span>
+          <span className={`integration-status is-${adsHealth.level}`}>{adsHealth.label}</span>
         </div>
         {connection?.secretCiphertext ? (
           <>
-            <GoogleAdsReportControls
+            <GoogleAdsPerformance
+              key={[today, from, to, interval, compare, selectedCampaigns.join(","), metrics.join(",")].join(":")}
               from={from}
               to={to}
               today={today}
+              completeThrough={fallbackTo}
               campaigns={campaignOptions}
               selectedCampaigns={selectedCampaigns}
-              metrics={metrics}
+              initialMetrics={metrics}
               interval={interval}
               compare={compare}
+              hasPreviousData={hasPreviousData}
+              data={chartData}
+              hasData={currentRows.length > 0}
+              totals={totals}
+              previousTotals={previousTotals}
+              currency={current?.currencyCode ?? "IDR"}
+              canManageReports={user.role === "admin" && reportingReady}
+              probeRequired={probeRequired}
+              accountTimeZone={accountTimeZone}
             />
-            <div className="marketing-kpis marketing-kpis--ads">
-              {allowedMetrics.map((key) => {
-                const delta = metricValues[key] - previousValues[key];
-                const value =
-                  key === "cost" || key === "conversionValue"
-                    ? money.format(metricValues[key])
-                    : number.format(metricValues[key]);
-                const deltaText =
-                  key === "cost" || key === "conversionValue"
-                    ? money.format(Math.abs(delta))
-                    : number.format(Math.abs(delta));
-                return (
-                  <div key={key} className={`marketing-kpi marketing-kpi--${metricColor[key]}`}>
-                    <span>{metricText[key]}</span>
-                    <strong>{value}</strong>
-                    {compare && hasPreviousData ? (
-                      <small className={delta > 0 ? "is-up" : delta < 0 ? "is-down" : "is-flat"}>
-                        {delta > 0 ? "↑" : delta < 0 ? "↓" : "→"} {deltaText} dibanding periode sebelumnya
-                      </small>
-                    ) : compare ? (
-                      <small>Belum ada data pembanding</small>
-                    ) : (
-                      <small>Untuk periode terpilih</small>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            {!currentRows.length ? (
-              <p className="ads-report-no-data" role="status">
-                Google Ads belum mengembalikan data kampanye pada rentang dan filter ini. Grafik ditampilkan sebagai
-                garis nol; periksa pilihan kampanye atau koneksi akun.
-              </p>
-            ) : null}
-            <GoogleAdsTrendChart data={chartData} metrics={metrics} currency={current?.currencyCode ?? "IDR"} />
             <section className="marketing-campaigns marketing-campaigns--table">
               <div className="marketing-campaigns__heading">
                 <div>
@@ -315,7 +202,9 @@ export default async function MarketingPage({
                       <tr>
                         <th>Kampanye</th>
                         <th>Status</th>
+                        <th>Klik</th>
                         <th>Impresi</th>
+                        <th>Rata-rata CPC</th>
                         <th>Biaya</th>
                         <th>Konversi</th>
                         <th>Nilai konversi</th>
@@ -339,7 +228,9 @@ export default async function MarketingPage({
                                   : campaign.status}
                             </span>
                           </td>
+                          <td>{number.format(campaign.clicks)}</td>
                           <td>{number.format(campaign.impressions)}</td>
+                          <td>{money.format(averageCpc(campaign.cost, campaign.clicks))}</td>
                           <td>{money.format(campaign.cost)}</td>
                           <td>{number.format(campaign.conversions)}</td>
                           <td>{money.format(campaign.conversionValue)}</td>
@@ -369,9 +260,16 @@ export default async function MarketingPage({
                 Rentang laporan: {days} hari.
               </p>
             </div>
-            {params.error === "sync" ? (
+            {selectedValue(params.ads) ? (
               <p className="integration-alert" role="alert">
-                Laporan belum berhasil diambil. Periksa status koneksi, lalu coba lagi.
+                {adsHealth.summary} {adsHealth.recovery}
+              </p>
+            ) : null}
+            {!reportingReady ? (
+              <p className="integration-alert" role="status">
+                Laporan tersimpan tetap dapat dibaca, tetapi pembaruan dinonaktifkan sampai{" "}
+                {reportingIssues.map((issue) => issue.label).join(", ")} lengkap.{" "}
+                {user.role === "admin" ? <Link href="/admin/settings/integrations">Buka Koneksi layanan</Link> : null}
               </p>
             ) : null}
             {connection.lastError ? <p className="integration-alert">{connection.lastError}</p> : null}
@@ -395,9 +293,12 @@ export default async function MarketingPage({
       </article>
       <article className="marketing-visitor-card">
         <div>
-          <p className="admin-eyebrow">WEBSITE</p>
-          <h2>Perilaku pengunjung</h2>
-          <p>Lihat bagian yang menarik perhatian, tombol yang sering dipilih, dan bagian tempat pengunjung berhenti.</p>
+          <p className="admin-eyebrow">BACA BERSAMA DATA WEBSITE</p>
+          <h2>Dari klik iklan ke kunjungan</h2>
+          <p>
+            Laporan pengunjung membantu melihat perilaku di website. Tanpa atribusi terpisah, satu klik iklan belum
+            dapat dipastikan menjadi prospek valid.
+          </p>
         </div>
         <Link className="admin-primary-button" href="/admin/insights">
           Buka laporan pengunjung

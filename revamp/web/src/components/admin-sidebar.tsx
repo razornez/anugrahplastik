@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import type { Role } from "@/lib/auth/session";
+import { AdminThemePicker } from "@/components/admin-theme-picker";
 
 type AdminSidebarProps = {
   name: string;
   role: Role;
   onLogout: (formData: FormData) => void | Promise<void>;
+  initialTheme: "system" | "light" | "dark";
 };
 
 function ContentIcon() {
@@ -38,19 +41,20 @@ function ProspectIcon() {
   );
 }
 
-function InsightIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d="M4.75 19.25V4.75M4.75 19.25h14.5M8.5 16v-4.25M12 16V8M15.5 16v-6.5" />
-    </svg>
-  );
-}
-
 function TransactionIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
       <path d="M5.25 3.75h10.5l3 3v13.5H5.25A1.5 1.5 0 0 1 3.75 18.75v-13.5a1.5 1.5 0 0 1 1.5-1.5Z" />
       <path d="M15.75 3.75v3h3M7.5 11.25h9M7.5 15h6" />
+    </svg>
+  );
+}
+
+function FinanceIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <rect x="4" y="5.25" width="16" height="14.5" rx="2" />
+      <path d="M7.25 9h9.5M7.25 12.5h5.25M15.75 15.75h1" />
     </svg>
   );
 }
@@ -111,45 +115,40 @@ function SettingsIcon() {
   );
 }
 
-export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
+export function AdminSidebar({ name, role, onLogout, initialTheme }: AdminSidebarProps) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
-  const moreButton = useRef<HTMLButtonElement>(null);
+  const [theme, setTheme] = useState(initialTheme);
+  useEffect(() => {
+    const shell = document.querySelector<HTMLElement>(".admin-shell");
+    if (shell) shell.dataset.theme = theme;
+    document.cookie = `ap-admin-theme=${theme}; Path=/admin; Max-Age=31536000; SameSite=Lax`;
+  }, [theme]);
   const navigation = [
     { href: "/admin", label: "Beranda", icon: <HomeIcon /> },
-    { href: "/admin/prospects", label: "Prospek", icon: <ProspectIcon /> },
+    { href: "/admin/growth", label: "Pemasaran", icon: <MarketingIcon /> },
     ...(role === "admin" || role === "sales"
       ? [{ href: "/admin/transactions", label: "Transaksi", icon: <TransactionIcon /> }]
       : []),
+    ...(role === "admin" || role === "sales"
+      ? [{ href: "/admin/finance", label: "Keuangan", icon: <FinanceIcon /> }]
+      : []),
     ...(role === "admin" || role === "sales" ? [{ href: "/admin/email", label: "Email CS", icon: <MailIcon /> }] : []),
-    ...(role === "admin" || role === "sales"
-      ? [{ href: "/admin/marketing", label: "Pemasaran", icon: <MarketingIcon /> }]
-      : []),
     { href: "/admin/content", label: "Konten landing", icon: <ContentIcon /> },
-    ...(role === "admin" || role === "sales"
-      ? [{ href: "/admin/insights", label: "Laporan pengunjung", icon: <InsightIcon /> }]
-      : []),
     ...(role === "admin" ? [{ href: "/admin/masters", label: "Data master", icon: <MasterIcon /> }] : []),
     ...(role === "admin"
       ? [{ href: "/admin/settings/integrations", label: "Koneksi layanan", icon: <SettingsIcon /> }]
+      : []),
+    ...(role === "admin"
+      ? [{ href: "/admin/settings/email-templates", label: "Template email", icon: <MailIcon /> }]
       : []),
   ];
   const mobilePriority =
     role === "content"
       ? ["/admin", "/admin/content"]
-      : ["/admin", "/admin/prospects", "/admin/transactions", "/admin/email"];
+      : ["/admin", "/admin/growth", "/admin/transactions", "/admin/finance"];
   const mobileNavigation = navigation.filter((item) => mobilePriority.includes(item.href));
   const moreNavigation = navigation.filter((item) => !mobilePriority.includes(item.href));
-
-  useEffect(() => {
-    const close = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setMoreOpen(false);
-      moreButton.current?.focus();
-    };
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, []);
 
   return (
     <aside className="admin-sidebar">
@@ -167,7 +166,15 @@ export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
           <Link
             key={item.href}
             href={item.href}
-            aria-current={pathname === item.href ? "page" : undefined}
+            aria-current={
+              pathname === item.href ||
+              (item.href === "/admin/transactions" && pathname.startsWith("/admin/transactions/")) ||
+              (item.href === "/admin/finance" && pathname.startsWith("/admin/finance")) ||
+              (item.href === "/admin/growth" &&
+                ["/admin/prospects", "/admin/marketing", "/admin/insights"].includes(pathname))
+                ? "page"
+                : undefined
+            }
             aria-label={item.label}
             title={item.label}
           >
@@ -178,6 +185,7 @@ export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
       </nav>
 
       <div className="admin-sidebar-bottom">
+        <AdminThemePicker theme={theme} onChange={setTheme} name="admin-theme-desktop" />
         <Link
           className="admin-public-link"
           href="/"
@@ -204,65 +212,74 @@ export function AdminSidebar({ name, role, onLogout }: AdminSidebarProps) {
       </div>
       <nav className="admin-bottom-nav" aria-label="Navigasi mobile">
         {mobileNavigation.map((item) => (
-          <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined}>
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={
+              pathname === item.href ||
+              (item.href === "/admin/transactions" && pathname.startsWith("/admin/transactions/")) ||
+              (item.href === "/admin/finance" && pathname.startsWith("/admin/finance")) ||
+              (item.href === "/admin/growth" &&
+                ["/admin/prospects", "/admin/marketing", "/admin/insights"].includes(pathname))
+                ? "page"
+                : undefined
+            }
+          >
             {item.icon}
             <span>{item.label.replace(" landing", "")}</span>
           </Link>
         ))}
-        <button
-          aria-controls="admin-more-sheet"
-          aria-expanded={moreOpen}
-          className={moreOpen ? "is-active" : undefined}
-          onClick={() => setMoreOpen((open) => !open)}
-          ref={moreButton}
-          type="button"
-        >
-          <MoreIcon />
-          <span>Lainnya</span>
-        </button>
+        <Dialog.Root open={moreOpen} onOpenChange={setMoreOpen}>
+          <Dialog.Trigger asChild>
+            <button aria-expanded={moreOpen} className={moreOpen ? "is-active" : undefined} type="button">
+              <MoreIcon />
+              <span>Lainnya</span>
+            </button>
+          </Dialog.Trigger>
+          <Dialog.Portal>
+            <Dialog.Overlay className="admin-more-backdrop" />
+            <Dialog.Content
+              aria-describedby={undefined}
+              className="admin-more-sheet"
+              data-theme={theme}
+              id="admin-more-sheet"
+            >
+              <div className="admin-more-sheet__head">
+                <Dialog.Title>Menu lainnya</Dialog.Title>
+                <Dialog.Close aria-label="Tutup menu lainnya" type="button">
+                  ×
+                </Dialog.Close>
+              </div>
+              <AdminThemePicker theme={theme} onChange={setTheme} name="admin-theme-mobile" />
+              <nav aria-label="Menu lainnya">
+                {moreNavigation.map((item) => (
+                  <Link href={item.href} key={item.href} onClick={() => setMoreOpen(false)}>
+                    {item.icon}
+                    <span>{item.label}</span>
+                  </Link>
+                ))}
+                {role === "admin" ? (
+                  <Link href="/admin/team" onClick={() => setMoreOpen(false)}>
+                    <ProspectIcon />
+                    <span>Kelola tim</span>
+                  </Link>
+                ) : null}
+                <Link href="/admin/profile" onClick={() => setMoreOpen(false)}>
+                  <span className="admin-more-avatar">{name.slice(0, 1).toUpperCase()}</span>
+                  <span>Profil & perangkat</span>
+                </Link>
+                <Link href="/" target="_blank" rel="noreferrer">
+                  <ExternalIcon />
+                  <span>Lihat landing page</span>
+                </Link>
+              </nav>
+              <form action={onLogout}>
+                <button type="submit">Keluar dari ruang kerja</button>
+              </form>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
       </nav>
-      {moreOpen ? (
-        <div className="admin-more-backdrop" onMouseDown={() => setMoreOpen(false)}>
-          <section
-            aria-label="Menu lainnya"
-            className="admin-more-sheet"
-            id="admin-more-sheet"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="admin-more-sheet__head">
-              <strong>Menu lainnya</strong>
-              <button aria-label="Tutup menu lainnya" onClick={() => setMoreOpen(false)} type="button">
-                ×
-              </button>
-            </div>
-            <nav>
-              {moreNavigation.map((item) => (
-                <Link href={item.href} key={item.href} onClick={() => setMoreOpen(false)}>
-                  {item.icon}
-                  <span>{item.label}</span>
-                </Link>
-              ))}
-              {role === "admin" ? (
-                <Link href="/admin/team" onClick={() => setMoreOpen(false)}>
-                  <ProspectIcon />
-                  <span>Kelola tim</span>
-                </Link>
-              ) : null}
-              <Link href="/admin/profile" onClick={() => setMoreOpen(false)}>
-                <span className="admin-more-avatar">{name.slice(0, 1).toUpperCase()}</span>
-                <span>Profil & perangkat</span>
-              </Link>
-              <Link href="/" target="_blank" rel="noreferrer">
-                <ExternalIcon />
-                <span>Lihat landing page</span>
-              </Link>
-            </nav>
-            <form action={onLogout}>
-              <button type="submit">Keluar dari ruang kerja</button>
-            </form>
-          </section>
-        </div>
-      ) : null}
     </aside>
   );
 }

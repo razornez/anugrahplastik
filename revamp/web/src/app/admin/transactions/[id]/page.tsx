@@ -1,250 +1,1238 @@
-import Link from "next/link";
 import { randomUUID } from "node:crypto";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  recordTransactionPayment,
-  releaseProduction,
-  updateTransactionTrackStatus,
-  verifyTransactionPayment,
-} from "@/features/operations/actions";
-import { sendTransactionDocument } from "@/features/integrations/actions";
+import { AdminPageHeader } from "@/components/admin-page-header";
+import { TransactionDocumentUpload } from "@/components/transaction-document-upload";
+import { TransactionQuoteEditor } from "@/components/transaction-quote-editor";
+import { TransactionShipmentForm } from "@/components/transaction-shipment-form";
+import { TransactionInvoiceForm } from "@/components/transaction-invoice-form";
+import { TransactionHandoverForm } from "@/components/transaction-handover-form";
+import { prepareTransactionDocumentEmail } from "@/features/integrations/actions";
+import { fillEmailSubject, fillEmailTemplate, getActiveTemplate } from "@/features/integrations/email-templates";
+import { EmailMessageComposer } from "@/components/email-message-composer";
 import { requireOperationsAccess } from "@/features/operations/access";
+import { recordTransactionPayment, releaseProduction, verifyTransactionPayment } from "@/features/operations/actions";
+import { quotationTemplateReady } from "@/features/operations/docgen";
+import {
+  DOCGEN_TEST_RECIPIENT,
+  docGenDummyMode,
+  docGenTemplateId,
+  docGenTemplateReady,
+  localQaRendererEnabled,
+} from "@/features/operations/docgen-policy";
 import { getTransactionDetail } from "@/features/operations/service";
-import { transactionMainStage, transactionStatusLabel } from "@/features/operations/transaction-status";
+import { transactionStepStates, workspaceMoney } from "@/features/operations/transaction-workspace";
+import { readDeliveryDetails, readShipmentLogistics } from "@/features/operations/delivery-note";
+import { acceptedAmount, committedAmount, handoverDetailsSchema } from "@/features/operations/handover-note";
+import { readQuotationLetter } from "@/features/operations/quotation-letter";
+import styles from "../transactions.module.css";
+import {
+  invoiceCountsAsIssued,
+  invoiceStatusLabel,
+  transactionStatusLabel,
+} from "@/features/operations/transaction-status";
+import {
+  closeTransaction,
+  completeProductionBatch,
+  createProductionBatch,
+  generateDeliveryNote,
+  generateQuotation,
+  linkTransactionEmail,
+  markShipmentSent,
+  retryDocumentGeneration,
+} from "@/features/operations/workflow-actions";
 
 export const instant = false;
 
-type TransactionStage = "commercial" | "payment" | "fulfilment";
+type Transaction = NonNullable<Awaited<ReturnType<typeof getTransactionDetail>>>;
+type Document = Transaction["documents"][number];
+type Step = "quote" | "order" | "payment" | "production" | "delivery" | "handover";
 
-const stages: Record<TransactionStage, { label: string; shortLabel: string; description: string }> = {
-  commercial: {
-    label: "Penawaran",
-    shortLabel: "Penawaran",
-    description: "Kebutuhan, nilai, dan dokumen komersial.",
-  },
-  payment: {
-    label: "Pembayaran",
-    shortLabel: "Pembayaran",
-    description: "Tagihan, konfirmasi, dan saldo customer.",
-  },
-  fulfilment: {
-    label: "Produksi & pengiriman",
-    shortLabel: "Produksi",
-    description: "Mould, sampel, pengiriman, dan serah terima.",
-  },
-};
-
-const stageStatusOptions: Record<TransactionStage, Array<{ value: string; label: string; disabled?: boolean }>> = {
-  commercial: [
-    { value: "quotation", label: "Menyiapkan penawaran" },
-    { value: "po_received", label: "PO diterima" },
-    { value: "contract", label: "Kontrak / invoice" },
-    { value: "completed", label: "Komersial selesai" },
-    { value: "cancelled", label: "Dibatalkan" },
-  ],
-  payment: [
-    { value: "awaiting_invoice", label: "Belum ada tagihan" },
-    { value: "awaiting_payment", label: "Menunggu pembayaran", disabled: true },
-    { value: "payment_recorded", label: "Menunggu verifikasi" },
-    { value: "partial", label: "Dibayar sebagian" },
-    { value: "verified", label: "Terverifikasi" },
-  ],
-  fulfilment: [
-    { value: "not_released", label: "Belum dilepas" },
-    { value: "sample", label: "Sampel dalam proses", disabled: true },
-    { value: "released", label: "Sudah dilepas ke produksi" },
-    { value: "completed", label: "Produksi & pengiriman selesai" },
-  ],
-};
-
-function rupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
+function docGenAllowed(transaction: Transaction) {
+  return !docGenDummyMode() || transaction.header.dataClass === "test";
 }
 
-function quantity(value: string | number | null) {
-  return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 3 }).format(Number(value ?? 0));
-}
-
-function batchStatusLabel(value: string) {
-  const labels: Record<string, string> = {
-    planned: "Direncanakan",
-    in_progress: "Produksi berjalan",
-    awaiting_approval: "Menunggu persetujuan sampel",
-    completed: "Selesai",
-  };
-  return labels[value] ?? "Status belum dikenali";
-}
-
-function dateText(value: Date | null) {
-  return value
-    ? value.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })
-    : "Belum ditetapkan";
-}
-
-function documentLabel(type: string) {
-  const labels: Record<string, string> = {
-    quotation: "Surat penawaran",
-    purchase_order: "PO customer",
-    contract: "Kontrak",
-    invoice_dp: "Invoice DP",
-    invoice_final: "Invoice pelunasan",
-    tax_invoice: "Faktur pajak",
-    delivery_note: "Surat jalan",
-    bast: "Serah terima barang",
-    payment_proof: "Bukti pembayaran",
-  };
-  return labels[type] ?? type;
-}
-
-function SendDocumentEmail({
-  transactionId,
-  documentId,
-  documentName,
-  customerEmail,
-  referenceNo,
-}: {
-  transactionId: string;
-  documentId: string;
-  documentName: string;
-  customerEmail: string | null;
-  referenceNo: string;
-}) {
-  if (!customerEmail)
-    return <small className="transaction-email-missing">Email customer belum diisi pada data pelanggan.</small>;
-  return (
-    <details className="transaction-document-email">
-      <summary>Kirim lewat email</summary>
-      <form action={sendTransactionDocument}>
-        <input type="hidden" name="transactionId" value={transactionId} />
-        <input type="hidden" name="documentId" value={documentId} />
-        <input type="hidden" name="to" value={customerEmail} />
-        <input type="hidden" name="idempotencyKey" value={randomUUID()} />
-        <label>
-          Ke<strong>{customerEmail}</strong>
-        </label>
-        <label>
-          Subjek
-          <input name="subject" defaultValue={`${documentName} · ${referenceNo}`} maxLength={998} required />
-        </label>
-        <label>
-          Pesan
-          <textarea
-            name="body"
-            defaultValue={`Yth. ${customerEmail},\n\nBersama email ini kami sampaikan ${documentName.toLowerCase()} untuk pekerjaan ${referenceNo}.\n\nSalam,\nAnugrah Plastik`}
-            maxLength={20000}
-            required
-            rows={4}
-          />
-        </label>
-        <button type="submit">Kirim dokumen</button>
-      </form>
-    </details>
-  );
-}
-
-function statusLabel(stage: TransactionStage, value: string) {
-  return transactionStatusLabel(stage, value);
-}
-
-function getSuggestedStage(status: { paymentStatus: string; fulfilmentStatus: string }): TransactionStage {
-  return transactionMainStage(status);
-}
-
-function stageStatus(
-  stage: TransactionStage,
-  header: { commercialStatus: string; paymentStatus: string; fulfilmentStatus: string },
-) {
-  if (stage === "commercial") return header.commercialStatus;
-  if (stage === "payment") return header.paymentStatus;
-  return header.fulfilmentStatus;
-}
-
-function activityLabel(action: string, metadata: unknown) {
+function documentEmailAllowed(transaction: Transaction, document: Document) {
+  if ((document.payload as { renderSource?: string } | null)?.renderSource === "local_qa") return false;
+  if (document.type === "contract") return false;
   if (
-    action === "transaction.track_status_changed" &&
-    metadata &&
-    typeof metadata === "object" &&
-    "reason" in metadata
+    document.type === "delivery_note" &&
+    !transaction.shipments.some((shipment) => shipment.deliveryDocumentId === document.id)
   ) {
-    const reason = typeof metadata.reason === "string" ? metadata.reason : "";
-    return reason ? `Tahap diperbarui · ${reason}` : "Tahap diperbarui";
+    return false;
   }
-  const labels: Record<string, string> = {
-    "transaction.created": "Transaksi dibuat",
-    "transaction.payment_recorded": "Pembayaran dicatat",
-    "transaction.payment_verified": "Pembayaran diverifikasi",
-    "transaction.production_released": "Pekerjaan dilepas ke produksi",
-  };
-  return labels[action] ?? action.replaceAll(".", " · ").replaceAll("_", " ");
-}
-
-function StageNavigation({
-  id,
-  activeStage,
-  header,
-  returnTo,
-}: {
-  id: string;
-  activeStage: TransactionStage;
-  header: { commercialStatus: string; paymentStatus: string; fulfilmentStatus: string };
-  returnTo: string;
-}) {
+  const isDummy = (document.payload as { isDummy?: boolean } | null)?.isDummy === true;
   return (
-    <nav aria-label="Tahap transaksi" className="transaction-stage-nav">
-      {(Object.keys(stages) as TransactionStage[]).map((stage, index) => {
-        const isActive = activeStage === stage;
-        return (
-          <Link
-            aria-current={isActive ? "page" : undefined}
-            className={isActive ? "is-active" : undefined}
-            href={`/admin/transactions/${id}?stage=${stage}&returnTo=${encodeURIComponent(returnTo)}`}
-            key={stage}
-          >
-            <span className="transaction-stage-nav__number">0{index + 1}</span>
-            <span>
-              <strong>{stages[stage].shortLabel}</strong>
-              <small>{statusLabel(stage, stageStatus(stage, header))}</small>
-            </span>
-          </Link>
-        );
-      })}
-    </nav>
+    (!docGenDummyMode() && !isDummy) ||
+    (transaction.header.dataClass === "test" &&
+      transaction.header.customerEmail?.toLowerCase() === DOCGEN_TEST_RECIPIENT)
   );
 }
 
-function StageManager({ id, stage, currentStatus }: { id: string; stage: TransactionStage; currentStatus: string }) {
+const steps: Array<{ id: Step; label: string; short: string; help: string }> = [
+  { id: "quote", label: "Penawaran", short: "Penawaran", help: "Rincian, harga, dan surat penawaran" },
+  { id: "order", label: "PO pelanggan", short: "PO", help: "Catat pesanan resmi dari pelanggan" },
+  { id: "payment", label: "Invoice & pembayaran", short: "Invoice", help: "Tagihan, uang muka, dan pelunasan" },
+  { id: "production", label: "Produksi", short: "Produksi", help: "Pelepasan, sampel, dan batch" },
+  { id: "delivery", label: "Surat jalan", short: "Kirim", help: "Jumlah yang dikirim dan surat jalan" },
+  { id: "handover", label: "STB bertanda tangan", short: "Terima", help: "Bukti penerimaan dan penutupan" },
+];
+
+const money = (value: string | number | null) =>
+  new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(Number(value ?? 0));
+const number = (value: string | number | null) =>
+  new Intl.NumberFormat("id-ID", { maximumFractionDigits: 3 }).format(Number(value ?? 0));
+const date = (value: Date | null) =>
+  value
+    ? value.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", year: "numeric" })
+    : "Belum ditentukan";
+const dateTime = (value: Date) =>
+  value.toLocaleString("id-ID", {
+    timeZone: "Asia/Jakarta",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+const activityLabels: Record<string, string> = {
+  "transaction.created": "Pekerjaan dibuat",
+  "transaction.quotation_draft_saved": "Rincian penawaran disimpan",
+  "transaction.quotation_generation_started": "Pembuatan penawaran dimulai",
+  "transaction.quotation_ready": "PDF penawaran siap",
+  "transaction.document_emailed": "Dokumen dikirim lewat email",
+  "transaction.document_received": "Dokumen pelanggan diterima",
+  "transaction.email_linked": "Email ditautkan ke pekerjaan",
+  "transaction.invoice_generation_started": "Pembuatan invoice dimulai",
+  "transaction.invoice_issued": "Invoice diterbitkan",
+  "transaction.payment_recorded": "Konfirmasi pembayaran dicatat",
+  "transaction.payment_verified": "Pembayaran diperiksa administrator",
+  "transaction.production_released": "Pekerjaan dilepas ke produksi",
+  "transaction.batch_created": "Batch atau sampel dicatat",
+  "transaction.batch_completed": "Batch atau sampel selesai",
+  "transaction.shipment_planned": "Pengiriman direncanakan",
+  "transaction.delivery_note_ready": "Surat jalan siap",
+  "transaction.shipment_sent": "Barang dikirim",
+  "transaction.contract_ready": "Kontrak siap",
+  "transaction.bast_ready": "Surat serah terima barang siap",
+  "transaction.stb_ready": "Surat serah terima barang siap",
+  "transaction.stb_proof_received": "Bukti STB bertanda tangan tersimpan",
+  "transaction.stb_proof_replaced": "Bukti STB diganti dan arsip lama dipertahankan",
+  "transaction.document_generation_recovered": "Dokumen berhasil dipulihkan",
+  "transaction.track_status_changed": "Status pekerjaan diperbarui",
+  "transaction.closed": "Pekerjaan ditutup",
+};
+const documentLabels: Record<string, string> = {
+  quotation: "Surat penawaran",
+  quotation_attachment: "Lampiran penawaran",
+  purchase_order: "Pesanan pelanggan (PO)",
+  contract: "Arsip lama: kontrak",
+  invoice_dp: "Tagihan uang muka (DP)",
+  invoice_final: "Tagihan akhir",
+  payment_proof: "Bukti pembayaran",
+  tax_invoice: "Faktur pajak resmi",
+  delivery_note: "Surat jalan",
+  bast: "Surat serah terima barang (STB)",
+  bast_signed: "STB bertanda tangan",
+};
+
+function latestQuoteMatches(transaction: Transaction) {
+  return transaction.workspace.currentQuote;
+}
+
+function latestStep(transaction: Transaction): Step {
+  return transaction.workspace.step;
+}
+
+function nextAction(step: Step, transaction: Transaction) {
+  if (transaction.header.commercialStatus === "cancelled") {
+    return "Transaksi dibatalkan. Dokumen dan riwayat tetap tersedia sebagai arsip.";
+  }
+  if (transaction.header.fulfilmentStatus === "completed") {
+    return "Transaksi selesai. Semua dokumen dan riwayat tetap tersedia untuk ditinjau.";
+  }
+  switch (step) {
+    case "quote":
+      if (transaction.workspace.issuedCount)
+        return "Rincian penawaran terkunci setelah invoice diterbitkan. Tinjau rincian dan dokumen yang sudah tersimpan.";
+      if (!transaction.lines.length) return "Isi barang atau jasa dan harga penawaran.";
+      if (!transaction.header.quoteLetter) return "Isi surat dan syarat penawaran, lalu simpan sebelum membuat PDF.";
+      if (!latestQuoteMatches(transaction)) return "Periksa rincian, lalu buat PDF penawaran.";
+      return transaction.documents.some((document) => document.type === "quotation" && document.sentMessageId)
+        ? "Penawaran sudah dikirim. Tunggu PO pelanggan, lalu buka langkah berikutnya."
+        : "Tinjau PDF penawaran, lalu kirim ke alamat pelanggan yang sudah diperiksa.";
+    case "order":
+      return transaction.documents.some((document) => document.type === "purchase_order")
+        ? transaction.workspace.issuedCount
+          ? "PO sudah tersimpan. Tagihan dan catatan pembayaran tersedia di Invoice & pembayaran."
+          : "PO sudah tersimpan. Lanjutkan ke Invoice & pembayaran untuk membuat tagihan."
+        : "Unggah PO dari pelanggan. Setelah PO tersimpan, buat tagihan pada langkah Invoice & pembayaran.";
+    case "payment":
+      return transaction.workspace.pendingPayment
+        ? "Pembayaran sudah dicatat dan menunggu pemeriksaan administrator."
+        : transaction.workspace.issuedCount && transaction.workspace.outstanding === "0.00"
+          ? "Invoice yang telah terbit sudah lunas. Tagihan tambahan, jika diperlukan, tetap dicatat di langkah ini."
+          : "Buat tagihan atau catat pembayaran pelanggan.";
+    case "production":
+      return transaction.header.fulfilmentStatus === "not_released"
+        ? "Administrator memeriksa kesiapan sebelum pekerjaan masuk produksi."
+        : "Catat sampel atau batch yang sedang dikerjakan.";
+    case "delivery":
+      return "Siapkan pengiriman sesuai jumlah barang, lalu periksa surat jalan.";
+    case "handover":
+      return "Arsipkan bukti serah terima yang ditandatangani pelanggan.";
+  }
+}
+
+async function DocumentList({
+  documents,
+  transaction,
+  canRetry = false,
+}: {
+  documents: Document[];
+  transaction: Transaction;
+  canRetry?: boolean;
+}) {
+  if (!documents.length) return <p className="transaction-flow-empty">Belum ada dokumen pada langkah ini.</p>;
+  const [quotationEmail, invoiceEmail, deliveryEmail] = await Promise.all([
+    getActiveTemplate("quotation"),
+    getActiveTemplate("invoice"),
+    getActiveTemplate("delivery"),
+  ]);
   return (
-    <details className="transaction-stage-manager">
-      <summary>Kelola tahap</summary>
-      <form action={updateTransactionTrackStatus}>
-        <input name="transactionId" type="hidden" value={id} />
-        <input name="track" type="hidden" value={stage} />
-        <label>
-          Status {stages[stage].label.toLowerCase()}
-          <select defaultValue={currentStatus} name="status">
-            {!stageStatusOptions[stage].some((option) => option.value === currentStatus) ? (
-              <option value={currentStatus} disabled>
-                Status perlu ditinjau
-              </option>
+    <div className="transaction-flow-documents">
+      {documents.map((document) => (
+        <article key={document.id}>
+          <span className="transaction-flow-documents__mark" aria-hidden="true">
+            PDF
+          </span>
+          <div>
+            <strong>
+              {documentLabels[document.type] ?? "Dokumen"}
+              {document.type === "quotation" || document.type === "delivery_note" || document.type === "bast"
+                ? ` · versi ${document.version}`
+                : ""}
+            </strong>
+            <small>{document.documentNo ?? document.originalName ?? "Tanpa nomor"}</small>
+            {document.status === "needs_review" ? <small>Perlu diperiksa sebelum membuat ulang.</small> : null}
+            {canRetry &&
+            document.type !== "contract" &&
+            document.status === "needs_review" &&
+            document.operationKey &&
+            document.providerDocumentId?.startsWith("batch_") ? (
+              <form action={retryDocumentGeneration} className="transaction-flow-retry">
+                <input name="documentId" type="hidden" value={document.id} />
+                <label>
+                  <input name="confirmed" required type="checkbox" value="yes" /> Saya sudah memeriksa DocGen; lanjutkan
+                  dengan permintaan yang sama.
+                </label>
+                <button type="submit">Coba arsipkan lagi</button>
+              </form>
             ) : null}
-            {stageStatusOptions[stage].map((option) => (
-              <option
-                key={option.value}
-                value={option.value}
-                disabled={option.disabled || option.value === "cancelled"}
+          </div>
+          <span className="transaction-flow-documents__status">
+            {document.status === "ready"
+              ? "Siap"
+              : document.status === "received"
+                ? "Diterima"
+                : document.status === "generating"
+                  ? "Sedang dibuat"
+                  : document.status === "needs_review"
+                    ? "Perlu diperiksa"
+                    : document.status}
+          </span>
+          {document.storagePath ? (
+            <Link href={`/api/admin/transactions/${transaction.header.id}/documents/${document.id}`} target="_blank">
+              Lihat
+            </Link>
+          ) : null}
+          {document.type === "purchase_order" && (document.payload as { emailId?: string } | null)?.emailId ? (
+            <Link href={`/admin/email?folder=inbox&email=${(document.payload as { emailId: string }).emailId}`}>
+              Lihat email
+            </Link>
+          ) : null}
+          {document.storagePath &&
+          document.direction === "outbound" &&
+          document.type !== "bast" &&
+          document.type !== "contract" &&
+          !document.sentMessageId &&
+          documentEmailAllowed(transaction, document) &&
+          !(document.payload as { sendState?: string } | null)?.sendState ? (
+            <details className="transaction-flow-send">
+              <summary>Kirim lewat email</summary>
+              {transaction.header.customerEmail ? (
+                <form action={prepareTransactionDocumentEmail}>
+                  <input name="transactionId" type="hidden" value={transaction.header.id} />
+                  <input name="documentId" type="hidden" value={document.id} />
+                  <input name="idempotencyKey" type="hidden" value={randomUUID()} />
+                  <label>
+                    Email pelanggan di Data master
+                    <input name="to" readOnly required type="email" value={transaction.header.customerEmail} />
+                  </label>
+                  <label>
+                    Subjek
+                    <input
+                      defaultValue={`${docGenDummyMode() || (document.payload as { isDummy?: boolean } | null)?.isDummy ? "[UJI] " : ""}${fillEmailSubject((document.type === "quotation" ? quotationEmail : document.type.startsWith("invoice") ? invoiceEmail : deliveryEmail).subject, { customerName: transaction.header.customerName, documentName: documentLabels[document.type] ?? "Dokumen", transactionNo: transaction.header.referenceNo, senderName: "Tim Anugrah Plastik" })}`}
+                      name="subject"
+                      required
+                    />
+                  </label>
+                  <div className="email-form__message">
+                    <strong>Pesan</strong>
+                    <EmailMessageComposer
+                      initial={fillEmailTemplate(
+                        (document.type === "quotation"
+                          ? quotationEmail
+                          : document.type.startsWith("invoice")
+                            ? invoiceEmail
+                            : deliveryEmail
+                        ).content,
+                        {
+                          customerName: transaction.header.customerName,
+                          transactionNo: transaction.header.referenceNo,
+                          documentName: documentLabels[document.type]?.toLowerCase() ?? "dokumen",
+                          senderName: "Tim Anugrah Plastik",
+                        },
+                      )}
+                    />
+                  </div>
+                  <label className="transaction-flow-send__confirm">
+                    <input name="confirmedTo" required type="checkbox" value={transaction.header.customerEmail} /> Saya
+                    sudah memeriksa alamat tujuan dan lampiran.
+                  </label>
+                  <p>Langkah ini hanya menyiapkan draf. Periksa pratinjau final di Email CS sebelum mengonfirmasi.</p>
+                  <button type="submit">Siapkan draf dan pratinjau</button>
+                </form>
+              ) : (
+                <p>Isi email pelanggan di Data master sebelum mengirim dokumen.</p>
+              )}
+            </details>
+          ) : null}
+          {(document.payload as { sendState?: string } | null)?.sendState === "uncertain" ? (
+            <small>Pengiriman email perlu diperiksa di Email terkirim. Jangan kirim ulang sebelum dipastikan.</small>
+          ) : null}
+          {(document.payload as { sendState?: string } | null)?.sendState === "pending" ? (
+            <small>Permintaan email sedang diproses. Periksa Email terkirim jika tidak berubah.</small>
+          ) : null}
+          {document.sentMessageId ? <small>Sudah diserahkan ke server email untuk dikirim.</small> : null}
+          {(document.payload as { lastEmailState?: string } | null)?.lastEmailState === "simulated" ? (
+            <small>Simulasi selesai — tidak ada email yang dikirim.</small>
+          ) : null}
+          {(document.payload as { lastEmailAttemptId?: string } | null)?.lastEmailAttemptId ? (
+            <small>
+              <Link
+                href={`/admin/email?folder=sent&email=outbox:${encodeURIComponent((document.payload as { lastEmailAttemptId: string }).lastEmailAttemptId)}`}
               >
-                {option.label}
-              </option>
+                Lihat status email di Email CS
+              </Link>
+            </small>
+          ) : null}
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function QuoteStep({ transaction, isAdmin }: { transaction: Transaction; isAdmin: boolean }) {
+  const quotationDocuments = transaction.documents.filter((document) => document.type === "quotation");
+  const attachments = transaction.documents
+    .filter((document) => document.type === "quotation_attachment" && document.status === "received")
+    .map((document) => ({
+      id: document.id,
+      name: (document.payload as { caption?: string } | null)?.caption ?? document.originalName ?? "Lampiran",
+      category: (document.payload as { category?: string } | null)?.category ?? "Lampiran",
+    }));
+  const hasReadyQuote = quotationDocuments.some((document) => document.status === "ready");
+  const hasInvoice = transaction.invoices.length > 0;
+  return (
+    <div className="transaction-flow-stack">
+      <section className="transaction-flow-card">
+        <div className="transaction-flow-card__head">
+          <div>
+            <span className="eyebrow">01 · Rincian pekerjaan</span>
+            <h3>Siapkan penawaran</h3>
+          </div>
+          <span>{transaction.lines.length} item</span>
+        </div>
+        {transaction.lines.length ? (
+          <div className="transaction-flow-line-summary">
+            {transaction.lines.map((line) => (
+              <div key={line.id}>
+                <strong>{line.description}</strong>
+                <span>
+                  {number(line.quantity)} {line.unit} × {money(line.unitPrice)}
+                </span>
+              </div>
             ))}
-          </select>
-        </label>
-        <label>
-          Alasan perubahan
-          <input maxLength={240} minLength={3} name="reason" placeholder="Contoh: PO diterima melalui email" required />
-        </label>
-        <button type="submit">Simpan status</button>
-      </form>
-    </details>
+            <div>
+              <strong>Total price</strong>
+              <span>{money(transaction.totals.quoteGross)}</span>
+            </div>
+            <div>
+              <strong>Diskon</strong>
+              <span>−{money(transaction.totals.quoteDiscount)}</span>
+            </div>
+            <div className="transaction-flow-line-summary__total">
+              <strong>Nilai barang / jasa</strong>
+              <span>{money(transaction.totals.quoteSubtotal)}</span>
+            </div>
+            <div>
+              <strong>Pajak yang dipilih</strong>
+              <span>{money(transaction.totals.quoteTax)}</span>
+            </div>
+            <div className="transaction-flow-line-summary__total">
+              <strong>Total penawaran</strong>
+              <span>{money(transaction.totals.quotedAmount)}</span>
+            </div>
+          </div>
+        ) : (
+          <p className="transaction-flow-empty">
+            Belum ada rincian. Mulai dari nama barang atau jasa, jumlah, lalu harga.
+          </p>
+        )}
+        {hasReadyQuote && !latestQuoteMatches(transaction) ? (
+          <p className="transaction-flow-warning" role="status">
+            Rincian sudah berubah sejak PDF terakhir dibuat. Buat versi penawaran baru sebelum mengirimkannya.
+          </p>
+        ) : null}
+        {hasInvoice ? (
+          <p className="transaction-flow-warning">
+            Rincian penawaran dikunci setelah invoice dibuat agar arsip tagihan dan barang tetap cocok.
+          </p>
+        ) : (
+          <details className="transaction-flow-details" open={!transaction.lines.length}>
+            <summary>{transaction.lines.length ? "Ubah rincian penawaran" : "Isi rincian penawaran"}</summary>
+            <TransactionQuoteEditor
+              transactionId={transaction.header.id}
+              attachments={attachments}
+              initialLetter={readQuotationLetter(
+                transaction.header.quoteLetter,
+                transaction.header.title,
+                transaction.header.customerBillingAddress ?? "",
+              )}
+              canEditDiscount={isAdmin}
+              initialLines={transaction.lines.map((line) => ({
+                description: line.description,
+                materialLabel: line.materialLabel,
+                mouldingLabel: line.mouldingLabel,
+                quantity: line.quantity,
+                unit: line.unit,
+                unitPrice: line.unitPrice,
+                taxRate: line.taxRate,
+                taxMethod: line.taxMethod as "legacy" | "none" | "standard" | "dpp_11_12",
+                discountKind: line.discountKind as "none" | "amount" | "percent",
+                discountValue: line.discountValue,
+              }))}
+              initialTargetDate={
+                transaction.header.dueAt?.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" }) ?? ""
+              }
+            />
+          </details>
+        )}
+        {!hasInvoice ? (
+          <details className="transaction-flow-details">
+            <summary>Unggah foto, drawing, atau spesifikasi (opsional)</summary>
+            <TransactionDocumentUpload
+              transactionId={transaction.header.id}
+              type="quotation_attachment"
+              label="Tambah lampiran penawaran"
+              hint="PDF, JPG, atau PNG, maksimal 10 MB. Setelah unggah, pilih lampiran di form surat lalu simpan rincian."
+            />
+            <DocumentList
+              documents={transaction.documents.filter((document) => document.type === "quotation_attachment")}
+              transaction={transaction}
+            />
+          </details>
+        ) : null}
+      </section>
+      <section className="transaction-flow-card">
+        <div className="transaction-flow-card__head">
+          <div>
+            <span className="eyebrow">02 · Tinjau dan kirim</span>
+            <h3>Surat penawaran</h3>
+          </div>
+        </div>
+        <p>Setelah rincian disimpan, buat PDF untuk ditinjau. Membuat PDF belum mengirim email.</p>
+        <p>
+          Nomor surat:{" "}
+          <strong>
+            {transaction.header.quotationNo ??
+              (transaction.header.dataClass === "test" ? `UJI-${transaction.header.referenceNo}` : "Belum diterbitkan")}
+          </strong>
+        </p>
+        {!transaction.header.customerBillingAddress &&
+        !readQuotationLetter(transaction.header.quoteLetter, transaction.header.title).recipientAddress ? (
+          <p className="transaction-flow-warning">
+            Alamat penerima belum tersedia. Lengkapi di isi surat sebelum membuat penawaran resmi.
+          </p>
+        ) : null}
+        {isAdmin ? (
+          <p>
+            <Link href="/admin/settings/quotation">Periksa urutan nomor surat dan identitas penerbit</Link>
+          </p>
+        ) : null}
+        {transaction.lines.length ? (
+          <form action={generateQuotation} className="transaction-flow-inline-action">
+            <input name="transactionId" type="hidden" value={transaction.header.id} />
+            <button disabled={!quotationTemplateReady() || !docGenAllowed(transaction)} type="submit">
+              Buat versi PDF baru
+            </button>
+            {!quotationTemplateReady() ? (
+              <small>Template surat baru belum terverifikasi di DocGen. Draf tetap tersimpan; PDF tidak dibuat.</small>
+            ) : null}
+          </form>
+        ) : null}
+        <DocumentList documents={quotationDocuments} transaction={transaction} />
+      </section>
+    </div>
+  );
+}
+
+function OrderStep({ transaction, returnTo }: { transaction: Transaction; returnTo: string }) {
+  const po = transaction.documents.filter((item) => item.type === "purchase_order");
+  return (
+    <div className="transaction-flow-stack">
+      <section className="transaction-flow-card">
+        <div className="transaction-flow-card__head">
+          <div>
+            <span className="eyebrow">01 · Pesanan pelanggan</span>
+            <h3>Terima PO</h3>
+          </div>
+          <span>{po.length ? "Sudah diterima" : "Belum ada PO"}</span>
+        </div>
+        <p>PO adalah pesanan resmi dari pelanggan. Simpan salinan yang diterima melalui email atau WhatsApp.</p>
+        <DocumentList documents={po} transaction={transaction} />
+        <details className="transaction-flow-details" open={!po.length}>
+          <summary>Unggah PO pelanggan</summary>
+          <TransactionDocumentUpload
+            transactionId={transaction.header.id}
+            type="purchase_order"
+            label="Simpan PO pelanggan"
+            hint="PDF atau foto hingga 10 MB. Dokumen hanya dapat dibuka oleh tim yang berwenang."
+          />
+        </details>
+        {transaction.relatedEmails.length ? (
+          <div className="transaction-flow-email-list">
+            <strong>Email terkait pekerjaan ini</strong>
+            {transaction.relatedEmails.map((email) => (
+              <div key={email.id}>
+                <div>
+                  <Link href={`/admin/email?folder=inbox&email=${email.id}`}>{email.subject}</Link>
+                  <small>
+                    {email.fromAddress ?? "Pengirim tidak diketahui"} · {date(email.receivedAt)}
+                  </small>
+                </div>
+                {!po.some((document) => (document.payload as { emailId?: string } | null)?.emailId === email.id) ? (
+                  <form action={linkTransactionEmail}>
+                    <input name="transactionId" type="hidden" value={transaction.header.id} />
+                    <input name="emailId" type="hidden" value={email.id} />
+                    <label className="transaction-flow-email-po">
+                      <input
+                        name="containsPo"
+                        required={Boolean(email.linkedTransactionId)}
+                        type="checkbox"
+                        value="yes"
+                      />{" "}
+                      Email ini berisi PO pelanggan
+                    </label>
+                    <button type="submit">{email.linkedTransactionId ? "Simpan sebagai PO" : "Tautkan email"}</button>
+                  </form>
+                ) : (
+                  <span>PO sudah tercatat</span>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {po.length ? (
+          <p>
+            PO sudah tercatat.{" "}
+            <Link href={`?step=payment&returnTo=${encodeURIComponent(returnTo)}#transaction-step-title`}>
+              {transaction.workspace.issuedCount ? "Lihat invoice & pembayaran →" : "Lanjut buat tagihan →"}
+            </Link>
+          </p>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
+function PaymentStep({ transaction, isAdmin }: { transaction: Transaction; isAdmin: boolean }) {
+  const paymentProofs = transaction.documents.filter((item) => item.type === "payment_proof");
+  const invoiceDocuments = transaction.documents.filter(
+    (item) => item.type === "invoice_dp" || item.type === "invoice_final",
+  );
+  const taxDocuments = transaction.documents.filter((item) => item.type === "tax_invoice");
+  const remainingToInvoice = Math.max(0, transaction.totals.quotedAmount - transaction.totals.invoiceAmount);
+  const pendingInvoice = transaction.invoices.some((invoice) => invoice.status === "draft");
+  const legacyInvoice = transaction.invoices.some(
+    (invoice) => invoiceCountsAsIssued(invoice.status) && !invoice.snapshot,
+  );
+  const overdue =
+    transaction.totals.outstandingAmount > 0 &&
+    transaction.invoices.some(
+      (invoice) => invoiceCountsAsIssued(invoice.status) && Boolean(invoice.dueAt && invoice.dueAt < new Date()),
+    );
+  return (
+    <div className="transaction-flow-stack">
+      <dl className="transaction-flow-money">
+        <div>
+          <dt>Nilai pekerjaan</dt>
+          <dd>{workspaceMoney(transaction.workspace.quote)}</dd>
+        </div>
+        <div>
+          <dt>Tagihan terbit</dt>
+          <dd>{workspaceMoney(transaction.workspace.invoice)}</dd>
+        </div>
+        <div>
+          <dt>Pembayaran terverifikasi</dt>
+          <dd>{workspaceMoney(transaction.workspace.received)}</dd>
+        </div>
+        <div>
+          <dt>Sisa tagihan</dt>
+          <dd>
+            {transaction.workspace.issuedCount
+              ? workspaceMoney(transaction.workspace.outstanding)
+              : "Belum ada invoice"}
+          </dd>
+        </div>
+      </dl>
+      {overdue ? (
+        <p className="transaction-flow-warning" role="status">
+          Ada tagihan melewati jatuh tempo dan sisa pembayaran {money(transaction.totals.outstandingAmount)}. Hubungi
+          pelanggan untuk tindak lanjut; sistem tidak mengirim pengingat otomatis.
+        </p>
+      ) : null}
+      {transaction.totals.overpaymentAmount > 0 ? (
+        <p className="transaction-flow-warning" role="status">
+          Pembayaran yang diperiksa melebihi tagihan terbit sebesar {money(transaction.totals.overpaymentAmount)}.
+          Periksa pencatatan sebelum menutup pekerjaan.
+        </p>
+      ) : null}
+      <section className="transaction-flow-card">
+        <div className="transaction-flow-card__head">
+          <div>
+            <span className="eyebrow">01 · Tagihan</span>
+            <h3>Buat invoice</h3>
+          </div>
+        </div>
+        <p>
+          Pilih tagihan uang muka (DP) atau tagihan akhir. Jumlah semua tagihan tidak boleh melebihi nilai penawaran.
+        </p>
+        {transaction.invoices.map((invoice) => (
+          <div className="transaction-flow-row" key={invoice.id}>
+            <strong>{invoice.invoiceNo}</strong>
+            <span>
+              {invoice.kind === "dp" || invoice.kind === "deposit" ? "Uang muka (DP)" : "Tagihan akhir"} ·{" "}
+              {invoiceStatusLabel(invoice.status)}
+            </span>
+            <b>{money(invoice.amount)}</b>
+            <small>Jatuh tempo {date(invoice.dueAt)}</small>
+          </div>
+        ))}
+        {pendingInvoice ? (
+          <p className="transaction-flow-warning">
+            Ada invoice yang belum selesai dibuat. Periksa dokumennya sebelum membuat tagihan lain.
+          </p>
+        ) : null}
+        {legacyInvoice ? (
+          <p className="transaction-flow-warning">
+            Invoice lama belum memiliki rincian pajak tersimpan. Tagihan baru untuk transaksi ini memerlukan peninjauan
+            manual administrator; arsip lama tidak diubah otomatis.
+          </p>
+        ) : null}
+        {isAdmin && remainingToInvoice > 0 && !pendingInvoice && !legacyInvoice ? (
+          <details className="transaction-flow-details">
+            <summary>Buat tagihan baru</summary>
+            <TransactionInvoiceForm
+              canGenerate={Boolean(
+                docGenAllowed(transaction) && process.env.DOCGEN_API_KEY && docGenTemplateId("INVOICE"),
+              )}
+              customerAddress={transaction.header.customerBillingAddress ?? ""}
+              customerName={transaction.header.customerName}
+              invoices={transaction.invoices
+                .filter((invoice) => invoiceCountsAsIssued(invoice.status))
+                .map((invoice) => ({
+                  kind: invoice.kind,
+                  amount: invoice.amount,
+                  dpApplied: invoice.dpApplied,
+                  snapshot: invoice.snapshot,
+                  shipmentId: invoice.shipmentId,
+                }))}
+              lines={transaction.lines.map((line) => ({
+                id: line.id,
+                description: line.description,
+                quantity: line.quantity,
+                unit: line.unit,
+                unitPrice: line.unitPrice,
+                taxRate: line.taxRate,
+                taxMethod: line.taxMethod,
+                discountKind: line.discountKind,
+                discountValue: line.discountValue,
+                materialName: line.materialName,
+              }))}
+              poNumber={transaction.documents.find((document) => document.type === "purchase_order")?.documentNo ?? ""}
+              shipments={transaction.shipments
+                .filter(
+                  (shipment) =>
+                    ["shipped", "received"].includes(shipment.status) &&
+                    !transaction.invoices.some(
+                      (invoice) => invoiceCountsAsIssued(invoice.status) && invoice.shipmentId === shipment.id,
+                    ),
+                )
+                .map((shipment) => ({
+                  id: shipment.id,
+                  referenceNo: shipment.shipmentNo,
+                  status: shipment.status,
+                  items: transaction.shipmentItems
+                    .filter((item) => item.shipmentId === shipment.id)
+                    .map((item) => ({ lineId: item.lineId, quantity: item.quantity })),
+                }))}
+              transactionId={transaction.header.id}
+              verifiedPayments={String(transaction.totals.receivedAmount)}
+            />
+          </details>
+        ) : null}
+        <DocumentList documents={invoiceDocuments} transaction={transaction} />
+      </section>
+      <section className="transaction-flow-card">
+        <div className="transaction-flow-card__head">
+          <div>
+            <span className="eyebrow">02 · Pembayaran</span>
+            <h3>Catat konfirmasi pelanggan</h3>
+          </div>
+        </div>
+        <p>Catatan dari sales belum dihitung sebagai uang diterima sampai administrator memeriksanya.</p>
+        <details className="transaction-flow-details">
+          <summary>Unggah bukti transfer</summary>
+          <TransactionDocumentUpload
+            transactionId={transaction.header.id}
+            type="payment_proof"
+            label="Bukti pembayaran"
+            hint="Simpan PDF atau foto bukti transfer sebelum mencatat pembayaran."
+          />
+        </details>
+        <form action={recordTransactionPayment} className="transaction-flow-form">
+          <input name="transactionId" type="hidden" value={transaction.header.id} />
+          <input name="operationKey" type="hidden" value={randomUUID()} />
+          <label>
+            Jumlah yang dikonfirmasi (Rp)
+            <input min="0.01" name="amount" required step="0.01" type="number" />
+          </label>
+          <label>
+            Bukti transfer
+            <select defaultValue="" name="proofDocumentId">
+              <option value="">Belum ada bukti</option>
+              {paymentProofs.map((proof) => (
+                <option key={proof.id} value={proof.id}>
+                  {proof.originalName ?? proof.documentNo ?? "Bukti pembayaran"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Referensi atau catatan
+            <input maxLength={160} name="reference" placeholder="Nomor transfer atau penjelasan singkat" />
+          </label>
+          <button type="submit">Catat untuk diperiksa</button>
+        </form>
+        <div className="transaction-flow-list">
+          {transaction.entries
+            .filter((item) => item.kind === "customer_payment")
+            .map((entry) => (
+              <div className="transaction-flow-row" key={entry.id}>
+                <strong>{money(entry.amount)}</strong>
+                <span>{entry.status === "verified" ? "Sudah diperiksa" : "Menunggu pemeriksaan"}</span>
+                <small>
+                  {entry.reference ?? "Tanpa referensi"} · {date(entry.occurredAt)}
+                </small>
+                {entry.status === "unverified" && isAdmin ? (
+                  <form action={verifyTransactionPayment}>
+                    <input name="entryId" type="hidden" value={entry.id} />
+                    <button type="submit">Verifikasi pembayaran</button>
+                  </form>
+                ) : null}
+              </div>
+            ))}
+        </div>
+      </section>
+      {isAdmin ? (
+        <section className="transaction-flow-card">
+          <div className="transaction-flow-card__head">
+            <div>
+              <span className="eyebrow">Dokumen pajak</span>
+              <h3>Faktur pajak resmi</h3>
+            </div>
+          </div>
+          <p>Unggah faktur dari Coretax/e-Faktur. Aplikasi ini tidak menerbitkan faktur pajak.</p>
+          <DocumentList documents={taxDocuments} transaction={transaction} />
+          <details className="transaction-flow-details">
+            <summary>Simpan faktur pajak</summary>
+            <TransactionDocumentUpload
+              transactionId={transaction.header.id}
+              type="tax_invoice"
+              label="Faktur pajak resmi"
+              hint="Masukkan nomor faktur dan unggah PDF resmi yang sudah diterbitkan."
+            />
+          </details>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function ProductionStep({ transaction, isAdmin }: { transaction: Transaction; isAdmin: boolean }) {
+  const released = transaction.header.fulfilmentStatus !== "not_released";
+  const checks = [
+    { label: "Pelanggan tercatat", ready: Boolean(transaction.header.customerName) },
+    {
+      label: "Barang dan nilai penawaran ada",
+      ready: transaction.lines.length > 0 && transaction.totals.quotedAmount > 0,
+    },
+    { label: "Target pekerjaan ditentukan", ready: Boolean(transaction.header.dueAt) },
+    { label: "Tagihan sudah diterbitkan", ready: transaction.totals.invoiceAmount > 0 },
+    { label: "Pembayaran sudah diperiksa", ready: transaction.totals.receivedAmount > 0 },
+  ];
+  const incomplete = checks.some((check) => !check.ready);
+  return (
+    <div className="transaction-flow-stack">
+      <section className="transaction-flow-card">
+        <div className="transaction-flow-card__head">
+          <div>
+            <span className="eyebrow">01 · Pemeriksaan</span>
+            <h3>Lepaskan ke produksi</h3>
+          </div>
+          <span>{released ? "Sudah dilepas" : "Belum dilepas"}</span>
+        </div>
+        <p>Administrator dapat melanjutkan walaupun ada data yang belum lengkap, tetapi wajib mencatat alasannya.</p>
+        <ul className="transaction-flow-checklist">
+          {checks.map((check) => (
+            <li key={check.label}>
+              <span aria-hidden="true">{check.ready ? "✓" : "!"}</span>
+              {check.label}
+              <strong>{check.ready ? "Siap" : "Perlu perhatian"}</strong>
+            </li>
+          ))}
+        </ul>
+        {isAdmin && !released ? (
+          <form action={releaseProduction} className="transaction-flow-form">
+            <input name="transactionId" type="hidden" value={transaction.header.id} />
+            {incomplete ? (
+              <label>
+                Alasan tetap melanjutkan
+                <textarea
+                  minLength={8}
+                  name="reason"
+                  placeholder="Contoh: Sampel perlu dibuat sebelum DP diterima."
+                  required
+                  rows={3}
+                />
+              </label>
+            ) : null}
+            <button type="submit">Lepaskan ke produksi</button>
+          </form>
+        ) : null}
+      </section>
+      <section className="transaction-flow-card">
+        <div className="transaction-flow-card__head">
+          <div>
+            <span className="eyebrow">02 · Pekerjaan produksi</span>
+            <h3>Sampel dan batch</h3>
+          </div>
+        </div>
+        {transaction.batches.map((batch) => (
+          <div className="transaction-flow-row" key={batch.id}>
+            <strong>{batch.batchNo}</strong>
+            <span>
+              {batch.kind === "sample" ? "Sampel" : "Produksi"} ·{" "}
+              {batch.status === "completed" ? "Selesai" : "Direncanakan"}
+            </span>
+            <small>
+              Rencana {number(batch.plannedQuantity)} · selesai {number(batch.completedQuantity)}
+            </small>
+            {isAdmin && batch.status !== "completed" ? (
+              <form action={completeProductionBatch} className="transaction-flow-inline-action">
+                <input name="batchId" type="hidden" value={batch.id} />
+                <label>
+                  Jumlah selesai
+                  <input
+                    max={Number(batch.plannedQuantity ?? 0)}
+                    min="0.001"
+                    name="completedQuantity"
+                    required
+                    step="0.001"
+                    type="number"
+                  />
+                </label>
+                <button type="submit">Tandai selesai</button>
+              </form>
+            ) : null}
+          </div>
+        ))}
+        {!transaction.batches.length ? <p className="transaction-flow-empty">Belum ada sampel atau batch.</p> : null}
+        {isAdmin && released ? (
+          <details className="transaction-flow-details">
+            <summary>Catat sampel atau batch baru</summary>
+            <form action={createProductionBatch} className="transaction-flow-form">
+              <input name="transactionId" type="hidden" value={transaction.header.id} />
+              <label>
+                Jenis pekerjaan
+                <select name="kind">
+                  <option value="sample">Sampel</option>
+                  <option value="production">Produksi</option>
+                </select>
+              </label>
+              <label>
+                Jumlah rencana
+                <input min="0.001" name="plannedQuantity" required step="0.001" type="number" />
+              </label>
+              <button type="submit">Simpan rencana</button>
+            </form>
+          </details>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
+function DeliveryStep({ transaction, isAdmin }: { transaction: Transaction; isAdmin: boolean }) {
+  const shippedByLine = new Map<string, number>();
+  transaction.shipmentItems.forEach((item) => {
+    const shipment = transaction.shipments.find((entry) => entry.id === item.shipmentId)!;
+    shippedByLine.set(
+      item.lineId,
+      (shippedByLine.get(item.lineId) ?? 0) + committedAmount(shipment.status, item.quantity, item.acceptedQuantity),
+    );
+  });
+  const shipmentLines = transaction.lines.map((line) => ({
+    id: line.id,
+    description: line.description,
+    unit: line.unit,
+    remaining: Math.max(0, Number(line.quantity) - (shippedByLine.get(line.id) ?? 0)),
+  }));
+  return (
+    <div className="transaction-flow-stack">
+      <section className="transaction-flow-card">
+        <div className="transaction-flow-card__head">
+          <div>
+            <span className="eyebrow">01 · Jumlah barang</span>
+            <h3>Siapkan pengiriman</h3>
+          </div>
+        </div>
+        {transaction.header.fulfilmentStatus === "not_released" ? (
+          <p className="transaction-flow-empty">Pekerjaan perlu dilepas ke produksi sebelum pengiriman disiapkan.</p>
+        ) : (
+          <TransactionShipmentForm
+            transactionId={transaction.header.id}
+            lines={shipmentLines}
+            customerName={transaction.header.customerName}
+            customerAddress={transaction.header.customerAddress ?? ""}
+          />
+        )}
+      </section>
+      <section className="transaction-flow-card">
+        <div className="transaction-flow-card__head">
+          <div>
+            <span className="eyebrow">02 · Surat jalan</span>
+            <h3>Periksa lalu kirim barang</h3>
+          </div>
+        </div>
+        {isAdmin ? (
+          <p>
+            <Link href="/admin/settings/delivery">Periksa urutan nomor surat jalan dan identitas penerbit</Link>
+          </p>
+        ) : null}
+        {transaction.shipments.length ? (
+          transaction.shipments.map((shipment) => {
+            const document = transaction.documents.find((item) => item.id === shipment.deliveryDocumentId);
+            const versions = transaction.documents
+              .filter(
+                (item) =>
+                  item.type === "delivery_note" &&
+                  ((item.payload as { shipmentId?: string } | null)?.shipmentId === shipment.id ||
+                    item.id === document?.id),
+              )
+              .sort((left, right) => right.version - left.version);
+            const currentItems = transaction.shipmentItems.filter((item) => item.shipmentId === shipment.id);
+            const mayRevise =
+              shipment.status === "planned" &&
+              (!document || (Boolean(shipment.deliveryNo) && document.status === "ready"));
+            return (
+              <article className="transaction-flow-shipment" key={shipment.id}>
+                <div>
+                  <strong>{shipment.deliveryNo ?? shipment.shipmentNo}</strong>
+                  <span>
+                    {shipment.status === "planned"
+                      ? "Disiapkan"
+                      : shipment.status === "shipped"
+                        ? "Dalam pengiriman"
+                        : shipment.status === "received_partial"
+                          ? "Diterima sebagian · siapkan pengganti"
+                          : "Diterima pelanggan"}
+                  </span>
+                  <small>
+                    {currentItems.map((item) => `${item.description}: ${number(item.quantity)}`).join(" · ")}
+                  </small>
+                </div>
+                {mayRevise ? (
+                  <details className="transaction-flow-details">
+                    <summary>{document ? "Koreksi sebelum barang dikirim" : "Ubah rencana pengiriman"}</summary>
+                    <p>
+                      Jika PDF sudah dibuat, koreksi akan menyimpan PDF lama sebagai arsip. Buat versi baru sebelum
+                      menandai barang dikirim.
+                    </p>
+                    <TransactionShipmentForm
+                      transactionId={transaction.header.id}
+                      shipmentId={shipment.id}
+                      lines={shipmentLines.map((line) => ({
+                        ...line,
+                        remaining:
+                          line.remaining + Number(currentItems.find((item) => item.lineId === line.id)?.quantity ?? 0),
+                      }))}
+                      customerName={shipment.recipientName ?? transaction.header.customerName}
+                      customerAddress={shipment.deliveryAddress ?? transaction.header.customerAddress ?? ""}
+                      initialDetails={readDeliveryDetails(shipment.deliveryDetails)}
+                      initialItems={currentItems.map((item) => ({
+                        lineId: item.lineId,
+                        quantity: item.quantity,
+                        logistics: readShipmentLogistics(item.logistics),
+                      }))}
+                    />
+                  </details>
+                ) : null}
+                {shipment.status === "planned" && !document ? (
+                  <form action={generateDeliveryNote}>
+                    <input name="shipmentId" type="hidden" value={shipment.id} />
+                    <button
+                      disabled={
+                        !docGenAllowed(transaction) ||
+                        !process.env.DOCGEN_API_KEY ||
+                        !process.env.DOCGEN_TEMPLATE_DELIVERY_ID ||
+                        !docGenTemplateReady("DELIVERY")
+                      }
+                      type="submit"
+                    >
+                      {versions.length ? "Buat versi surat jalan baru" : "Buat surat jalan"}
+                    </button>
+                    {!docGenTemplateReady("DELIVERY") ? (
+                      <small>Template baru belum terverifikasi di DocGen. Rencana tetap tersimpan.</small>
+                    ) : null}
+                  </form>
+                ) : null}
+                {versions.length ? <DocumentList documents={versions} transaction={transaction} /> : null}
+                {shipment.status === "planned" && document?.status === "ready" ? (
+                  <form action={markShipmentSent}>
+                    <input name="shipmentId" type="hidden" value={shipment.id} />
+                    <button type="submit">Tandai barang dikirim</button>
+                  </form>
+                ) : null}
+              </article>
+            );
+          })
+        ) : (
+          <p className="transaction-flow-empty">Belum ada pengiriman.</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function HandoverStep({ transaction, isAdmin }: { transaction: Transaction; isAdmin: boolean }) {
+  const pending = transaction.shipments.filter(
+    (shipment) => !["received", "received_partial"].includes(shipment.status) || !shipment.bastDocumentId,
+  );
+  const delivered = new Map<string, number>();
+  transaction.shipmentItems
+    .filter((item) =>
+      transaction.shipments.some(
+        (shipment) =>
+          shipment.id === item.shipmentId &&
+          ["received", "received_partial"].includes(shipment.status) &&
+          shipment.bastDocumentId,
+      ),
+    )
+    .forEach((item) => {
+      const shipment = transaction.shipments.find((entry) => entry.id === item.shipmentId)!;
+      delivered.set(
+        item.lineId,
+        (delivered.get(item.lineId) ?? 0) + acceptedAmount(shipment.status, item.quantity, item.acceptedQuantity),
+      );
+    });
+  const allDelivered =
+    transaction.lines.length > 0 &&
+    transaction.lines.every((line) => (delivered.get(line.id) ?? 0) + 0.0001 >= Number(line.quantity));
+  const readyToClose =
+    transaction.shipments.length > 0 &&
+    !pending.length &&
+    !transaction.shipments.some(
+      (shipment) => (shipment.handoverDetails as { condition?: string } | null)?.condition === "damaged",
+    ) &&
+    allDelivered &&
+    transaction.totals.invoiceAmount + 0.001 >= transaction.totals.quotedAmount &&
+    transaction.totals.outstandingAmount === 0;
+  return (
+    <div className="transaction-flow-stack">
+      <section className="transaction-flow-card">
+        <div className="transaction-flow-card__head">
+          <div>
+            <span className="eyebrow">01 · Bukti penerimaan</span>
+            <h3>Serah terima barang</h3>
+          </div>
+        </div>
+        <p>
+          STB mencatat jumlah dan kondisi barang yang benar-benar diterima. PDF tanpa tanda tangan bukan bukti
+          penerimaan.
+        </p>
+        {isAdmin ? (
+          <p>
+            <Link href="/admin/settings/handover">Periksa nomor STB resmi sebelum penerbitan</Link>
+          </p>
+        ) : null}
+        {transaction.shipments.map((shipment) => {
+          const bastDocuments = transaction.documents
+            .filter(
+              (item) =>
+                item.type === "bast" && (item.payload as { shipmentId?: string } | null)?.shipmentId === shipment.id,
+            )
+            .sort((left, right) => right.version - left.version);
+          const latest = bastDocuments[0];
+          const currentProof = transaction.documents.find((item) => item.id === shipment.bastDocumentId);
+          const shipmentItems = transaction.shipmentItems.filter((item) => item.shipmentId === shipment.id);
+          const deliveryDetails = readDeliveryDetails(shipment.deliveryDetails);
+          const saved = handoverDetailsSchema.safeParse(shipment.handoverDetails);
+          const latestDetails = handoverDetailsSchema.safeParse(
+            (latest?.payload as { details?: unknown } | null)?.details,
+          );
+          const initial = saved.success
+            ? saved.data
+            : latestDetails.success
+              ? latestDetails.data
+              : {
+                  recipient: shipment.recipientName ?? "",
+                  location: shipment.deliveryAddress ?? "",
+                  condition: "good" as const,
+                  note: "",
+                  senderName: deliveryDetails.senderName,
+                  driverName: deliveryDetails.driverName,
+                  receiverName: deliveryDetails.receiverSignatureName,
+                  items: shipmentItems.map((item) => ({ lineId: item.lineId, accepted: item.quantity })),
+                };
+          return (
+            <article className="transaction-flow-shipment" key={shipment.id}>
+              <div>
+                <strong>{shipment.shipmentNo}</strong>
+                <span>
+                  {shipment.status === "received_partial" && shipment.bastDocumentId
+                    ? "Diterima sebagian · selisih dapat dikirim ulang"
+                    : shipment.status === "received" && shipment.bastDocumentId
+                      ? "Bukti penerimaan lengkap tersimpan"
+                      : shipment.status === "shipped"
+                        ? "Menunggu bukti pelanggan"
+                        : "Belum dikirim"}
+                </span>
+              </div>
+              {shipment.status !== "planned" ? (
+                <>
+                  <DocumentList documents={bastDocuments} transaction={transaction} />
+                  {shipment.status === "shipped" || (shipment.bastDocumentId && isAdmin) ? (
+                    <TransactionHandoverForm
+                      transactionId={transaction.header.id}
+                      shipmentId={shipment.id}
+                      lines={shipmentItems.map((item) => ({
+                        lineId: item.lineId,
+                        description: item.description,
+                        quantity: item.quantity,
+                        unit: transaction.lines.find((line) => line.id === item.lineId)?.unit ?? "pcs",
+                      }))}
+                      initial={initial}
+                      latestReady={latest?.status === "ready"}
+                      latestNumber={latest?.documentNo ?? null}
+                      hasProof={Boolean(shipment.bastDocumentId)}
+                      isAdmin={isAdmin}
+                      enabled={
+                        docGenAllowed(transaction) &&
+                        Boolean(
+                          process.env.DOCGEN_API_KEY &&
+                          process.env.DOCGEN_TEMPLATE_BAST_ID &&
+                          docGenTemplateReady("BAST"),
+                        )
+                      }
+                    />
+                  ) : null}
+                  {shipment.bastDocumentId ? (
+                    <Link
+                      href={`/api/admin/transactions/${transaction.header.id}/documents/${shipment.bastDocumentId}`}
+                      target="_blank"
+                    >
+                      Lihat STB bertanda tangan
+                      {currentProof?.payload && (currentProof.payload as { source?: string }).source === "external"
+                        ? " (dokumen eksternal)"
+                        : ""}
+                    </Link>
+                  ) : null}
+                </>
+              ) : null}
+            </article>
+          );
+        })}
+        {!transaction.shipments.length ? (
+          <p className="transaction-flow-empty">Belum ada pengiriman untuk diserahterimakan.</p>
+        ) : null}
+      </section>
+      {isAdmin ? (
+        <section className="transaction-flow-card">
+          <div className="transaction-flow-card__head">
+            <div>
+              <span className="eyebrow">02 · Tinjau akhir</span>
+              <h3>Tutup transaksi</h3>
+            </div>
+          </div>
+          {transaction.header.fulfilmentStatus === "completed" ? (
+            <p className="transaction-flow-success">
+              Transaksi sudah ditutup. Riwayat dan dokumen tetap dapat dilihat.
+            </p>
+          ) : (
+            <>
+              <p>
+                {readyToClose
+                  ? "Bukti penerimaan dan pembayaran sudah tercatat. Periksa sekali lagi sebelum menutup."
+                  : "Masih ada pengiriman atau pembayaran yang belum selesai. Administrator dapat menutup dengan alasan pengecualian yang jelas."}
+              </p>
+              <form action={closeTransaction} className="transaction-flow-form">
+                <input name="transactionId" type="hidden" value={transaction.header.id} />
+                {!readyToClose ? (
+                  <>
+                    <label>
+                      Alasan pengecualian
+                      <textarea
+                        minLength={8}
+                        maxLength={500}
+                        name="exceptionReason"
+                        placeholder="Jelaskan mengapa transaksi ditutup walau masih ada pekerjaan tertunda."
+                        required
+                        rows={3}
+                      />
+                    </label>
+                    <label className="transaction-flow-checkbox">
+                      <input name="exceptionConfirmed" required type="checkbox" value="yes" />
+                      <span>
+                        Saya memahami bahwa transaksi ini akan ditutup sebagai pengecualian, bukan penutupan normal.
+                      </span>
+                    </label>
+                  </>
+                ) : null}
+                <button type="submit">{readyToClose ? "Tutup transaksi" : "Tutup sebagai pengecualian"}</button>
+              </form>
+            </>
+          )}
+        </section>
+      ) : null}
+    </div>
   );
 }
 
@@ -253,394 +1241,260 @@ export default async function TransactionDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ stage?: string; returnTo?: string; email?: string }>;
+  searchParams: Promise<{ step?: string; stage?: string; returnTo?: string; notice?: string; email?: string }>;
 }) {
   const user = await requireOperationsAccess();
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const returnTo = query.returnTo?.startsWith("/admin/transactions?") ? query.returnTo : "/admin/transactions";
   const transaction = await getTransactionDetail(id);
   if (!transaction) notFound();
+  const suggested = latestStep(transaction);
+  const requested =
+    query.step ??
+    (query.stage === "payment"
+      ? "payment"
+      : query.stage === "fulfilment"
+        ? "production"
+        : query.stage === "commercial"
+          ? "quote"
+          : suggested);
+  const active: Step = steps.some((step) => step.id === requested) ? (requested as Step) : suggested;
+  const returnTo = query.returnTo?.startsWith("/admin/transactions?") ? query.returnTo : "/admin/transactions";
+  const stepStates = transactionStepStates(transaction, transaction.workspace);
+  const readonly =
+    transaction.header.fulfilmentStatus === "completed" || transaction.header.commercialStatus === "cancelled";
+  const recommended = transaction.workspace.pendingPayment ? "payment" : suggested;
+  const recommendedLabel = steps.find((step) => step.id === recommended)!.label;
+  const ContinueLink = active === recommended ? "a" : Link;
 
-  const { header, totals } = transaction;
-  const suggestedStage = getSuggestedStage(header);
-  const activeStage =
-    query.stage === "commercial" || query.stage === "payment" || query.stage === "fulfilment"
-      ? query.stage
-      : suggestedStage;
-  const activeStatus = stageStatus(activeStage, header);
-  const commercialDocuments = transaction.documents.filter((document) =>
-    ["quotation", "purchase_order", "contract", "invoice_dp", "invoice_final", "tax_invoice"].includes(document.type),
-  );
-  const deliveryDocuments = transaction.documents.filter((document) =>
-    ["delivery_note", "bast"].includes(document.type),
-  );
-  const releaseChecks = [
-    { label: "Customer aktif", ready: Boolean(header.customerName) },
-    { label: "Nilai dan item tersedia", ready: transaction.lines.length > 0 && totals.quotedAmount > 0 },
-    { label: "Target pekerjaan ditetapkan", ready: Boolean(header.dueAt) },
-    { label: "Pembayaran terverifikasi", ready: totals.receivedAmount > 0 },
-  ];
-  const missingReleaseChecks = releaseChecks.filter((item) => !item.ready);
+  const notices: Record<string, string> = {
+    "draft-saved": "Rincian penawaran tersimpan. Periksa nilainya sebelum membuat PDF.",
+    "pdf-ready": "PDF penawaran siap ditinjau dan dikirim.",
+    "pdf-check": "Pembuatan PDF belum pasti. Periksa DocGen sebelum mencoba lagi agar tidak ada biaya ganda.",
+    "docgen-unavailable": "Template penawaran baru belum terverifikasi di DocGen. Draf tetap tersimpan.",
+    "invoice-template-unavailable": "Template invoice DocGen belum disiapkan.",
+    "invoice-check": "Invoice belum siap. Periksa DocGen sebelum mencoba lagi.",
+    "invoice-ready": "Invoice siap ditinjau dan dikirim.",
+    "delivery-template-unavailable":
+      "Template surat jalan baru belum terverifikasi di DocGen. Rencana tetap tersimpan.",
+    "delivery-check": "Surat jalan belum siap. Periksa DocGen sebelum mencoba lagi.",
+    "delivery-ready": "Surat jalan siap diperiksa.",
+    "template-unavailable": "Template dokumen DocGen belum disiapkan.",
+    "document-check": "Dokumen belum siap. Periksa DocGen sebelum mencoba lagi.",
+    "document-ready": "Dokumen siap ditinjau.",
+    "email-linked": "Email ditautkan ke transaksi ini.",
+    "batch-created": "Rencana sampel atau batch tersimpan.",
+    "batch-completed": "Jumlah selesai dicatat.",
+    "shipment-planned": "Pengiriman disiapkan. Buat dan periksa surat jalan sebelum mengirim barang.",
+    "shipment-revised": "Rincian pengiriman diperbarui. Jika PDF lama ada, buat versi baru sebelum barang dikirim.",
+    "shipment-sent": "Barang ditandai sudah dikirim.",
+    closed: "Transaksi ditutup dan tetap tersimpan sebagai riwayat.",
+  };
 
   return (
-    <section className="transaction-workspace-page">
-      <header className="transaction-workspace-head">
-        <Link href={returnTo}>← Semua transaksi</Link>
-        <div className="transaction-workspace-head__body">
-          <div>
-            <p className="eyebrow">{header.referenceNo}</p>
-            <h1>{header.title}</h1>
-            <p>{header.customerName}</p>
-          </div>
-          <span className="transaction-status">Tahap utama: {stages[suggestedStage].label}</span>
-        </div>
-      </header>
+    <section className={`transaction-flow-page ${styles.detail}`}>
+      <AdminPageHeader
+        title={transaction.header.title}
+        description={`${transaction.header.referenceNo} · ${transaction.header.customerName} · Penanggung jawab: ${transaction.header.ownerName ?? "Belum ditentukan"}`}
+        back={{ href: returnTo, label: "Kembali ke semua transaksi" }}
+        actions={
+          <span className="transaction-flow-header__status">
+            {transaction.header.fulfilmentStatus === "completed"
+              ? "Selesai"
+              : transactionStatusLabel("fulfilment", transaction.header.fulfilmentStatus)}
+          </span>
+        }
+      />
+      {transaction.header.dataClass !== "production" ? (
+        <p className="transaction-flow-notice">Transaksi uji / contoh — bukan pelanggan nyata.</p>
+      ) : null}
+      {docGenDummyMode() ? (
+        <p className="transaction-flow-notice" role="status">
+          {localQaRendererEnabled()
+            ? "Renderer QA lokal aktif. PDF pratinjau hanya untuk transaksi uji, disimpan privat, dan tidak dapat dikirim melalui email."
+            : `DocGen masih memakai template DRAF CONTOH. PDF hanya dapat dibuat pada transaksi uji dan dikirim ke ${DOCGEN_TEST_RECIPIENT}.`}
+        </p>
+      ) : null}
+      {query.notice && notices[query.notice] ? (
+        <p className="transaction-flow-notice" role="status">
+          {notices[query.notice]}
+        </p>
+      ) : null}
       {query.email === "sent" ? (
-        <p className="integration-success" role="status">
+        <p className="transaction-flow-notice" role="status">
           Dokumen diserahkan ke server email untuk dikirim.
         </p>
       ) : null}
       {query.email === "check" ? (
-        <p className="integration-alert" role="alert">
-          Status pengiriman belum pasti. Periksa Email terkirim atau webmail sebelum mengirim ulang agar tidak terjadi
-          duplikasi.
+        <p className="transaction-flow-notice" role="alert">
+          Pengiriman email belum pasti. Periksa Email terkirim sebelum mencoba ulang.
         </p>
       ) : null}
-
-      <div className="transaction-workspace-layout">
+      <div className="transaction-flow-summary">
+        <div>
+          <span>Penawaran setelah diskon & pajak</span>
+          <strong>{workspaceMoney(transaction.workspace.quote)}</strong>
+        </div>
+        <div>
+          <span>Tagihan terbit</span>
+          <strong>{workspaceMoney(transaction.workspace.invoice)}</strong>
+        </div>
+        <div>
+          <span>Sisa tagihan</span>
+          <strong>
+            {transaction.workspace.issuedCount
+              ? workspaceMoney(transaction.workspace.outstanding)
+              : "Belum ada invoice"}
+          </strong>
+        </div>
+        <div>
+          <span>Pembayaran terverifikasi</span>
+          <strong>{workspaceMoney(transaction.workspace.received)}</strong>
+        </div>
+      </div>
+      {transaction.workspace.pendingPayment ? (
+        <p className="transaction-flow-notice" role="status">
+          <Link
+            href={`/admin/transactions/${id}?step=payment&returnTo=${encodeURIComponent(returnTo)}#transaction-step-title`}
+          >
+            Pembayaran menunggu verifikasi administrator
+          </Link>
+          . Status ini tetap berlaku meskipun produksi atau pengiriman sudah berjalan.
+        </p>
+      ) : null}
+      {transaction.workspace.overpayment && transaction.workspace.overpayment !== "0.00" ? (
+        <p className="transaction-flow-notice">
+          Kelebihan pembayaran: <strong>{workspaceMoney(transaction.workspace.overpayment)}</strong>. Periksa
+          alokasinya; bukan sisa tagihan negatif.
+        </p>
+      ) : null}
+      <div className="transaction-flow-layout">
         <main>
-          <StageNavigation activeStage={activeStage} header={header} id={header.id} returnTo={returnTo} />
-
-          <section className="transaction-stage-focus">
-            <div className="transaction-stage-focus__intro">
-              <span aria-hidden="true">0{Object.keys(stages).indexOf(activeStage) + 1}</span>
-              <div>
-                <p className="eyebrow">Tahap aktif</p>
-                <h2>{stages[activeStage].label}</h2>
-                <p>{stages[activeStage].description}</p>
-              </div>
-              {user.role === "admin" ? (
-                <StageManager currentStatus={activeStatus} id={header.id} stage={activeStage} />
-              ) : null}
+          <div className={styles.recommendation}>
+            <div>
+              <p className="eyebrow">{readonly ? "Arsip pekerjaan" : "Yang perlu dikerjakan"}</p>
+              <h2>
+                {readonly
+                  ? transaction.workspace.action
+                  : transaction.workspace.pendingPayment
+                    ? "Periksa pembayaran pelanggan"
+                    : transaction.workspace.action}
+              </h2>
+              <p>
+                {readonly
+                  ? "Dokumen dan riwayat tetap tersedia untuk ditinjau."
+                  : transaction.workspace.pendingPayment
+                    ? user.role === "admin"
+                      ? "Buka bukti pembayaran dan cocokkan jumlahnya sebelum memverifikasi."
+                      : "Menunggu verifikasi administrator. Anda tetap dapat melihat bukti dan melanjutkan pencatatan yang diizinkan."
+                    : `Lanjutkan di ${recommendedLabel}. Langkah lainnya tetap bisa dibuka untuk melihat rincian.`}
+              </p>
             </div>
-
-            {activeStage === "commercial" ? (
-              <>
-                <section className="transaction-next-action">
-                  <span className="transaction-next-action__icon">01</span>
-                  <div>
-                    <p className="eyebrow">Status penawaran</p>
-                    <h3>{statusLabel("commercial", header.commercialStatus)}</h3>
-                    <p>Siapkan ruang lingkup, nilai, dan dokumen komersial sebelum pekerjaan diteruskan.</p>
-                  </div>
-                </section>
-                <div className="transaction-stage-grid">
-                  <section className="transaction-workspace-card transaction-workspace-card--primary">
-                    <div className="section-heading">
-                      <div>
-                        <p className="eyebrow">Nilai &amp; barang</p>
-                        <h2>{transaction.lines.length ? "Rincian pekerjaan" : "Nilai belum disiapkan"}</h2>
-                      </div>
-                      <span className="transaction-due">Target: {dateText(header.dueAt)}</span>
-                    </div>
-                    {transaction.lines.length ? (
-                      <div className="line-table">
-                        <div className="line-table-head">
-                          <span>Barang / pekerjaan</span>
-                          <span>Jumlah</span>
-                          <span>Harga</span>
-                          <span>Nilai</span>
-                        </div>
-                        {transaction.lines.map((line) => (
-                          <div className="line-table-row" key={line.id}>
-                            <span data-label="Barang / pekerjaan">
-                              <strong>{line.productName ?? line.description}</strong>
-                              <small>{line.materialName ?? "Material belum dipilih"}</small>
-                            </span>
-                            <span data-label="Jumlah">
-                              {line.quantity} {line.unit}
-                            </span>
-                            <span data-label="Harga">{rupiah(Number(line.unitPrice))}</span>
-                            <span data-label="Nilai">{rupiah(Number(line.quantity) * Number(line.unitPrice))}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="workspace-empty">
-                        Rincian barang dan anggaran akan muncul di sini saat penawaran disiapkan.
-                      </p>
-                    )}
-                    <dl className="transaction-totals">
-                      <div>
-                        <dt>Nilai penawaran</dt>
-                        <dd>{rupiah(totals.quotedAmount)}</dd>
-                      </div>
-                      <div>
-                        <dt>Tagihan dibuat</dt>
-                        <dd>{rupiah(totals.invoiceAmount)}</dd>
-                      </div>
-                    </dl>
-                  </section>
-                  <section className="transaction-workspace-card">
-                    <p className="eyebrow">Dokumen komersial</p>
-                    <h2>Penawaran hingga invoice</h2>
-                    {commercialDocuments.length ? (
-                      <div className="document-list">
-                        {commercialDocuments.map((document) => (
-                          <article key={document.id}>
-                            <span className="document-icon">PDF</span>
-                            <div>
-                              <strong>{documentLabel(document.type)}</strong>
-                              <small>{document.documentNo ?? document.originalName ?? "Belum bernomor"}</small>
-                            </div>
-                            <em>{document.status}</em>
-                            {document.storagePath ? (
-                              <SendDocumentEmail
-                                customerEmail={header.customerEmail}
-                                documentId={document.id}
-                                documentName={documentLabel(document.type)}
-                                referenceNo={header.referenceNo}
-                                transactionId={header.id}
-                              />
-                            ) : null}
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="workspace-empty">Belum ada dokumen komersial untuk pekerjaan ini.</p>
-                    )}
-                  </section>
-                </div>
-              </>
+            {!readonly ? (
+              <ContinueLink
+                className={styles.continueLink}
+                href={
+                  active === recommended
+                    ? "#transaction-step-title"
+                    : `/admin/transactions/${id}?step=${recommended}&returnTo=${encodeURIComponent(returnTo)}#transaction-step-title`
+                }
+              >
+                {active === recommended ? "Lihat rincian" : `Buka ${recommendedLabel}`}{" "}
+                <span aria-hidden="true">→</span>
+              </ContinueLink>
             ) : null}
-
-            {activeStage === "payment" ? (
-              <>
-                <section className="transaction-next-action">
-                  <span className="transaction-next-action__icon">02</span>
-                  <div>
-                    <p className="eyebrow">Status pembayaran</p>
-                    <h3>{statusLabel("payment", header.paymentStatus)}</h3>
-                    <p>
-                      Catat pembayaran dari customer di sini. Verifikasi dilakukan administrator sebelum produksi
-                      dilepas.
-                    </p>
-                  </div>
-                </section>
-                <dl className="transaction-metric-strip">
-                  <div>
-                    <dt>Tagihan dibuat</dt>
-                    <dd>{rupiah(totals.invoiceAmount)}</dd>
-                  </div>
-                  <div>
-                    <dt>Diterima</dt>
-                    <dd>{rupiah(totals.receivedAmount)}</dd>
-                  </div>
-                  <div>
-                    <dt>Sisa piutang</dt>
-                    <dd>{rupiah(totals.outstandingAmount)}</dd>
-                  </div>
-                </dl>
-                <div className="transaction-stage-grid">
-                  <section className="transaction-workspace-card transaction-workspace-card--primary">
-                    <p className="eyebrow">Konfirmasi pembayaran</p>
-                    <h2>Catat pembayaran masuk</h2>
-                    <form action={recordTransactionPayment} className="payment-form">
-                      <input name="transactionId" type="hidden" value={header.id} />
-                      <label>
-                        Nominal
-                        <input name="amount" type="number" min="1" step="1" placeholder="Contoh: 2500000" required />
-                      </label>
-                      <label>
-                        Referensi / catatan
-                        <input name="reference" placeholder="Nomor transfer atau catatan" />
-                      </label>
-                      <button type="submit">Catat pembayaran</button>
-                    </form>
-                  </section>
-                  <section className="transaction-workspace-card">
-                    <p className="eyebrow">Riwayat pembayaran</p>
-                    <h2>Catatan dana pekerjaan</h2>
-                    {transaction.entries.length ? (
-                      <div className="financial-list">
-                        {transaction.entries.map((entry) => (
-                          <article key={entry.id}>
-                            <div>
-                              <strong>{entry.direction === "in" ? "Pembayaran customer" : "Pengeluaran proyek"}</strong>
-                              <small>
-                                {dateText(entry.occurredAt)} · {entry.reference ?? "Tanpa referensi"}
-                              </small>
-                            </div>
-                            <b>
-                              {entry.direction === "in" ? "+" : "−"}
-                              {rupiah(Number(entry.amount))}
-                            </b>
-                            {entry.status === "unverified" && user.role === "admin" ? (
-                              <form action={verifyTransactionPayment}>
-                                <input name="entryId" type="hidden" value={entry.id} />
-                                <button type="submit">Verifikasi</button>
-                              </form>
-                            ) : (
-                              <em>{entry.status === "verified" ? "Terverifikasi" : "Menunggu cek"}</em>
-                            )}
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="workspace-empty">Belum ada pembayaran yang dicatat pada pekerjaan ini.</p>
-                    )}
-                  </section>
-                </div>
-              </>
-            ) : null}
-
-            {activeStage === "fulfilment" ? (
-              <>
-                <section className="transaction-next-action">
-                  <span className="transaction-next-action__icon">03</span>
-                  <div>
-                    <p className="eyebrow">Status produksi &amp; pengiriman</p>
-                    <h3>{statusLabel("fulfilment", header.fulfilmentStatus)}</h3>
-                    <p>
-                      {missingReleaseChecks.length
-                        ? "Ada data yang belum lengkap. Administrator tetap dapat melanjutkan setelah meninjaunya."
-                        : "Data utama sudah siap. Lepaskan pekerjaan saat tim produksi siap menerima."}
-                    </p>
-                  </div>
-                  {user.role === "admin" && header.fulfilmentStatus !== "released" ? (
-                    <form action={releaseProduction}>
-                      <input name="transactionId" type="hidden" value={header.id} />
-                      <button className="primary-action" type="submit">
-                        Lepaskan ke produksi
-                      </button>
-                    </form>
-                  ) : null}
-                </section>
-                {missingReleaseChecks.length ? (
-                  <section className="transaction-release-warning" aria-label="Pemeriksaan sebelum produksi">
-                    <strong>Periksa sebelum melepas ke produksi</strong>
-                    <p>Produksi tetap dapat diteruskan sesuai kebijakan, tetapi data berikut belum lengkap:</p>
-                    <ul>
-                      {missingReleaseChecks.map((item) => (
-                        <li key={item.label}>{item.label}</li>
-                      ))}
-                    </ul>
-                  </section>
-                ) : null}
-                <div className="transaction-stage-grid">
-                  <section className="transaction-workspace-card">
-                    <p className="eyebrow">Produksi</p>
-                    <h2>Mould, sampel, dan batch</h2>
-                    {transaction.batches.length ? (
-                      <div className="document-list">
-                        {transaction.batches.map((batch) => (
-                          <article key={batch.id}>
-                            <span className="document-icon">{batch.kind === "sample" ? "SPL" : "PRD"}</span>
-                            <div>
-                              <strong>{batch.productName ?? batch.batchNo}</strong>
-                              <small>
-                                {batch.mouldName ?? "Mould belum dipilih"} · rencana {quantity(batch.plannedQuantity)}{" "}
-                                pcs
-                              </small>
-                            </div>
-                            <em>{batchStatusLabel(batch.status)}</em>
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="workspace-empty">Belum ada sampel atau batch produksi untuk pekerjaan ini.</p>
-                    )}
-                  </section>
-                  <section className="transaction-workspace-card">
-                    <p className="eyebrow">Pengiriman &amp; serah terima</p>
-                    <h2>Barang sampai ke customer</h2>
-                    {transaction.shipments.length || deliveryDocuments.length ? (
-                      <div className="document-list">
-                        {transaction.shipments.map((shipment) => (
-                          <article key={shipment.id}>
-                            <span className="document-icon">KRM</span>
-                            <div>
-                              <strong>{shipment.shipmentNo}</strong>
-                              <small>
-                                {shipment.recipientName ?? header.customerName} · dikirim {dateText(shipment.shippedAt)}
-                              </small>
-                            </div>
-                            <em>{shipment.status}</em>
-                          </article>
-                        ))}
-                        {deliveryDocuments.map((document) => (
-                          <article key={document.id}>
-                            <span className="document-icon">PDF</span>
-                            <div>
-                              <strong>{documentLabel(document.type)}</strong>
-                              <small>{document.documentNo ?? document.originalName ?? "Belum bernomor"}</small>
-                            </div>
-                            <em>{document.status}</em>
-                            {document.storagePath ? (
-                              <SendDocumentEmail
-                                customerEmail={header.customerEmail}
-                                documentId={document.id}
-                                documentName={documentLabel(document.type)}
-                                referenceNo={header.referenceNo}
-                                transactionId={header.id}
-                              />
-                            ) : null}
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="workspace-empty">Belum ada surat jalan, BAST, atau pengiriman yang dicatat.</p>
-                    )}
-                  </section>
-                </div>
-              </>
-            ) : null}
+          </div>
+          <p className={styles.navigationHelp}>
+            Pilih langkah untuk melihat atau melengkapi data. Status di bawah menunjukkan catatan yang sudah tersedia.
+          </p>
+          <nav aria-label="Langkah transaksi" className="transaction-flow-nav">
+            {steps.map((step, index) => (
+              <Link
+                aria-current={active === step.id ? "step" : undefined}
+                className={active === step.id ? "is-active" : stepStates[step.id].kind === "complete" ? "is-done" : ""}
+                data-state={stepStates[step.id].kind}
+                href={`/admin/transactions/${id}?step=${step.id}&returnTo=${encodeURIComponent(returnTo)}#transaction-step-title`}
+                key={step.id}
+              >
+                <span aria-hidden="true">
+                  {stepStates[step.id].kind === "complete" ? "✓" : String(index + 1).padStart(2, "0")}
+                </span>
+                <strong>{step.label}</strong>
+                <small>{stepStates[step.id].label}</small>
+              </Link>
+            ))}
+          </nav>
+          <section className="transaction-flow-focus" aria-labelledby="transaction-step-title">
+            <div className="transaction-flow-focus__intro">
+              <div>
+                <p className="eyebrow">Langkah {steps.findIndex((step) => step.id === active) + 1} dari 6</p>
+                <h2 id="transaction-step-title" tabIndex={-1}>
+                  {steps.find((step) => step.id === active)?.label}
+                </h2>
+                <p>{steps.find((step) => step.id === active)?.help}</p>
+              </div>
+              <span className={styles.stepBadge} data-state={stepStates[active].kind}>
+                {stepStates[active].label}
+              </span>
+            </div>
+            <div className="transaction-flow-next">
+              <strong>{readonly ? "Ringkasan" : "Pada langkah ini"}</strong>
+              <p>{nextAction(active, transaction)}</p>
+            </div>
+            <fieldset className="transaction-flow-step-fields" disabled={readonly}>
+              {active === "quote" ? <QuoteStep transaction={transaction} isAdmin={user.role === "admin"} /> : null}
+              {active === "order" ? <OrderStep transaction={transaction} returnTo={returnTo} /> : null}
+              {active === "payment" ? <PaymentStep isAdmin={user.role === "admin"} transaction={transaction} /> : null}
+              {active === "production" ? (
+                <ProductionStep isAdmin={user.role === "admin"} transaction={transaction} />
+              ) : null}
+              {active === "delivery" ? (
+                <DeliveryStep isAdmin={user.role === "admin"} transaction={transaction} />
+              ) : null}
+              {active === "handover" ? (
+                <HandoverStep isAdmin={user.role === "admin"} transaction={transaction} />
+              ) : null}
+            </fieldset>
           </section>
         </main>
-
-        <aside className="transaction-context-panel">
+        <aside className="transaction-flow-aside">
           <p className="eyebrow">Informasi pekerjaan</p>
-          <h2>Ringkasan yang selalu terlihat.</h2>
+          <h2>{transaction.header.customerName}</h2>
           <dl>
             <div>
-              <dt>Customer</dt>
-              <dd>{header.customerName}</dd>
-            </div>
-            <div>
               <dt>Penanggung jawab</dt>
-              <dd>{header.ownerName ?? "Belum ditentukan"}</dd>
+              <dd>{transaction.header.ownerName ?? "Belum ditentukan"}</dd>
             </div>
             <div>
-              <dt>Target pekerjaan</dt>
-              <dd>{dateText(header.dueAt)}</dd>
+              <dt>Target</dt>
+              <dd>{date(transaction.header.dueAt)}</dd>
+            </div>
+            <div>
+              <dt>Pembayaran terverifikasi</dt>
+              <dd>{workspaceMoney(transaction.workspace.received)}</dd>
             </div>
           </dl>
-          <div className="transaction-context-panel__amount">
-            <span>Nilai penawaran</span>
-            <strong>{rupiah(totals.quotedAmount)}</strong>
-            <small>
-              {totals.outstandingAmount ? `Sisa piutang ${rupiah(totals.outstandingAmount)}` : "Belum ada piutang"}
-            </small>
-          </div>
-          <details className="transaction-activity-details">
-            <summary>
-              Riwayat keputusan <span>{transaction.activity.length}</span>
-            </summary>
+          <details>
+            <summary>Semua dokumen ({transaction.documents.length})</summary>
+            <DocumentList
+              canRetry={user.role === "admin" && !readonly}
+              documents={transaction.documents}
+              transaction={transaction}
+            />
+          </details>
+          <details>
+            <summary>Riwayat kegiatan ({transaction.activity.length})</summary>
             {transaction.activity.length ? (
-              <div>
+              <ol>
                 {transaction.activity.map((activity) => (
-                  <article key={activity.id}>
-                    <span />
-                    <p>
-                      <strong>{activity.actorName ?? "Sistem"}</strong>
-                      {activityLabel(activity.action, activity.metadata)}
-                    </p>
-                    <time>{dateText(activity.createdAt)}</time>
-                  </article>
+                  <li key={activity.id}>
+                    <strong>{activity.actorName ?? "Sistem"}</strong>
+                    <span>{activityLabels[activity.action] ?? "Perubahan pekerjaan dicatat"}</span>
+                    <time>{dateTime(activity.createdAt)} WIB</time>
+                  </li>
                 ))}
-              </div>
+              </ol>
             ) : (
-              <p className="workspace-empty">Perubahan penting akan tercatat di sini.</p>
+              <p>Belum ada kegiatan lain.</p>
             )}
           </details>
         </aside>

@@ -4,6 +4,33 @@ export const LANDING_CONTENT_KEY = "landing.page";
 
 const shortText = z.string().trim().min(1).max(220);
 const longText = z.string().trim().min(1).max(2_000);
+const imagePath = z
+  .string()
+  .trim()
+  .regex(/^\/images-webp\/[a-z0-9_\-./ ()\[\]]+\.webp$/i, "Pilih gambar WebP internal.");
+const slug = z
+  .string()
+  .trim()
+  .regex(/^[a-z0-9-]+$/, "Gunakan huruf kecil, angka, dan tanda hubung.");
+const capabilitySchema = z.object({ title: shortText, description: longText, proof: shortText });
+const processStepSchema = z.object({ title: shortText, description: longText });
+const galleryCategorySchema = z.object({
+  slug,
+  title: shortText,
+  imagePath,
+  altText: shortText,
+  products: z.array(shortText).min(1).max(6),
+  ctaLabel: shortText,
+  isPublished: z.boolean(),
+});
+const testimonialSchema = z.object({ name: shortText, role: shortText, quote: longText, isPublished: z.boolean() });
+const insightSchema = z.object({
+  slug,
+  category: shortText,
+  title: shortText,
+  excerpt: longText,
+  isPublished: z.boolean(),
+});
 
 export const landingContentSchema = z.object({
   metadata: z.object({
@@ -33,6 +60,11 @@ export const landingContentSchema = z.object({
     primaryCta: shortText,
   }),
   footer: z.object({ description: longText }),
+  capabilities: z.array(capabilitySchema).max(6),
+  processSteps: z.array(processStepSchema).max(6),
+  galleryCategories: z.array(galleryCategorySchema).max(12),
+  testimonials: z.array(testimonialSchema).max(12),
+  featuredInsights: z.array(insightSchema).max(3),
 });
 
 export type LandingContent = z.infer<typeof landingContentSchema>;
@@ -81,4 +113,9 @@ export const defaultLandingContent: LandingContent = {
     description:
       "CV. Anugrahplastik Mandiri Bandung — jasa cetak plastik manual dan injection custom untuk produk serta spare part.",
   },
+  capabilities: [],
+  processSteps: [],
+  galleryCategories: [],
+  testimonials: [],
+  featuredInsights: [],
 };

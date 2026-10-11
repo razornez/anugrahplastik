@@ -1,3 +1,5 @@
 .next/
 node_modules/
+drizzle/meta/*_snapshot.json
+pnpm-lock.yaml
 src/features/marketing/template-light.html

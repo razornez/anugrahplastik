@@ -1,5 +1,6 @@
 import { desc } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { AdminPageHeader } from "@/components/admin-page-header";
 import { getSession } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/database/client";
 import { users } from "@/lib/database/schema";
@@ -20,13 +21,10 @@ export default async function TeamPage({
   const query = await searchParams;
   return (
     <div className="team-page">
-      <header className="workspace-topbar">
-        <div>
-          <p className="eyebrow">Tim</p>
-          <h1>Akses ruang kerja</h1>
-          <span>Owner mengatur peran, status akun, password, dan PIN setiap anggota.</span>
-        </div>
-      </header>
+      <AdminPageHeader
+        title="Akses ruang kerja"
+        description="Kelola peran, status akun, password, dan PIN setiap anggota tim."
+      />
       {query.status === "created" ? (
         <p className="admin-notice">Akun baru berhasil dibuat. Bagikan kredensial melalui jalur internal yang aman.</p>
       ) : null}

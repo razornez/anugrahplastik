@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/database/client";
 import { googleAdsDailyReports } from "@/lib/database/schema";
 import { validateGoogleAdsRange } from "@/features/integrations/google-ads-service";
+import { averageCpc } from "@/features/integrations/google-ads-report-model";
 
 function csvCell(value: string | number) {
   let text = String(value);
@@ -50,6 +51,7 @@ export async function GET(request: Request) {
       "Impresi",
       "Klik",
       "Biaya",
+      "Rata-rata CPC",
       "Konversi",
       "Nilai konversi",
     ]
@@ -65,6 +67,7 @@ export async function GET(request: Request) {
         row.impressions,
         row.clicks,
         formatMicros(row.costMicros),
+        averageCpc(Number(BigInt(row.costMicros)) / 1_000_000, row.clicks),
         row.conversions,
         row.conversionsValue,
       ]

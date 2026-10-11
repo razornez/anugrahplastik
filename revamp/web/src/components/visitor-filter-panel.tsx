@@ -11,13 +11,33 @@ type Props = {
   cities: string[];
   sources: string[];
   activeCount: number;
+  extent?: string;
+  country?: string;
+  region?: string;
+  countries?: string[];
+  regions?: string[];
 };
 
-export function VisitorFilterPanel({ days, device, city, source, outcome, cities, sources, activeCount }: Props) {
+export function VisitorFilterPanel({
+  days,
+  device,
+  city,
+  source,
+  outcome,
+  cities,
+  sources,
+  activeCount,
+  extent = "indonesia",
+  country = "",
+  region = "",
+  countries = [],
+  regions = [],
+}: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const fields = (
     <>
       <input type="hidden" name="days" value={days} />
+      <input type="hidden" name="map" value={extent} />
       <label>
         Perangkat
         <select name="device" defaultValue={device}>
@@ -25,10 +45,33 @@ export function VisitorFilterPanel({ days, device, city, source, outcome, cities
           <option value="mobile">Ponsel</option>
           <option value="desktop">Komputer</option>
           <option value="tablet">Tablet</option>
+          <option value="unknown">Tidak diketahui</option>
         </select>
       </label>
       <label>
-        Lokasi
+        Negara
+        <select name="country" defaultValue={country}>
+          <option value="">Semua negara</option>
+          {[...new Set([...countries, country].filter(Boolean))].map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Provinsi / wilayah
+        <select name="region" defaultValue={region}>
+          <option value="">Semua wilayah</option>
+          {[...new Set([...regions, region].filter(Boolean))].map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Kota
         <select name="city" defaultValue={city}>
           <option value="">Semua lokasi</option>
           {cities.map((item) => (
@@ -53,7 +96,7 @@ export function VisitorFilterPanel({ days, device, city, source, outcome, cities
         Hasil kunjungan
         <select name="outcome" defaultValue={outcome}>
           <option value="">Semua hasil</option>
-          <option value="Form terkirim">Event form terkirim</option>
+          <option value="Form terkirim">Mengirim formulir</option>
           <option value="Klik WhatsApp">Klik WhatsApp</option>
           <option value="Form mulai diisi">Form mulai diisi</option>
           <option value="Tombol minat diklik">Tombol minat diklik</option>

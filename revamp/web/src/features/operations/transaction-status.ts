@@ -5,7 +5,8 @@ const labels: Record<TransactionTrack, Record<string, string>> = {
   commercial: {
     quotation: "Menyiapkan penawaran",
     po_received: "PO diterima",
-    contract: "Kontrak / invoice",
+    contract: "Tahap lama — perlu ditinjau",
+    invoice_issued: "Invoice terbit",
     completed: "Komersial selesai",
     cancelled: "Dibatalkan",
   },
@@ -19,7 +20,10 @@ const labels: Record<TransactionTrack, Record<string, string>> = {
   fulfilment: {
     not_released: "Belum dilepas",
     sample: "Sampel dalam proses",
+    production: "Produksi berjalan",
     released: "Sudah dilepas ke produksi",
+    shipping: "Barang dikirim",
+    bast_pending: "Menunggu serah terima",
     completed: "Produksi & pengiriman selesai",
   },
 };
@@ -32,11 +36,29 @@ export function transactionStatusLabel(stage: TransactionTrack, status: string) 
   return labels[stage][status] ?? "Status perlu ditinjau";
 }
 
+export function invoiceCountsAsIssued(status: string) {
+  return ["issued", "sent", "partial", "paid", "overdue"].includes(status);
+}
+
+export function invoiceStatusLabel(status: string) {
+  const invoiceLabels: Record<string, string> = {
+    draft: "Belum selesai dibuat",
+    issued: "Terbit",
+    sent: "Sudah dikirim",
+    partial: "Dibayar sebagian",
+    paid: "Lunas",
+    overdue: "Lewat jatuh tempo",
+    cancelled: "Dibatalkan",
+  };
+  return invoiceLabels[status] ?? "Perlu diperiksa";
+}
+
 export function transactionMainStage(status: {
   paymentStatus: string;
   fulfilmentStatus: string;
 }): TransactionMainStage {
-  if (["released", "completed"].includes(status.fulfilmentStatus)) return "fulfilment";
+  if (["released", "sample", "production", "shipping", "bast_pending", "completed"].includes(status.fulfilmentStatus))
+    return "fulfilment";
   if (["payment_recorded", "partial", "verified"].includes(status.paymentStatus)) return "payment";
   return "commercial";
 }

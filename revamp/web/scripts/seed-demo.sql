@@ -11,10 +11,10 @@ WITH admin_user AS (
     ('Sari Wulandari', '0811-2305-772', 'Ada part pompa plastik retak. Mohon evaluasi apakah bisa dibuat ulang dari sampel.', 'whatsapp', '/', '{"utm_source":"whatsapp"}'::jsonb, true, now() - interval '2 days 4 hours'),
     ('Andika Putra', '0896-7812-3900', 'Membutuhkan roda kecil nylon untuk alat bantu produksi. Bisa konsultasi material?', 'google / cpc', '/', '{"utm_source":"google","utm_medium":"cpc","utm_campaign":"material"}'::jsonb, false, now() - interval '4 days')
 )
-INSERT INTO leads (name, phone, message, source, landing_path, attribution, assigned_user_id, created_at)
+INSERT INTO leads (name, phone, message, source, landing_path, attribution, assigned_user_id, created_at, data_class)
 SELECT demo.name, demo.phone, demo.message, demo.source, demo.landing_path, demo.attribution,
   CASE WHEN demo.assigned THEN (SELECT id FROM admin_user) ELSE NULL END,
-  demo.created_at
+  demo.created_at, 'demo'
 FROM demo_leads demo
 WHERE NOT EXISTS (SELECT 1 FROM leads WHERE leads.phone = demo.phone);
 
@@ -49,10 +49,10 @@ WITH demo_sessions(anonymous_id, created_at, last_seen_at, referrer) AS (
     ('demo-anugrah-011', now() - interval '5 days 3 hours', now() - interval '5 days 2 hours 30 minutes', 'https://www.google.com/'),
     ('demo-anugrah-012', now() - interval '6 days 1 hour', now() - interval '6 days 40 minutes', 'https://www.google.com/')
 )
-INSERT INTO analytics_sessions (anonymous_id, landing_path, referrer, consented_at, created_at, last_seen_at)
-SELECT anonymous_id, '/', referrer, created_at, created_at, last_seen_at
+INSERT INTO analytics_sessions (anonymous_id, session_key, traffic_class, landing_path, referrer, consented_at, created_at, last_seen_at)
+SELECT anonymous_id, anonymous_id || '-session', 'demo', '/', referrer, created_at, created_at, last_seen_at
 FROM demo_sessions
-ON CONFLICT (anonymous_id) DO NOTHING;
+ON CONFLICT (session_key) DO NOTHING;
 
 UPDATE analytics_sessions
 SET
@@ -114,8 +114,10 @@ WITH events(anonymous_id, name, section_key, element_key, occurred_at) AS (
     ('demo-anugrah-012', 'cta_click', 'ap-process', 'process-sample-cta', now() - interval '6 days 45 minutes'),
     ('demo-anugrah-012', 'page_leave', 'ap-process', NULL, now() - interval '6 days 40 minutes')
 )
-INSERT INTO analytics_events (session_id, name, path, section_key, element_key, occurred_at)
-SELECT sessions.id, events.name, '/', events.section_key, events.element_key, events.occurred_at
+INSERT INTO analytics_events (session_id, name, path, section_key, element_key, sequence, occurred_at)
+SELECT sessions.id, events.name, '/', events.section_key, events.element_key,
+  row_number() OVER (PARTITION BY sessions.id ORDER BY events.occurred_at, events.name)::integer,
+  events.occurred_at
 FROM events
 JOIN analytics_sessions sessions ON sessions.anonymous_id = events.anonymous_id
 WHERE NOT EXISTS (
@@ -123,7 +125,8 @@ WHERE NOT EXISTS (
   FROM analytics_events existing
   WHERE existing.session_id = sessions.id
     AND existing.name = events.name
-    AND existing.occurred_at = events.occurred_at
+    AND existing.section_key IS NOT DISTINCT FROM events.section_key
+    AND existing.element_key IS NOT DISTINCT FROM events.element_key
 );
 
 WITH ordered AS (
@@ -229,11 +232,11 @@ WITH admin_user AS (
 ), source(reference_no, customer_code, title, commercial_status, payment_status, fulfilment_status, created_at) AS (
   VALUES
     ('TRX-2026-00001', 'CUS-001', 'Reproduksi cover gear mesin pengemas', 'quotation', 'awaiting_payment', 'not_released', now() - interval '1 day'),
-    ('TRX-2026-00002', 'CUS-002', 'Produksi spacer nylon untuk mesin', 'contract', 'verified', 'released', now() - interval '6 days'),
+    ('TRX-2026-00002', 'CUS-002', 'Produksi spacer nylon untuk mesin', 'invoice_issued', 'verified', 'released', now() - interval '6 days'),
     ('TRX-2026-00003', 'CUS-003', 'Clip kabel custom untuk proyek interior', 'po_received', 'partial', 'sample', now() - interval '12 days')
 )
-INSERT INTO business_transactions (reference_no, customer_id, owner_id, title, commercial_status, payment_status, fulfilment_status, created_at, updated_at, quoted_at)
-SELECT source.reference_no, customer.id, (SELECT id FROM admin_user), source.title, source.commercial_status, source.payment_status, source.fulfilment_status, source.created_at, source.created_at, source.created_at
+INSERT INTO business_transactions (reference_no, customer_id, owner_id, title, commercial_status, payment_status, fulfilment_status, created_at, updated_at, quoted_at, data_class)
+SELECT source.reference_no, customer.id, (SELECT id FROM admin_user), source.title, source.commercial_status, source.payment_status, source.fulfilment_status, source.created_at, source.created_at, source.created_at, 'demo'
 FROM source
 JOIN customers customer ON customer.code = source.customer_code
 ON CONFLICT (reference_no) DO NOTHING;

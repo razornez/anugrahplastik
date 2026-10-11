@@ -11,6 +11,7 @@ import {
   unique,
   uuid,
   varchar,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
@@ -125,6 +126,25 @@ export const integrationOauthStates = pgTable("integration_oauth_states", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/** Private operational history. It stores only safe outcome codes, never provider responses or secrets. */
+export const integrationSyncRuns = pgTable(
+  "integration_sync_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    trigger: varchar("trigger", { length: 16 }).notNull(),
+    status: varchar("status", { length: 16 }).notNull(),
+    mailStatus: varchar("mail_status", { length: 24 }).notNull().default("skipped"),
+    mailCount: integer("mail_count").notNull().default(0),
+    mailErrorCode: varchar("mail_error_code", { length: 64 }),
+    adsStatus: varchar("ads_status", { length: 24 }).notNull().default("skipped"),
+    adsCount: integer("ads_count").notNull().default(0),
+    adsErrorCode: varchar("ads_error_code", { length: 64 }),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (table) => [index("integration_sync_runs_started_at_idx").on(table.startedAt)],
+);
+
 export const csEmails = pgTable(
   "cs_emails",
   {
@@ -135,6 +155,10 @@ export const csEmails = pgTable(
     size: integer("size").notNull().default(0),
     messageId: varchar("message_id", { length: 500 }),
     inReplyTo: varchar("in_reply_to", { length: 500 }),
+    references: text("references"),
+    replyToAddress: varchar("reply_to_address", { length: 1000 }),
+    ccAddress: varchar("cc_address", { length: 1000 }),
+    threadKey: varchar("thread_key", { length: 500 }),
     fromName: varchar("from_name", { length: 255 }),
     fromAddress: varchar("from_address", { length: 255 }),
     toAddress: varchar("to_address", { length: 1000 }),
@@ -154,6 +178,8 @@ export const csEmails = pgTable(
     index("cs_emails_folder_received_idx").on(table.folder, table.receivedAt),
     index("cs_emails_from_address_idx").on(table.fromAddress),
     index("cs_emails_subject_idx").on(table.subject),
+    index("cs_emails_message_id_idx").on(table.messageId),
+    index("cs_emails_thread_key_idx").on(table.threadKey),
     index("cs_emails_linked_lead_idx").on(table.linkedLeadId),
     index("cs_emails_linked_transaction_idx").on(table.linkedTransactionId),
   ],
@@ -163,10 +189,18 @@ export const csEmailOutbox = pgTable(
   "cs_email_outbox",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    toAddress: varchar("to_address", { length: 255 }).notNull(),
+    toAddress: varchar("to_address", { length: 5500 }).notNull(),
     subject: varchar("subject", { length: 998 }).notNull(),
     bodyCiphertext: text("body_ciphertext").notNull(),
+    htmlCiphertext: text("html_ciphertext"),
     idempotencyKey: varchar("idempotency_key", { length: 80 }).notNull().unique(),
+    draftId: uuid("draft_id"),
+    draftRevision: integer("draft_revision"),
+    snapshotCiphertext: text("snapshot_ciphertext"),
+    resultCiphertext: text("result_ciphertext"),
+    preparedBy: uuid("prepared_by").references(() => users.id),
+    preparedAt: timestamp("prepared_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
     status: varchar("status", { length: 24 }).notNull().default("pending"),
     messageId: varchar("message_id", { length: 500 }),
     inReplyTo: varchar("in_reply_to", { length: 500 }),
@@ -182,8 +216,69 @@ export const csEmailOutbox = pgTable(
     index("cs_email_outbox_sent_at_idx").on(table.sentAt),
     index("cs_email_outbox_to_address_idx").on(table.toAddress),
     index("cs_email_outbox_subject_idx").on(table.subject),
+    index("cs_email_outbox_draft_revision_idx").on(table.draftId, table.draftRevision),
   ],
 );
+
+export const csEmailDrafts = pgTable(
+  "cs_email_drafts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id),
+    revision: integer("revision").notNull().default(1),
+    payloadCiphertext: text("payload_ciphertext").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("draft"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("cs_email_drafts_owner_updated_idx").on(table.ownerId, table.updatedAt)],
+);
+
+export const csEmailDraftFiles = pgTable(
+  "cs_email_draft_files",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    draftId: uuid("draft_id")
+      .notNull()
+      .references(() => csEmailDrafts.id),
+    filename: varchar("filename", { length: 180 }).notNull(),
+    contentType: varchar("content_type", { length: 40 }).notNull(),
+    size: integer("size").notNull(),
+    sha256: varchar("sha256", { length: 64 }).notNull(),
+    contentCiphertext: text("content_ciphertext").notNull(),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("cs_email_draft_files_draft_idx").on(table.draftId)],
+);
+
+export const emailTemplateVersions = pgTable(
+  "email_template_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    templateKey: varchar("template_key", { length: 32 }).notNull(),
+    version: integer("version").notNull(),
+    subject: varchar("subject", { length: 998 }).notNull(),
+    content: jsonb("content").notNull(),
+    shellConfig: jsonb("shell_config"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    restoredFromId: uuid("restored_from_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [unique("email_template_key_version_unique").on(table.templateKey, table.version)],
+);
+
+export const emailTemplateMedia = pgTable("email_template_media", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  storagePath: varchar("storage_path", { length: 500 }).notNull(),
+  mimeType: varchar("mime_type", { length: 32 }).notNull(),
+  size: integer("size").notNull(),
+  sha256: varchar("sha256", { length: 64 }).notNull(),
+  uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
 
 export const googleAdsDailyReports = pgTable(
   "google_ads_daily_reports",
@@ -275,11 +370,138 @@ export const analyticsSessions = pgTable(
   },
   (table) => [
     index("analytics_sessions_created_at_idx").on(table.createdAt),
+    index("analytics_sessions_anonymous_created_at_idx").on(table.anonymousId, table.createdAt),
     index("analytics_sessions_device_created_at_idx").on(table.deviceCategory, table.createdAt),
     index("analytics_sessions_city_created_at_idx").on(table.cityName, table.createdAt),
     index("analytics_sessions_source_created_at_idx").on(table.sourceName, table.createdAt),
     index("analytics_sessions_outcome_created_at_idx").on(table.outcome, table.createdAt),
   ],
+);
+
+export const growthCompetitorSettings = pgTable("growth_competitor_settings", {
+  id: integer("id").primaryKey(),
+  competitors: jsonb("competitors").notNull(),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const growthSearchAudits = pgTable(
+  "growth_search_audits",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+    location: varchar("location", { length: 80 }).notNull(),
+    device: varchar("device", { length: 16 }).notNull(),
+    competitors: jsonb("competitors").notNull(),
+    results: jsonb("results").notNull(),
+    evidencePath: varchar("evidence_path", { length: 500 }),
+    evidenceChecksum: varchar("evidence_checksum", { length: 64 }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("growth_search_audits_checked_at_idx").on(table.checkedAt)],
+);
+
+export const growthSeoAudits = pgTable(
+  "growth_seo_audits",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    weekKey: varchar("week_key", { length: 10 }).notNull().unique(),
+    status: varchar("status", { length: 16 }).notNull(),
+    checkedAt: timestamp("checked_at", { withTimezone: true }),
+    competitors: jsonb("competitors").notNull(),
+    results: jsonb("results"),
+    pages: jsonb("pages"),
+    error: varchar("error", { length: 300 }),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("growth_seo_audits_checked_at_idx").on(table.checkedAt)],
+);
+
+export const growthSerpUsage = pgTable("growth_serp_usage", {
+  monthKey: varchar("month_key", { length: 7 }).primaryKey(),
+  used: integer("used").notNull().default(0),
+});
+
+export const growthMarketSignals = pgTable("growth_market_signals", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  weekKey: varchar("week_key", { length: 10 }).notNull().unique(),
+  topic: varchar("topic", { length: 100 }).notNull(),
+  status: varchar("status", { length: 16 }).notNull(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }),
+  rising: jsonb("rising"),
+  error: varchar("error", { length: 300 }),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const growthSearchDiscoveries = pgTable("growth_search_discoveries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  weekKey: varchar("week_key", { length: 10 }).notNull().unique(),
+  status: varchar("status", { length: 16 }).notNull(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }),
+  results: jsonb("results").notNull().default([]),
+  error: varchar("error", { length: 300 }),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const growthOpportunityReviews = pgTable("growth_opportunity_reviews", {
+  key: varchar("key", { length: 64 }).primaryKey(),
+  status: varchar("status", { length: 20 }).notNull(),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const growthBusinessSearches = pgTable(
+  "growth_business_searches",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    queryKey: varchar("query_key", { length: 180 }).notNull(),
+    phrase: varchar("phrase", { length: 120 }).notNull(),
+    cityId: varchar("city_id", { length: 32 }).notNull(),
+    monthKey: varchar("month_key", { length: 7 }).notNull(),
+    status: varchar("status", { length: 16 }).notNull(),
+    checkedAt: timestamp("checked_at", { withTimezone: true }),
+    resultCount: integer("result_count").notNull().default(0),
+    error: varchar("error", { length: 300 }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("growth_business_searches_query_idx").on(table.queryKey, table.startedAt),
+    index("growth_business_searches_month_idx").on(table.monthKey),
+  ],
+);
+
+export const growthBusinessCandidates = pgTable("growth_business_candidates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  stableId: varchar("stable_id", { length: 250 }).unique(),
+  name: varchar("name", { length: 120 }).notNull(),
+  category: varchar("category", { length: 120 }),
+  address: varchar("address", { length: 500 }),
+  phone: varchar("phone", { length: 32 }),
+  website: varchar("website", { length: 1000 }),
+  mapsUrl: varchar("maps_url", { length: 1000 }).notNull(),
+  status: varchar("status", { length: 16 }).notNull().default("new"),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+  leadId: uuid("lead_id")
+    .unique()
+    .references(() => leads.id, { onDelete: "set null" }),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+});
+
+export const growthBusinessMatches = pgTable(
+  "growth_business_matches",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    searchId: uuid("search_id")
+      .notNull()
+      .references(() => growthBusinessSearches.id, { onDelete: "cascade" }),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => growthBusinessCandidates.id, { onDelete: "cascade" }),
+    snapshot: jsonb("snapshot").notNull(),
+  },
+  (table) => [unique("growth_business_matches_unique").on(table.searchId, table.candidateId)],
 );
 
 export const analyticsEvents = pgTable(
@@ -510,6 +732,8 @@ export const businessTransactions = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     referenceNo: varchar("reference_no", { length: 32 }).notNull().unique(),
+    quotationNo: varchar("quotation_no", { length: 80 }).unique(),
+    quoteLetter: jsonb("quote_letter"),
     leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
     customerId: uuid("customer_id")
       .notNull()
@@ -539,6 +763,53 @@ export const transactionNumberCounters = pgTable("transaction_number_counters", 
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const invoiceNumberCounters = pgTable("invoice_number_counters", {
+  referenceYear: integer("reference_year").primaryKey(),
+  lastValue: integer("last_value").notNull(),
+  initializedBy: uuid("initialized_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const quotationNumberCounters = pgTable("quotation_number_counters", {
+  referenceYear: integer("reference_year").primaryKey(),
+  lastValue: integer("last_value").notNull(),
+  initializedBy: uuid("initialized_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const deliveryNumberCounters = pgTable("delivery_number_counters", {
+  referenceYear: integer("reference_year").primaryKey(),
+  lastValue: integer("last_value").notNull(),
+  initializedBy: uuid("initialized_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const handoverNumberCounters = pgTable("handover_number_counters", {
+  referenceYear: integer("reference_year").primaryKey(),
+  lastValue: integer("last_value").notNull(),
+  initializedBy: uuid("initialized_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const invoiceIssuerSettings = pgTable("invoice_issuer_settings", {
+  id: integer("id").primaryKey(),
+  legalName: varchar("legal_name", { length: 180 }).notNull().default(""),
+  address: text("address").notNull().default(""),
+  phone: varchar("phone", { length: 60 }).notNull().default(""),
+  email: varchar("email", { length: 255 }).notNull().default(""),
+  website: varchar("website", { length: 255 }).notNull().default(""),
+  taxId: varchar("tax_id", { length: 40 }).notNull().default(""),
+  bankName: varchar("bank_name", { length: 100 }).notNull().default(""),
+  bankAccountNo: varchar("bank_account_no", { length: 80 }).notNull().default(""),
+  bankAccountName: varchar("bank_account_name", { length: 180 }).notNull().default(""),
+  logoPath: varchar("logo_path", { length: 255 }).notNull().default(""),
+  signerName: varchar("signer_name", { length: 120 }).notNull().default(""),
+  signerTitle: varchar("signer_title", { length: 100 }).notNull().default(""),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const masterNumberCounters = pgTable("master_number_counters", {
   kind: varchar("kind", { length: 24 }).primaryKey(),
   lastValue: integer("last_value").notNull().default(0),
@@ -556,10 +827,15 @@ export const transactionLines = pgTable(
     materialId: uuid("material_id").references(() => materials.id, { onDelete: "set null" }),
     colorLotId: uuid("color_lot_id").references(() => materialColorLots.id, { onDelete: "set null" }),
     description: text("description").notNull(),
+    materialLabel: varchar("material_label", { length: 160 }).notNull().default(""),
+    mouldingLabel: varchar("moulding_label", { length: 160 }).notNull().default(""),
     quantity: numeric("quantity", { precision: 16, scale: 3 }).notNull(),
     unit: varchar("unit", { length: 16 }).notNull().default("pcs"),
     unitPrice: numeric("unit_price", { precision: 16, scale: 2 }).notNull().default("0"),
     taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).notNull().default("0"),
+    taxMethod: varchar("tax_method", { length: 24 }).notNull().default("legacy"),
+    discountKind: varchar("discount_kind", { length: 12 }).notNull().default("none"),
+    discountValue: numeric("discount_value", { precision: 16, scale: 2 }).notNull().default("0"),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (table) => [index("transaction_lines_transaction_idx").on(table.transactionId)],
@@ -575,6 +851,10 @@ export const transactionInvoices = pgTable(
     invoiceNo: varchar("invoice_no", { length: 80 }).notNull().unique(),
     kind: varchar("kind", { length: 24 }).notNull(),
     amount: numeric("amount", { precision: 16, scale: 2 }).notNull(),
+    shipmentId: uuid("shipment_id").references((): AnyPgColumn => shipments.id, { onDelete: "restrict" }),
+    dpApplied: numeric("dp_applied", { precision: 16, scale: 2 }).notNull().default("0"),
+    paymentTerms: text("payment_terms"),
+    snapshot: jsonb("snapshot"),
     dueAt: timestamp("due_at", { withTimezone: true }),
     status: varchar("status", { length: 24 }).notNull().default("draft"),
     issuedAt: timestamp("issued_at", { withTimezone: true }),
@@ -598,6 +878,8 @@ export const transactionDocuments = pgTable(
     status: varchar("status", { length: 24 }).notNull().default("draft"),
     templateId: varchar("template_id", { length: 120 }),
     providerDocumentId: varchar("provider_document_id", { length: 120 }),
+    operationKey: uuid("operation_key").unique(),
+    payload: jsonb("payload"),
     storagePath: varchar("storage_path", { length: 500 }),
     originalName: varchar("original_name", { length: 255 }),
     checksum: varchar("checksum", { length: 128 }),
@@ -621,6 +903,8 @@ export const transactionFinancialEntries = pgTable(
     direction: varchar("direction", { length: 12 }).notNull(),
     amount: numeric("amount", { precision: 16, scale: 2 }).notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    operationKey: uuid("operation_key").unique(),
+    requestFingerprint: varchar("request_fingerprint", { length: 64 }),
     status: varchar("status", { length: 24 }).notNull().default("unverified"),
     proofDocumentId: uuid("proof_document_id").references(() => transactionDocuments.id, { onDelete: "set null" }),
     reference: varchar("reference", { length: 160 }),
@@ -630,6 +914,161 @@ export const transactionFinancialEntries = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [index("transaction_financial_entries_transaction_status_idx").on(table.transactionId, table.status)],
+);
+
+/** A local-only QA run marker. It is never created by the production UI. */
+export const financeQaRuns = pgTable("finance_qa_runs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  label: varchar("label", { length: 120 }).notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  cleanedAt: timestamp("cleaned_at", { withTimezone: true }),
+});
+
+/**
+ * Operational finance is intentionally independent from customer transactions:
+ * a bank movement may be a customer payment, a supplier bill, payroll, or an
+ * owner's private draw.  Financial accounts only represent bank accounts in
+ * the first release; cash and bank connectors can be introduced later.
+ */
+export const financeAccounts = pgTable(
+  "finance_accounts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: varchar("name", { length: 120 }).notNull(),
+    bankName: varchar("bank_name", { length: 120 }).notNull(),
+    accountNoMasked: varchar("account_no_masked", { length: 48 }).notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("active"),
+    openedAt: timestamp("opened_at", { withTimezone: true }).defaultNow().notNull(),
+    reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
+    reconciledBalance: numeric("reconciled_balance", { precision: 16, scale: 2 }),
+    qaRunId: uuid("qa_run_id").references(() => financeQaRuns.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("finance_accounts_status_idx").on(table.status)],
+);
+
+export const financeCategories = pgTable(
+  "finance_categories",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    code: varchar("code", { length: 48 }).notNull().unique(),
+    name: varchar("name", { length: 120 }).notNull(),
+    direction: varchar("direction", { length: 12 }).notNull(),
+    isSystem: boolean("is_system").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("finance_categories_direction_active_idx").on(table.direction, table.isActive)],
+);
+
+export const financeEmployees = pgTable(
+  "finance_employees",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: varchar("name", { length: 160 }).notNull(),
+    position: varchar("position", { length: 120 }),
+    status: varchar("status", { length: 20 }).notNull().default("active"),
+    qaRunId: uuid("qa_run_id").references(() => financeQaRuns.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("finance_employees_status_name_idx").on(table.status, table.name)],
+);
+
+export const financeEntries = pgTable(
+  "finance_entries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => financeAccounts.id, { onDelete: "restrict" }),
+    categoryId: uuid("category_id").references(() => financeCategories.id, { onDelete: "restrict" }),
+    transactionId: uuid("transaction_id").references(() => businessTransactions.id, { onDelete: "set null" }),
+    invoiceId: uuid("invoice_id").references(() => transactionInvoices.id, { onDelete: "set null" }),
+    supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "set null" }),
+    employeeId: uuid("employee_id").references(() => financeEmployees.id, { onDelete: "set null" }),
+    transferGroupId: uuid("transfer_group_id"),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    direction: varchar("direction", { length: 12 }).notNull(),
+    amount: numeric("amount", { precision: 16, scale: 2 }).notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("pending"),
+    reference: varchar("reference", { length: 160 }),
+    counterpartyName: varchar("counterparty_name", { length: 180 }),
+    notes: text("notes"),
+    reversalOfId: uuid("reversal_of_id").references((): AnyPgColumn => financeEntries.id, { onDelete: "restrict" }),
+    qaRunId: uuid("qa_run_id").references(() => financeQaRuns.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    verifiedBy: uuid("verified_by").references(() => users.id, { onDelete: "set null" }),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
+    reconciledBy: uuid("reconciled_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("finance_entries_account_occurred_idx").on(table.accountId, table.occurredAt),
+    index("finance_entries_status_occurred_idx").on(table.status, table.occurredAt),
+    index("finance_entries_transaction_idx").on(table.transactionId),
+    index("finance_entries_supplier_idx").on(table.supplierId),
+  ],
+);
+
+export const financeEntryDocuments = pgTable(
+  "finance_entry_documents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    entryId: uuid("entry_id")
+      .notNull()
+      .references(() => financeEntries.id, { onDelete: "cascade" }),
+    storagePath: varchar("storage_path", { length: 500 }).notNull(),
+    originalName: varchar("original_name", { length: 255 }).notNull(),
+    mimeType: varchar("mime_type", { length: 120 }).notNull(),
+    byteSize: integer("byte_size").notNull(),
+    checksum: varchar("checksum", { length: 128 }).notNull(),
+    uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("finance_entry_documents_entry_idx").on(table.entryId)],
+);
+
+export const financePayrollRuns = pgTable(
+  "finance_payroll_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("draft"),
+    notes: text("notes"),
+    qaRunId: uuid("qa_run_id").references(() => financeQaRuns.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    verifiedBy: uuid("verified_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (table) => [unique("finance_payroll_period_unique").on(table.periodStart, table.periodEnd)],
+);
+
+export const financePayrollItems = pgTable(
+  "finance_payroll_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    payrollRunId: uuid("payroll_run_id")
+      .notNull()
+      .references(() => financePayrollRuns.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => financeEmployees.id, { onDelete: "restrict" }),
+    basePay: numeric("base_pay", { precision: 16, scale: 2 }).notNull().default("0"),
+    overtimePay: numeric("overtime_pay", { precision: 16, scale: 2 }).notNull().default("0"),
+    allowance: numeric("allowance", { precision: 16, scale: 2 }).notNull().default("0"),
+    deduction: numeric("deduction", { precision: 16, scale: 2 }).notNull().default("0"),
+    netPay: numeric("net_pay", { precision: 16, scale: 2 }).notNull(),
+    entryId: uuid("entry_id").references(() => financeEntries.id, { onDelete: "set null" }),
+  },
+  (table) => [unique("finance_payroll_employee_unique").on(table.payrollRunId, table.employeeId)],
 );
 
 export const productionBatches = pgTable(
@@ -663,6 +1102,10 @@ export const shipments = pgTable(
       .notNull()
       .references(() => businessTransactions.id, { onDelete: "cascade" }),
     shipmentNo: varchar("shipment_no", { length: 80 }).notNull().unique(),
+    deliveryNo: varchar("delivery_no", { length: 80 }).unique(),
+    handoverNo: varchar("handover_no", { length: 80 }).unique(),
+    handoverDetails: jsonb("handover_details"),
+    deliveryDetails: jsonb("delivery_details"),
     status: varchar("status", { length: 24 }).notNull().default("planned"),
     recipientName: varchar("recipient_name", { length: 160 }),
     deliveryAddress: text("delivery_address"),
@@ -688,6 +1131,8 @@ export const shipmentLines = pgTable(
       .notNull()
       .references(() => transactionLines.id, { onDelete: "restrict" }),
     quantity: numeric("quantity", { precision: 16, scale: 3 }).notNull(),
+    acceptedQuantity: numeric("accepted_quantity", { precision: 16, scale: 3 }),
+    logistics: jsonb("logistics"),
   },
   (table) => [index("shipment_lines_shipment_idx").on(table.shipmentId)],
 );
@@ -700,11 +1145,17 @@ export const productDesignFiles = pgTable(
     mouldId: uuid("mould_id").references(() => moulds.id, { onDelete: "set null" }),
     customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
     transactionId: uuid("transaction_id").references(() => businessTransactions.id, { onDelete: "set null" }),
+    materialId: uuid("material_id").references(() => materials.id, { onDelete: "set null" }),
     origin: varchar("origin", { length: 24 }).notNull(),
     fileKind: varchar("file_kind", { length: 24 }).notNull(),
     format: varchar("format", { length: 12 }).notNull(),
     storagePath: varchar("storage_path", { length: 500 }).notNull().unique(),
     originalName: varchar("original_name", { length: 255 }).notNull(),
+    description: text("description"),
+    thumbnailStoragePath: varchar("thumbnail_storage_path", { length: 500 }),
+    thumbnailChecksum: varchar("thumbnail_checksum", { length: 128 }),
+    thumbnailByteSize: integer("thumbnail_byte_size"),
+    thumbnailCreatedAt: timestamp("thumbnail_created_at", { withTimezone: true }),
     mimeType: varchar("mime_type", { length: 120 }).notNull(),
     byteSize: integer("byte_size").notNull(),
     checksum: varchar("checksum", { length: 128 }).notNull(),
@@ -717,5 +1168,6 @@ export const productDesignFiles = pgTable(
   (table) => [
     index("product_design_files_product_created_idx").on(table.productId, table.createdAt),
     index("product_design_files_customer_created_idx").on(table.customerId, table.createdAt),
+    index("product_design_files_material_created_idx").on(table.materialId, table.createdAt),
   ],
 );

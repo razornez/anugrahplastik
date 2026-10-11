@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath, updateTag } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -9,10 +9,15 @@ import { getDatabase } from "@/lib/database/client";
 import { auditLogs, contentBlocks, contentRevisions, users } from "@/lib/database/schema";
 import { clearSession, createSession, getSession, type SessionUser } from "@/lib/auth/session";
 import { clientAddress, takeRateLimit } from "@/lib/security/rate-limit";
-import { LANDING_CONTENT_KEY, landingContentSchema, type LandingContent } from "./landing-content";
+import {
+  defaultLandingContent,
+  LANDING_CONTENT_KEY,
+  landingContentSchema,
+  type LandingContent,
+} from "./landing-content";
 
 function canManageContent(user: SessionUser | null): user is SessionUser {
-  return Boolean(user);
+  return Boolean(user && (user.role === "admin" || user.role === "content"));
 }
 
 async function requireContentManager() {
@@ -64,36 +69,45 @@ export async function saveLandingContent(formData: FormData) {
   const database = getDatabase();
   if (!database) redirect("/admin/content?error=database");
 
-  const parsed = landingContentSchema.safeParse({
-    metadata: { title: formData.get("metadata.title"), description: formData.get("metadata.description") },
-    topbar: { promise: formData.get("topbar.promise") },
-    hero: {
-      titleBefore: formData.get("hero.titleBefore"),
-      titleHighlight: formData.get("hero.titleHighlight"),
-      titleAfter: formData.get("hero.titleAfter"),
-      description: formData.get("hero.description"),
-      primaryCta: formData.get("hero.primaryCta"),
-      secondaryCta: formData.get("hero.secondaryCta"),
+  const serialized = String(formData.get("content-json") || "");
+  let submitted: unknown;
+  try {
+    submitted = serialized ? JSON.parse(serialized) : null;
+  } catch {
+    redirect("/admin/content?error=content");
+  }
+  const parsed = landingContentSchema.safeParse(
+    submitted ?? {
+      metadata: { title: formData.get("metadata.title"), description: formData.get("metadata.description") },
+      topbar: { promise: formData.get("topbar.promise") },
+      hero: {
+        titleBefore: formData.get("hero.titleBefore"),
+        titleHighlight: formData.get("hero.titleHighlight"),
+        titleAfter: formData.get("hero.titleAfter"),
+        description: formData.get("hero.description"),
+        primaryCta: formData.get("hero.primaryCta"),
+        secondaryCta: formData.get("hero.secondaryCta"),
+      },
+      about: { title: formData.get("about.title"), body: formData.get("about.body") },
+      why: { title: formData.get("why.title") },
+      process: { title: formData.get("process.title") },
+      material: { title: formData.get("material.title"), primaryCta: formData.get("material.primaryCta") },
+      portfolio: { title: formData.get("portfolio.title") },
+      faq: {
+        title: formData.get("faq.title"),
+        description: formData.get("faq.description"),
+        primaryCta: formData.get("faq.primaryCta"),
+      },
+      contact: {
+        title: formData.get("contact.title"),
+        description: formData.get("contact.description"),
+        formTitle: formData.get("contact.formTitle"),
+        formDescription: formData.get("contact.formDescription"),
+        primaryCta: formData.get("contact.primaryCta"),
+      },
+      footer: { description: formData.get("footer.description") },
     },
-    about: { title: formData.get("about.title"), body: formData.get("about.body") },
-    why: { title: formData.get("why.title") },
-    process: { title: formData.get("process.title") },
-    material: { title: formData.get("material.title"), primaryCta: formData.get("material.primaryCta") },
-    portfolio: { title: formData.get("portfolio.title") },
-    faq: {
-      title: formData.get("faq.title"),
-      description: formData.get("faq.description"),
-      primaryCta: formData.get("faq.primaryCta"),
-    },
-    contact: {
-      title: formData.get("contact.title"),
-      description: formData.get("contact.description"),
-      formTitle: formData.get("contact.formTitle"),
-      formDescription: formData.get("contact.formDescription"),
-      primaryCta: formData.get("contact.primaryCta"),
-    },
-    footer: { description: formData.get("footer.description") },
-  });
+  );
 
   if (!parsed.success) {
     redirect("/admin/content?error=content");
@@ -101,7 +115,10 @@ export async function saveLandingContent(formData: FormData) {
   const content: LandingContent = parsed.data;
 
   const action = String(formData.get("action") || "draft") === "publish" ? "publish" : "draft";
+  const expectedVersion = Number(formData.get("expected-version"));
   const [existing] = await database.select().from(contentBlocks).where(eq(contentBlocks.key, LANDING_CONTENT_KEY));
+  if (Number.isFinite(expectedVersion) && expectedVersion !== (existing?.version ?? 0))
+    redirect("/admin/content?error=conflict");
   const version = (existing?.version ?? 0) + 1;
   const [block] = await database.transaction(async (transaction) => {
     const payload = {
@@ -114,12 +131,17 @@ export async function saveLandingContent(formData: FormData) {
       updatedAt: new Date(),
     };
     const [saved] = existing
-      ? await transaction.update(contentBlocks).set(payload).where(eq(contentBlocks.id, existing.id)).returning()
+      ? await transaction
+          .update(contentBlocks)
+          .set(payload)
+          .where(and(eq(contentBlocks.id, existing.id), eq(contentBlocks.version, existing.version)))
+          .returning()
       : await transaction
           .insert(contentBlocks)
           .values({ key: LANDING_CONTENT_KEY, ...payload })
           .returning();
 
+    if (!saved) throw new Error("Versi konten berubah sebelum dapat disimpan.");
     await transaction
       .insert(contentRevisions)
       .values({ contentBlockId: saved.id, content, version, action, actorId: user.id });
@@ -138,4 +160,49 @@ export async function saveLandingContent(formData: FormData) {
     revalidatePath("/");
   }
   redirect(`/admin/content?status=${action}`);
+}
+
+export async function restoreLandingRevision(revisionId: string, formData: FormData) {
+  const user = await requireContentManager();
+  const database = getDatabase();
+  if (!database) redirect("/admin/content?error=database");
+  const expectedVersion = Number(formData.get("expected-version"));
+  const [block] = await database.select().from(contentBlocks).where(eq(contentBlocks.key, LANDING_CONTENT_KEY));
+  if (!block || expectedVersion !== block.version) redirect("/admin/content?error=conflict");
+  const [revision] = await database
+    .select()
+    .from(contentRevisions)
+    .where(and(eq(contentRevisions.id, revisionId), eq(contentRevisions.contentBlockId, block.id)));
+  const parsed = landingContentSchema.safeParse({ ...defaultLandingContent, ...(revision?.content ?? {}) });
+  if (!parsed.success) redirect("/admin/content?error=revision");
+  const version = block.version + 1;
+  await database.transaction(async (transaction) => {
+    const [saved] = await transaction
+      .update(contentBlocks)
+      .set({
+        content: parsed.data,
+        draftContent: parsed.data,
+        publishedContent: parsed.data,
+        status: "published",
+        publishedAt: new Date(),
+        version,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(contentBlocks.id, block.id), eq(contentBlocks.version, block.version)))
+      .returning();
+    if (!saved) throw new Error("Versi konten berubah sebelum dapat dipulihkan.");
+    await transaction
+      .insert(contentRevisions)
+      .values({ contentBlockId: block.id, content: parsed.data, version, action: "restore", actorId: user.id });
+    await transaction.insert(auditLogs).values({
+      actorId: user.id,
+      action: "content.restore",
+      entityType: "content_block",
+      entityId: block.id,
+      metadata: { restoredRevisionId: revision.id, version },
+    });
+  });
+  updateTag("landing.page");
+  revalidatePath("/");
+  redirect("/admin/content?status=restore");
 }

@@ -2,6 +2,7 @@ import { and, count, countDistinct, desc, eq, gte, isNotNull } from "drizzle-orm
 import { analyticsEvents, analyticsSessions } from "@/lib/database/schema";
 import { getDatabase } from "@/lib/database/client";
 import { actionLabel, sectionLabel } from "./display-labels";
+import { jakartaReportStart } from "./report-period";
 
 export type InsightRow = { key: string; total: number };
 
@@ -37,17 +38,20 @@ function toRows(rows: Array<{ key: string | null; total: number }>): InsightRow[
   return rows.filter((row): row is { key: string; total: number } => Boolean(row.key)).map((row) => ({ ...row }));
 }
 
-export async function getAnalyticsInsight(days = 7): Promise<AnalyticsInsight> {
+export async function getAnalyticsInsight(
+  days = 7,
+  trafficClass: "public" | "demo" = "public",
+): Promise<AnalyticsInsight> {
   const database = getDatabase();
   if (!database) return emptyInsight(days);
 
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1_000);
+  const since = jakartaReportStart(days);
   const [summaryRows, topSections, topCtas, exitSections] = await Promise.all([
     database
       .select({ sessions: countDistinct(analyticsSessions.id), events: count(analyticsEvents.id) })
       .from(analyticsSessions)
       .leftJoin(analyticsEvents, eq(analyticsEvents.sessionId, analyticsSessions.id))
-      .where(and(gte(analyticsSessions.createdAt, since), eq(analyticsSessions.trafficClass, "public"))),
+      .where(and(gte(analyticsSessions.createdAt, since), eq(analyticsSessions.trafficClass, trafficClass))),
     database
       .select({ key: analyticsEvents.sectionKey, total: count() })
       .from(analyticsEvents)
@@ -56,7 +60,7 @@ export async function getAnalyticsInsight(days = 7): Promise<AnalyticsInsight> {
         and(
           eq(analyticsEvents.name, "section_engaged"),
           gte(analyticsEvents.occurredAt, since),
-          eq(analyticsSessions.trafficClass, "public"),
+          eq(analyticsSessions.trafficClass, trafficClass),
           isNotNull(analyticsEvents.sectionKey),
         ),
       )
@@ -71,7 +75,7 @@ export async function getAnalyticsInsight(days = 7): Promise<AnalyticsInsight> {
         and(
           eq(analyticsEvents.name, "cta_click"),
           gte(analyticsEvents.occurredAt, since),
-          eq(analyticsSessions.trafficClass, "public"),
+          eq(analyticsSessions.trafficClass, trafficClass),
           isNotNull(analyticsEvents.elementKey),
         ),
       )
@@ -79,19 +83,20 @@ export async function getAnalyticsInsight(days = 7): Promise<AnalyticsInsight> {
       .orderBy(desc(count()))
       .limit(5),
     database
-      .select({ key: analyticsEvents.sectionKey, total: count() })
+      .select({ key: analyticsEvents.sectionKey, total: countDistinct(analyticsEvents.sessionId) })
       .from(analyticsEvents)
       .innerJoin(analyticsSessions, eq(analyticsEvents.sessionId, analyticsSessions.id))
       .where(
         and(
           eq(analyticsEvents.name, "page_leave"),
           gte(analyticsEvents.occurredAt, since),
-          eq(analyticsSessions.trafficClass, "public"),
+          gte(analyticsSessions.createdAt, since),
+          eq(analyticsSessions.trafficClass, trafficClass),
           isNotNull(analyticsEvents.sectionKey),
         ),
       )
       .groupBy(analyticsEvents.sectionKey)
-      .orderBy(desc(count()))
+      .orderBy(desc(countDistinct(analyticsEvents.sessionId)))
       .limit(5),
   ]);
   const summary = summaryRows[0];
@@ -105,7 +110,7 @@ export async function getAnalyticsInsight(days = 7): Promise<AnalyticsInsight> {
         and(
           eq(analyticsEvents.name, name),
           gte(analyticsEvents.occurredAt, since),
-          eq(analyticsSessions.trafficClass, "public"),
+          eq(analyticsSessions.trafficClass, trafficClass),
         ),
       );
 
@@ -118,7 +123,7 @@ export async function getAnalyticsInsight(days = 7): Promise<AnalyticsInsight> {
         and(
           eq(analyticsSessions.outcome, "Form terkirim"),
           gte(analyticsSessions.createdAt, since),
-          eq(analyticsSessions.trafficClass, "public"),
+          eq(analyticsSessions.trafficClass, trafficClass),
         ),
       ),
     database
@@ -128,7 +133,7 @@ export async function getAnalyticsInsight(days = 7): Promise<AnalyticsInsight> {
         and(
           eq(analyticsSessions.formStatus, "valid"),
           gte(analyticsSessions.createdAt, since),
-          eq(analyticsSessions.trafficClass, "public"),
+          eq(analyticsSessions.trafficClass, trafficClass),
         ),
       ),
     countFor("whatsapp_click"),

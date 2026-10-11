@@ -2,8 +2,12 @@
  * One process only. It claims batches with SKIP LOCKED so an accidental second
  * process waits its turn instead of processing the same visitor events twice.
  */
-// eslint-disable-next-line @typescript-eslint/no-require-imports -- This standalone Node process is supervised as CommonJS on the VPS.
-require("dotenv").config({ path: ".env.local" });
+// Production uses systemd EnvironmentFile. Loading .env.local remains a local-only convenience
+// and avoids shipping dotenv as a runtime dependency in the Linux release artifact.
+if (process.env.NODE_ENV !== "production") {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- Local-only worker bootstrap.
+  require("dotenv").config({ path: ".env.local" });
+}
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- Keep the worker independent from the Next.js module graph.
 const { Pool } = require("pg");

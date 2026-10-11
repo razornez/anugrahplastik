@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/database/client";
 import { auditLogs, leads } from "@/lib/database/schema";
+import { businessSource } from "@/features/analytics/business-discovery-model";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSession();
@@ -14,14 +15,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
   const [lead] = await database.select().from(leads).where(eq(leads.id, id));
   if (!lead) return NextResponse.redirect(new URL("/admin/prospects", request.url));
-  if (!lead.phone)
+  if (lead.source === businessSource && !["admin", "sales"].includes(user.role))
+    return NextResponse.redirect(new URL("/admin/prospects", request.url));
+  if (lead.dataClass !== "production") return NextResponse.redirect(new URL("/admin/prospects", request.url));
+  const phone = lead.phone;
+  if (!phone) {
     return NextResponse.redirect(new URL(`/admin/prospects?selected=${lead.id}&error=no-phone`, request.url));
+  }
   await database.transaction(async (transaction) => {
-    await transaction
-      .insert(auditLogs)
-      .values({ actorId: user.id, action: "prospect.whatsapp_started", entityType: "lead", entityId: lead.id });
+    await transaction.insert(auditLogs).values({
+      actorId: user.id,
+      action: "prospect.whatsapp_started",
+      entityType: "lead",
+      entityId: lead.id,
+      metadata: { source: "workspace" },
+    });
   });
-  const phone = lead.phone.replace(/\D/g, "").replace(/^0/, "62");
-  const text = `Halo ${lead.name}, terima kasih sudah menghubungi Anugrah Plastik. Kami ingin memahami kebutuhan Anda: ${lead.message}`;
+  const text =
+    lead.source === businessSource
+      ? `Halo, kami dari Anugrah Plastik. Apakah ${lead.name} memiliki kebutuhan komponen plastik yang bisa kami bantu?`
+      : `Halo ${lead.name}, terima kasih sudah menghubungi Anugrah Plastik. Kami ingin memahami kebutuhan Anda: ${lead.message}`;
   return NextResponse.redirect(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`);
 }

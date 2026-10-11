@@ -56,13 +56,18 @@ export function storageName(format: DesignFormat) {
   );
 }
 
+export function thumbnailStorageName() {
+  const now = new Date();
+  return join(
+    "design-thumbnails",
+    String(now.getUTCFullYear()),
+    String(now.getUTCMonth() + 1).padStart(2, "0"),
+    `${randomUUID()}.webp`,
+  );
+}
+
 export async function preparePrivateDestination(relativePath: string) {
-  const root = storageRoot();
-  const absolutePath = resolve(root, relativePath);
-  const resolvedRoot = resolve(root);
-  if (absolutePath === resolvedRoot || !absolutePath.startsWith(resolvedRoot)) {
-    throw new Error("Lokasi file tidak valid.");
-  }
+  const absolutePath = privateFilePath(relativePath);
   await mkdir(dirname(absolutePath), { recursive: true });
   return absolutePath;
 }

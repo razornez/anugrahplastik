@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Anugrah Plastik integration sync every five minutes
+
+[Timer]
+OnCalendar=*:0/5
+Persistent=true
+Unit=anugrahplastik-integrations.service
+
+[Install]
+WantedBy=timers.target

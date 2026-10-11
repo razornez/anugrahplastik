@@ -10,19 +10,14 @@ import {
 } from "@/lib/database/schema";
 import { getDatabase } from "@/lib/database/client";
 import { decodeTimeCursor, encodeTimeCursor } from "@/lib/pagination/cursor";
+import { jakartaReportRange } from "@/features/analytics/report-period";
+import { businessSource } from "@/features/analytics/business-discovery-model";
 
 export type WorkspacePeriod = "today" | "week" | "month";
 
-export function workspaceRange(period: WorkspacePeriod) {
-  const now = new Date();
-  const start = new Date(now);
-  if (period === "today") start.setHours(0, 0, 0, 0);
-  if (period === "week") start.setDate(start.getDate() - 6);
-  if (period === "month") start.setDate(start.getDate() - 29);
-  start.setHours(0, 0, 0, 0);
-  const prior = new Date(start);
-  prior.setTime(prior.getTime() - (now.getTime() - start.getTime()));
-  return { start, prior, now };
+export function workspaceRange(period: WorkspacePeriod, now = new Date()) {
+  const days = period === "today" ? 1 : period === "week" ? 7 : 30;
+  return jakartaReportRange(days, now);
 }
 
 async function eventCount(name: string | null, start: Date, end?: Date) {
@@ -79,11 +74,15 @@ export async function getWorkspaceOverview(period: WorkspacePeriod) {
     database
       .select({ total: count() })
       .from(leads)
-      .where(and(gte(leads.createdAt, start), eq(leads.dataClass, "production"))),
+      .where(
+        and(gte(leads.createdAt, start), eq(leads.dataClass, "production"), sql`${leads.source} <> ${businessSource}`),
+      ),
     database
       .select({ total: count() })
       .from(leads)
-      .where(and(isNull(leads.assignedUserId), eq(leads.dataClass, "production"))),
+      .where(
+        and(isNull(leads.assignedUserId), eq(leads.dataClass, "production"), sql`${leads.source} <> ${businessSource}`),
+      ),
     database
       .select({
         id: leads.id,
@@ -95,7 +94,7 @@ export async function getWorkspaceOverview(period: WorkspacePeriod) {
       })
       .from(leads)
       .leftJoin(users, eq(leads.assignedUserId, users.id))
-      .where(eq(leads.dataClass, "production"))
+      .where(and(eq(leads.dataClass, "production"), sql`${leads.source} <> ${businessSource}`))
       .orderBy(desc(leads.createdAt))
       .limit(5),
     database
@@ -107,6 +106,7 @@ export async function getWorkspaceOverview(period: WorkspacePeriod) {
       })
       .from(auditLogs)
       .leftJoin(users, eq(auditLogs.actorId, users.id))
+      .where(sql`coalesce(${auditLogs.metadata}->>'source', '') <> 'demo'`)
       .orderBy(desc(auditLogs.createdAt))
       .limit(5),
     database
@@ -172,6 +172,8 @@ export async function getProspects(
     status?: string;
     cursor?: string;
     direction?: "next" | "previous";
+    origin?: string;
+    allowResearch?: boolean;
   } = {},
 ) {
   const database = getDatabase();
@@ -180,8 +182,15 @@ export async function getProspects(
   const cursorDate = cursor ? new Date(cursor.createdAt) : null;
   const cursorId = cursor?.id ?? "";
   const backwards = query.direction === "previous";
+  const sourceFilter =
+    query.allowResearch === false || query.origin === "incoming"
+      ? sql`${leads.source} <> ${businessSource}`
+      : query.origin === "research"
+        ? eq(leads.source, businessSource)
+        : undefined;
   const filters = and(
     eq(leads.dataClass, "production"),
+    sourceFilter,
     query.status ? eq(leads.status, query.status) : undefined,
     query.search
       ? or(
@@ -202,7 +211,7 @@ export async function getProspects(
           )
       : undefined,
   );
-  const [loadedProspects, members] = await Promise.all([
+  const [loadedProspects, members, summaryRows, notesRows] = await Promise.all([
     database
       .select({
         id: leads.id,
@@ -222,6 +231,18 @@ export async function getProspects(
       .orderBy(...(backwards ? [asc(leads.createdAt), asc(leads.id)] : [desc(leads.createdAt), desc(leads.id)]))
       .limit(26),
     database.select({ id: users.id, name: users.name, role: users.role }).from(users).where(eq(users.isActive, true)),
+    database
+      .select({
+        total: count(),
+        unassigned: sql<number>`count(*) filter (where ${leads.assignedUserId} is null)`,
+      })
+      .from(leads)
+      .where(and(eq(leads.dataClass, "production"), sourceFilter)),
+    database
+      .select({ total: countDistinct(leadNotes.leadId) })
+      .from(leadNotes)
+      .innerJoin(leads, eq(leadNotes.leadId, leads.id))
+      .where(and(eq(leads.dataClass, "production"), sourceFilter)),
   ]);
   const hasAdjacent = loadedProspects.length > 25;
   const prospects = backwards ? loadedProspects.slice(0, 25).reverse() : loadedProspects.slice(0, 25);
@@ -235,6 +256,11 @@ export async function getProspects(
         .orderBy(desc(leadNotes.createdAt))
     : [];
   return {
+    summary: {
+      total: Number(summaryRows[0]?.total ?? 0),
+      unassigned: Number(summaryRows[0]?.unassigned ?? 0),
+      withNotes: Number(notesRows[0]?.total ?? 0),
+    },
     prospects,
     selected,
     notes,

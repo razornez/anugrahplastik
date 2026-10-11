@@ -15,10 +15,14 @@
 
 # next.js
 /.next/
+/.next-qa/
 /out/
 
 # production
 /build
+/storage/
+/tmp/
+/output/pdf/
 
 # misc
 .DS_Store

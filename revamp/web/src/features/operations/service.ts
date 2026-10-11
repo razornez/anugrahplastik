@@ -1,8 +1,9 @@
-import { and, asc, count, desc, eq, getTableColumns, ilike, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, ilike, inArray, or, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   auditLogs,
   businessTransactions,
+  csEmails,
   customers,
   materials,
   moulds,
@@ -10,6 +11,7 @@ import {
   products,
   productionBatches,
   shipments,
+  shipmentLines,
   suppliers,
   transactionDocuments,
   transactionFinancialEntries,
@@ -19,17 +21,31 @@ import {
 } from "@/lib/database/schema";
 import { getDatabase } from "@/lib/database/client";
 import { decodeTimeCursor, encodeTimeCursor } from "@/lib/pagination/cursor";
+import { calculateQuote } from "./quote-math";
+import { transactionWorkspace } from "./transaction-workspace";
 
 export const masterKinds = ["customers", "suppliers", "materials", "products", "moulds", "designs"] as const;
 export type MasterKind = (typeof masterKinds)[number];
 export type DirectoryQuery = {
   query?: string;
   status?: string;
+  format?: string;
+  materialId?: string;
   order?: "newest" | "oldest";
   cursor?: string;
   direction?: "next" | "previous";
 };
-export type DirectoryRow = { id: string; code: string; title: string; detail: string; status: string; createdAt: Date };
+export type DirectoryRow = {
+  id: string;
+  code: string;
+  title: string;
+  detail: string;
+  status: string;
+  createdAt: Date;
+  description?: string | null;
+  materialName?: string | null;
+  thumbnailStoragePath?: string | null;
+};
 
 function money(value: string | number | null) {
   return Number(value ?? 0);
@@ -225,16 +241,24 @@ export async function getMasterDirectoryPage(kind: MasterKind, query: DirectoryQ
         id: productDesignFiles.id,
         code: sql<string>`upper(${productDesignFiles.format})`,
         title: productDesignFiles.originalName,
-        detail: sql<string>`coalesce(${products.name}, ${customers.displayName}, 'Belum ditautkan')`,
+        detail: sql<string>`concat_ws(' · ', ${products.name}, ${moulds.name}, ${customers.displayName}, ${businessTransactions.referenceNo})`,
+        description: productDesignFiles.description,
+        materialName: materials.name,
+        thumbnailStoragePath: productDesignFiles.thumbnailStoragePath,
         status: productDesignFiles.origin,
         createdAt: productDesignFiles.createdAt,
       })
       .from(productDesignFiles)
       .leftJoin(products, eq(products.id, productDesignFiles.productId))
+      .leftJoin(moulds, eq(moulds.id, productDesignFiles.mouldId))
       .leftJoin(customers, eq(customers.id, productDesignFiles.customerId))
+      .leftJoin(businessTransactions, eq(businessTransactions.id, productDesignFiles.transactionId))
+      .leftJoin(materials, eq(materials.id, productDesignFiles.materialId))
       .where(
         and(
           status ? eq(productDesignFiles.origin, status) : undefined,
+          query.format ? eq(productDesignFiles.format, query.format) : undefined,
+          query.materialId ? eq(productDesignFiles.materialId, query.materialId) : undefined,
           term ? ilike(productDesignFiles.originalName, `%${term}%`) : undefined,
           cursorWhere(productDesignFiles.createdAt, productDesignFiles.id),
         ),
@@ -264,8 +288,8 @@ export async function getActiveCustomerCount() {
 
 export async function getDesignUploadOptions() {
   const database = getDatabase();
-  if (!database) return [];
-  const [customerRows, productRows, mouldRows] = await Promise.all([
+  if (!database) return { links: [], customers: [], materials: [] };
+  const [customerRows, productRows, mouldRows, transactionRows, materialRows] = await Promise.all([
     database
       .select({ id: customers.id, code: customers.code, name: customers.displayName })
       .from(customers)
@@ -284,24 +308,55 @@ export async function getDesignUploadOptions() {
       .where(eq(moulds.status, "active"))
       .orderBy(moulds.name)
       .limit(200),
+    database
+      .select({ id: businessTransactions.id, code: businessTransactions.referenceNo, name: businessTransactions.title })
+      .from(businessTransactions)
+      .orderBy(desc(businessTransactions.updatedAt))
+      .limit(200),
+    database
+      .select({ id: materials.id, code: materials.code, name: materials.name, family: materials.polymerFamily })
+      .from(materials)
+      .where(eq(materials.status, "active"))
+      .orderBy(materials.name)
+      .limit(200),
   ]);
-  return [
-    ...productRows.map((item) => ({
-      id: item.id,
-      type: "product" as const,
-      label: `${item.name} · ${item.code} — Barang`,
-    })),
-    ...customerRows.map((item) => ({
-      id: item.id,
-      type: "customer" as const,
-      label: `${item.name} · ${item.code} — Customer`,
-    })),
-    ...mouldRows.map((item) => ({ id: item.id, type: "mould" as const, label: `${item.name} · ${item.code} — Mould` })),
-  ];
+  return {
+    links: [
+      ...productRows.map((item) => ({
+        id: item.id,
+        type: "product" as const,
+        label: `${item.name} · ${item.code} — Barang`,
+      })),
+      ...customerRows.map((item) => ({
+        id: item.id,
+        type: "customer" as const,
+        label: `${item.name} · ${item.code} — Customer`,
+      })),
+      ...mouldRows.map((item) => ({
+        id: item.id,
+        type: "mould" as const,
+        label: `${item.name} · ${item.code} — Mould`,
+      })),
+      ...transactionRows.map((item) => ({
+        id: item.id,
+        type: "transaction" as const,
+        label: `${item.name} · ${item.code} — Transaksi`,
+      })),
+    ],
+    customers: customerRows.map((item) => ({ id: item.id, label: `${item.name} · ${item.code}` })),
+    materials: materialRows.map((item) => ({ id: item.id, label: `${item.name} · ${item.family}` })),
+  };
 }
 
 export async function getTransactionPage(
-  query: { search?: string; status?: string; cursor?: string; direction?: "next" | "previous" } = {},
+  query: {
+    search?: string;
+    status?: string;
+    payment?: string;
+    fulfilment?: string;
+    cursor?: string;
+    direction?: "next" | "previous";
+  } = {},
 ) {
   const database = getDatabase();
   if (!database) return null;
@@ -309,9 +364,13 @@ export async function getTransactionPage(
   const cursorDate = cursor ? new Date(cursor.createdAt) : null;
   const cursorId = cursor?.id ?? "";
   const backwards = query.direction === "previous";
+  // JavaScript Date/cursor precision is milliseconds; use the same precision in SQL.
+  const updatedClock = sql`date_trunc('milliseconds', ${businessTransactions.updatedAt})`;
   const conditions = and(
     eq(businessTransactions.dataClass, "production"),
     query.status ? eq(businessTransactions.commercialStatus, query.status) : undefined,
+    query.payment ? eq(businessTransactions.paymentStatus, query.payment) : undefined,
+    query.fulfilment ? eq(businessTransactions.fulfilmentStatus, query.fulfilment) : undefined,
     query.search
       ? or(
           ilike(businessTransactions.title, `%${query.search.slice(0, 120)}%`),
@@ -322,12 +381,12 @@ export async function getTransactionPage(
     cursorDate
       ? backwards
         ? or(
-            sql`${businessTransactions.updatedAt} > ${cursorDate}`,
-            and(eq(businessTransactions.updatedAt, cursorDate), sql`${businessTransactions.id} > ${cursorId}`),
+            sql`${updatedClock} > ${cursorDate}`,
+            and(sql`${updatedClock} = ${cursorDate}`, sql`${businessTransactions.id} > ${cursorId}`),
           )
         : or(
-            sql`${businessTransactions.updatedAt} < ${cursorDate}`,
-            and(eq(businessTransactions.updatedAt, cursorDate), sql`${businessTransactions.id} < ${cursorId}`),
+            sql`${updatedClock} < ${cursorDate}`,
+            and(sql`${updatedClock} = ${cursorDate}`, sql`${businessTransactions.id} < ${cursorId}`),
           )
       : undefined,
   );
@@ -335,12 +394,16 @@ export async function getTransactionPage(
     .select({
       id: businessTransactions.id,
       referenceNo: businessTransactions.referenceNo,
+      quotationNo: businessTransactions.quotationNo,
+      quoteLetter: businessTransactions.quoteLetter,
       title: businessTransactions.title,
+      dataClass: businessTransactions.dataClass,
       commercialStatus: businessTransactions.commercialStatus,
       paymentStatus: businessTransactions.paymentStatus,
       fulfilmentStatus: businessTransactions.fulfilmentStatus,
       updatedAt: businessTransactions.updatedAt,
       customerName: customers.displayName,
+      customerBillingAddress: customers.billingAddress,
       ownerName: users.name,
     })
     .from(businessTransactions)
@@ -349,14 +412,100 @@ export async function getTransactionPage(
     .where(conditions)
     .orderBy(
       ...(backwards
-        ? [asc(businessTransactions.updatedAt), asc(businessTransactions.id)]
-        : [desc(businessTransactions.updatedAt), desc(businessTransactions.id)]),
+        ? [asc(updatedClock), asc(businessTransactions.id)]
+        : [desc(updatedClock), desc(businessTransactions.id)]),
     )
     .limit(26);
   const hasAdjacent = loaded.length > 25;
   const rows = backwards ? loaded.slice(0, 25).reverse() : loaded.slice(0, 25);
+  const ids = rows.map((row) => row.id);
+  // Fixed-size grouped reads for one page, never load a full detail per row.
+  const [lines, invoices, entries, documents, batches, deliveries] = ids.length
+    ? await Promise.all([
+        database
+          .select()
+          .from(transactionLines)
+          .where(inArray(transactionLines.transactionId, ids))
+          .orderBy(asc(transactionLines.sortOrder)),
+        database
+          .select({
+            transactionId: transactionInvoices.transactionId,
+            status: transactionInvoices.status,
+            amount: sql<string>`case when min(${transactionInvoices.amount}) >= 0 then sum(${transactionInvoices.amount})::text else 'review' end`,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(transactionInvoices)
+          .where(inArray(transactionInvoices.transactionId, ids))
+          .groupBy(transactionInvoices.transactionId, transactionInvoices.status),
+        database
+          .select({
+            transactionId: transactionFinancialEntries.transactionId,
+            status: transactionFinancialEntries.status,
+            direction: transactionFinancialEntries.direction,
+            kind: transactionFinancialEntries.kind,
+            amount: sql<string>`case when min(${transactionFinancialEntries.amount}) >= 0 then sum(${transactionFinancialEntries.amount})::text else 'review' end`,
+          })
+          .from(transactionFinancialEntries)
+          .where(inArray(transactionFinancialEntries.transactionId, ids))
+          .groupBy(
+            transactionFinancialEntries.transactionId,
+            transactionFinancialEntries.status,
+            transactionFinancialEntries.direction,
+            transactionFinancialEntries.kind,
+          ),
+        database
+          .select({
+            transactionId: transactionDocuments.transactionId,
+            type: transactionDocuments.type,
+            status: transactionDocuments.status,
+            version: transactionDocuments.version,
+            payload: transactionDocuments.payload,
+          })
+          .from(transactionDocuments)
+          .where(
+            and(
+              inArray(transactionDocuments.transactionId, ids),
+              inArray(transactionDocuments.type, ["quotation", "purchase_order"]),
+            ),
+          ),
+        database
+          .select({ transactionId: productionBatches.transactionId, status: productionBatches.status })
+          .from(productionBatches)
+          .where(inArray(productionBatches.transactionId, ids)),
+        database
+          .select({ transactionId: shipments.transactionId, status: shipments.status })
+          .from(shipments)
+          .where(inArray(shipments.transactionId, ids)),
+      ])
+    : [[], [], [], [], [], []];
+  const grouped = <T extends { transactionId: string }>(items: T[]) => {
+    const result = new Map<string, T[]>();
+    for (const item of items) {
+      const group = result.get(item.transactionId);
+      if (group) group.push(item);
+      else result.set(item.transactionId, [item]);
+    }
+    return result;
+  };
+  const groupedLines = grouped(lines),
+    groupedInvoices = grouped(invoices),
+    groupedEntries = grouped(entries),
+    groupedDocuments = grouped(documents),
+    groupedBatches = grouped(batches),
+    groupedDeliveries = grouped(deliveries);
   return {
-    rows,
+    rows: rows.map((row) => ({
+      ...row,
+      workspace: transactionWorkspace({
+        header: row,
+        lines: groupedLines.get(row.id) ?? [],
+        invoices: groupedInvoices.get(row.id) ?? [],
+        entries: groupedEntries.get(row.id) ?? [],
+        documents: groupedDocuments.get(row.id) ?? [],
+        batches: groupedBatches.get(row.id) ?? [],
+        shipments: groupedDeliveries.get(row.id) ?? [],
+      }),
+    })),
     hasNext: backwards ? Boolean(query.cursor) : hasAdjacent,
     hasPrevious: backwards ? hasAdjacent : Boolean(query.cursor),
     nextCursor: rows.length ? encodeTimeCursor({ id: rows.at(-1)!.id, createdAt: rows.at(-1)!.updatedAt }) : null,
@@ -375,12 +524,24 @@ export async function getDesignFile(id: string) {
       byteSize: productDesignFiles.byteSize,
       origin: productDesignFiles.origin,
       fileKind: productDesignFiles.fileKind,
+      version: productDesignFiles.version,
+      checksum: productDesignFiles.checksum,
+      mimeType: productDesignFiles.mimeType,
+      description: productDesignFiles.description,
+      materialName: materials.name,
+      thumbnailStoragePath: productDesignFiles.thumbnailStoragePath,
+      createdAt: productDesignFiles.createdAt,
       productName: products.name,
+      mouldName: moulds.name,
       customerName: customers.displayName,
+      transactionReference: businessTransactions.referenceNo,
     })
     .from(productDesignFiles)
     .leftJoin(products, eq(products.id, productDesignFiles.productId))
+    .leftJoin(moulds, eq(moulds.id, productDesignFiles.mouldId))
     .leftJoin(customers, eq(customers.id, productDesignFiles.customerId))
+    .leftJoin(businessTransactions, eq(businessTransactions.id, productDesignFiles.transactionId))
+    .leftJoin(materials, eq(materials.id, productDesignFiles.materialId))
     .where(eq(productDesignFiles.id, id));
   return file ?? null;
 }
@@ -391,7 +552,10 @@ export async function getTransactionDetail(id: string) {
   const [header] = await database
     .select({
       id: businessTransactions.id,
+      dataClass: businessTransactions.dataClass,
       referenceNo: businessTransactions.referenceNo,
+      quotationNo: businessTransactions.quotationNo,
+      quoteLetter: businessTransactions.quoteLetter,
       title: businessTransactions.title,
       commercialStatus: businessTransactions.commercialStatus,
       paymentStatus: businessTransactions.paymentStatus,
@@ -404,6 +568,7 @@ export async function getTransactionDetail(id: string) {
       customerEmail: customers.email,
       customerPhone: customers.phone,
       customerAddress: customers.deliveryAddress,
+      customerBillingAddress: customers.billingAddress,
       ownerName: users.name,
     })
     .from(businessTransactions)
@@ -412,51 +577,114 @@ export async function getTransactionDetail(id: string) {
     .where(eq(businessTransactions.id, id));
   if (!header) return null;
 
-  const [lines, invoices, documents, entries, batches, deliveryRows, activity] = await Promise.all([
-    database
-      .select({ ...getTableColumns(transactionLines), productName: products.name, materialName: materials.name })
-      .from(transactionLines)
-      .leftJoin(products, eq(products.id, transactionLines.productId))
-      .leftJoin(materials, eq(materials.id, transactionLines.materialId))
-      .where(eq(transactionLines.transactionId, id))
-      .orderBy(transactionLines.sortOrder),
-    database
-      .select()
-      .from(transactionInvoices)
-      .where(eq(transactionInvoices.transactionId, id))
-      .orderBy(desc(transactionInvoices.createdAt)),
-    database
-      .select()
-      .from(transactionDocuments)
-      .where(eq(transactionDocuments.transactionId, id))
-      .orderBy(desc(transactionDocuments.createdAt)),
-    database
-      .select({ ...getTableColumns(transactionFinancialEntries), verifiedByName: users.name })
-      .from(transactionFinancialEntries)
-      .leftJoin(users, eq(users.id, transactionFinancialEntries.verifiedBy))
-      .where(eq(transactionFinancialEntries.transactionId, id))
-      .orderBy(desc(transactionFinancialEntries.occurredAt)),
-    database
-      .select({ ...getTableColumns(productionBatches), productName: products.name, mouldName: moulds.name })
-      .from(productionBatches)
-      .leftJoin(products, eq(products.id, productionBatches.productId))
-      .leftJoin(moulds, eq(moulds.id, productionBatches.mouldId))
-      .where(eq(productionBatches.transactionId, id))
-      .orderBy(desc(productionBatches.createdAt)),
-    database.select().from(shipments).where(eq(shipments.transactionId, id)).orderBy(desc(shipments.createdAt)),
-    database
-      .select({ ...getTableColumns(auditLogs), actorName: users.name })
-      .from(auditLogs)
-      .leftJoin(users, eq(users.id, auditLogs.actorId))
-      .where(sql`${auditLogs.entityType} = 'transaction' and ${auditLogs.entityId} = ${id}`)
-      .orderBy(desc(auditLogs.createdAt))
-      .limit(30),
-  ]);
-  const quotedAmount = lines.reduce((total, line) => total + money(line.quantity) * money(line.unitPrice), 0);
-  const invoiceAmount = invoices.reduce((total, invoice) => total + money(invoice.amount), 0);
-  const receivedAmount = entries
-    .filter((entry) => entry.status === "verified" && entry.direction === "in")
-    .reduce((total, entry) => total + money(entry.amount), 0);
+  const [lines, invoices, documents, entries, batches, deliveryRows, deliveryItems, relatedEmails, activity] =
+    await Promise.all([
+      database
+        .select({ ...getTableColumns(transactionLines), productName: products.name, materialName: materials.name })
+        .from(transactionLines)
+        .leftJoin(products, eq(products.id, transactionLines.productId))
+        .leftJoin(materials, eq(materials.id, transactionLines.materialId))
+        .where(eq(transactionLines.transactionId, id))
+        .orderBy(transactionLines.sortOrder),
+      database
+        .select()
+        .from(transactionInvoices)
+        .where(eq(transactionInvoices.transactionId, id))
+        .orderBy(desc(transactionInvoices.createdAt)),
+      database
+        .select()
+        .from(transactionDocuments)
+        .where(eq(transactionDocuments.transactionId, id))
+        .orderBy(desc(transactionDocuments.createdAt)),
+      database
+        .select({ ...getTableColumns(transactionFinancialEntries), verifiedByName: users.name })
+        .from(transactionFinancialEntries)
+        .leftJoin(users, eq(users.id, transactionFinancialEntries.verifiedBy))
+        .where(eq(transactionFinancialEntries.transactionId, id))
+        .orderBy(desc(transactionFinancialEntries.occurredAt)),
+      database
+        .select({ ...getTableColumns(productionBatches), productName: products.name, mouldName: moulds.name })
+        .from(productionBatches)
+        .leftJoin(products, eq(products.id, productionBatches.productId))
+        .leftJoin(moulds, eq(moulds.id, productionBatches.mouldId))
+        .where(eq(productionBatches.transactionId, id))
+        .orderBy(desc(productionBatches.createdAt)),
+      database.select().from(shipments).where(eq(shipments.transactionId, id)).orderBy(desc(shipments.createdAt)),
+      database
+        .select({
+          shipmentId: shipmentLines.shipmentId,
+          lineId: transactionLines.id,
+          description: transactionLines.description,
+          quantity: shipmentLines.quantity,
+          acceptedQuantity: shipmentLines.acceptedQuantity,
+          logistics: shipmentLines.logistics,
+        })
+        .from(shipmentLines)
+        .innerJoin(transactionLines, eq(transactionLines.id, shipmentLines.transactionLineId))
+        .innerJoin(shipments, eq(shipments.id, shipmentLines.shipmentId))
+        .where(eq(shipments.transactionId, id)),
+      database
+        .select({
+          id: csEmails.id,
+          subject: csEmails.subject,
+          fromAddress: csEmails.fromAddress,
+          receivedAt: csEmails.receivedAt,
+          linkedTransactionId: csEmails.linkedTransactionId,
+        })
+        .from(csEmails)
+        .where(
+          and(
+            eq(csEmails.folder, "inbox"),
+            or(
+              eq(csEmails.linkedTransactionId, id),
+              and(
+                sql`${csEmails.linkedTransactionId} is null`,
+                or(
+                  eq(csEmails.fromAddress, header.customerEmail ?? ""),
+                  ilike(csEmails.subject, `%${header.referenceNo}%`),
+                ),
+              ),
+            ),
+          ),
+        )
+        .orderBy(desc(csEmails.receivedAt))
+        .limit(10),
+      database
+        .select({ ...getTableColumns(auditLogs), actorName: users.name })
+        .from(auditLogs)
+        .leftJoin(users, eq(users.id, auditLogs.actorId))
+        .where(sql`${auditLogs.entityType} = 'transaction' and ${auditLogs.entityId} = ${id}`)
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(30),
+    ]);
+  const calculatedQuote = (() => {
+    try {
+      return calculateQuote(lines);
+    } catch {
+      return null;
+    }
+  })();
+  const quoteSubtotal = calculatedQuote
+    ? Number(calculatedQuote.subtotal)
+    : lines.reduce((total, line) => total + money(line.quantity) * money(line.unitPrice), 0);
+  const quoteTax = calculatedQuote
+    ? Number(calculatedQuote.tax)
+    : lines.reduce(
+        (total, line) => total + (money(line.quantity) * money(line.unitPrice) * money(line.taxRate)) / 100,
+        0,
+      );
+  const quotedAmount = quoteSubtotal + quoteTax;
+  const workspace = transactionWorkspace({
+    header,
+    lines,
+    invoices,
+    entries,
+    documents,
+    batches,
+    shipments: deliveryRows,
+  });
+  const invoiceAmount = Number(workspace.invoice ?? 0);
+  const receivedAmount = Number(workspace.received ?? 0);
   const expenseAmount = entries
     .filter((entry) => entry.status === "verified" && entry.direction === "out")
     .reduce((total, entry) => total + money(entry.amount), 0);
@@ -469,13 +697,21 @@ export async function getTransactionDetail(id: string) {
     entries,
     batches,
     shipments: deliveryRows,
+    shipmentItems: deliveryItems,
+    relatedEmails,
     activity,
+    workspace,
     totals: {
       quotedAmount,
+      quoteGross: calculatedQuote ? Number(calculatedQuote.gross) : quoteSubtotal,
+      quoteDiscount: calculatedQuote ? Number(calculatedQuote.discount) : 0,
+      quoteSubtotal,
+      quoteTax,
       invoiceAmount,
       receivedAmount,
       expenseAmount,
-      outstandingAmount: Math.max(0, invoiceAmount - receivedAmount),
+      outstandingAmount: Number(workspace.outstanding ?? 0),
+      overpaymentAmount: Number(workspace.overpayment ?? 0),
     },
   };
 }

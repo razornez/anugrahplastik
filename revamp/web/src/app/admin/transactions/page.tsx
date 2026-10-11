@@ -1,164 +1,232 @@
 import Link from "next/link";
+import { AdminPageHeader } from "@/components/admin-page-header";
 import { TransactionCreateForm } from "@/components/transaction-create-form";
+import { TransactionListScrollRestorer, TransactionResultLink } from "@/components/transaction-list-navigation";
 import { getActiveCustomerCount, getTransactionPage } from "@/features/operations/service";
 import { requireOperationsAccess } from "@/features/operations/access";
-import {
-  transactionMainStage,
-  transactionStageLabel,
-  transactionStatusLabel,
-} from "@/features/operations/transaction-status";
-import { TransactionListScrollRestorer, TransactionResultLink } from "@/components/transaction-list-navigation";
+import { transactionStatusLabel } from "@/features/operations/transaction-status";
+import { workspaceMoney } from "@/features/operations/transaction-workspace";
+import styles from "./transactions.module.css";
 
 export const instant = false;
-
-function transactionUrl(params: Record<string, string | undefined>) {
+type Query = {
+  q?: string;
+  status?: string;
+  payment?: string;
+  fulfilment?: string;
+  cursor?: string;
+  direction?: string;
+};
+function transactionUrl(params: Query) {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value) search.set(key, value);
   });
   return search.size ? `/admin/transactions?${search}` : "/admin/transactions";
 }
+const stepLabels = {
+  quote: "Penawaran",
+  order: "PO pelanggan",
+  payment: "Invoice & pembayaran",
+  production: "Produksi",
+  delivery: "Surat jalan",
+  handover: "STB bertanda tangan",
+};
+const updated = (value: Date) =>
+  value.toLocaleString("id-ID", {
+    timeZone: "Asia/Jakarta",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
-export default async function TransactionsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string; status?: string; cursor?: string; direction?: string }>;
-}) {
+export default async function TransactionsPage({ searchParams }: { searchParams: Promise<Query> }) {
   const user = await requireOperationsAccess();
-  const query = await searchParams;
+  const raw = await searchParams;
+  const query = { ...raw, status: raw.status === "contract" ? "invoice_issued" : raw.status };
   const [transactions, customerCount] = await Promise.all([
     getTransactionPage({
       search: query.q,
       status: query.status,
+      payment: query.payment,
+      fulfilment: query.fulfilment,
       cursor: query.cursor,
       direction: query.direction === "previous" ? "previous" : "next",
     }),
     getActiveCustomerCount(),
   ]);
-  const listUrl = transactionUrl({
-    q: query.q,
-    status: query.status,
-    cursor: query.cursor,
-    direction: query.direction,
-  });
-
+  const listUrl = transactionUrl(query);
+  const resetUrl = transactionUrl({});
+  const filtered = Boolean(query.q || query.status || query.payment || query.fulfilment);
   return (
-    <section className="operations-page transactions-page">
-      <header className="operations-head transactions-page__head">
-        <div>
-          <p className="eyebrow">Transaksi</p>
-          <h1>Semua pekerjaan, jelas tahapnya.</h1>
-          <p>Pilih pekerjaan untuk melihat tindakan berikutnya, atau mulai transaksi baru dari kebutuhan customer.</p>
-        </div>
-        <TransactionCreateForm customerCount={customerCount} />
-      </header>
-
+    <section className={styles.workspace}>
+      <TransactionListScrollRestorer listUrl={listUrl} />
+      <AdminPageHeader
+        title="Transaksi"
+        description="Kelola penawaran, tagihan, produksi, dan pengiriman pelanggan."
+        actions={<TransactionCreateForm customerCount={customerCount} />}
+      />
       {!customerCount ? (
-        <p className="operations-notice">Tambahkan customer di Data master sebelum membuat transaksi pertama.</p>
+        <p className="operations-notice">Tambahkan pelanggan di Data master sebelum membuat transaksi.</p>
       ) : null}
-      <div className="transaction-workspace">
-        <TransactionListScrollRestorer listUrl={listUrl} />
-        <aside className="transaction-list">
-          <form className="transaction-list-head" method="get">
-            <strong>Semua transaksi</strong>
-            <label className="sr-only" htmlFor="transaction-search">
-              Cari pekerjaan atau customer
-            </label>
-            <input
-              id="transaction-search"
-              name="q"
-              defaultValue={query.q}
-              aria-label="Cari transaksi"
-              placeholder="Cari pekerjaan atau customer"
-            />
-            <select name="status" defaultValue={query.status ?? ""} aria-label="Filter status penawaran">
-              <option value="">Semua status penawaran</option>
-              <option value="quotation">Penawaran</option>
-              <option value="po_received">PO diterima</option>
-              <option value="contract">Kontrak</option>
-              <option value="completed">Selesai</option>
-            </select>
-            <button type="submit">Cari</button>
-          </form>
-          {transactions?.rows.length ? (
-            transactions.rows.map((transaction) => (
-              <TransactionResultLink
-                href={`/admin/transactions/${transaction.id}?returnTo=${encodeURIComponent(listUrl)}`}
-                returnTo={listUrl}
-                key={transaction.id}
-              >
-                <span className="transaction-mark">{transaction.referenceNo.slice(-2)}</span>
+      <form className={styles.filters} method="get">
+        <label className={styles.search}>
+          Cari transaksi
+          <input name="q" defaultValue={query.q} placeholder="Pelanggan, pekerjaan, atau nomor" />
+        </label>
+        <label>
+          Komersial
+          <select name="status" defaultValue={query.status ?? ""}>
+            <option value="">Semua status</option>
+            <option value="quotation">Penawaran</option>
+            <option value="po_received">PO diterima</option>
+            <option value="invoice_issued">Invoice terbit</option>
+            <option value="completed">Selesai</option>
+            <option value="cancelled">Dibatalkan</option>
+          </select>
+        </label>
+        <label>
+          Pembayaran
+          <select name="payment" defaultValue={query.payment ?? ""}>
+            <option value="">Semua status</option>
+            <option value="awaiting_invoice">Belum ada invoice</option>
+            <option value="awaiting_payment">Menunggu pembayaran</option>
+            <option value="payment_recorded">Menunggu verifikasi</option>
+            <option value="partial">Dibayar sebagian</option>
+            <option value="verified">Pembayaran terverifikasi</option>
+          </select>
+        </label>
+        <label>
+          Produksi / pengiriman
+          <select name="fulfilment" defaultValue={query.fulfilment ?? ""}>
+            <option value="">Semua status</option>
+            {["not_released", "released", "sample", "production", "shipping", "bast_pending", "completed"].map(
+              (value) => (
+                <option key={value} value={value}>
+                  {transactionStatusLabel("fulfilment", value)}
+                </option>
+              ),
+            )}
+          </select>
+        </label>
+        <button type="submit">Terapkan</button>
+        {filtered ? <Link href={resetUrl}>Hapus filter</Link> : null}
+      </form>
+      <div className={styles.list}>
+        <div className={styles.listCaption}>
+          <strong>{transactions?.rows.length ?? 0} transaksi di halaman ini</strong>
+          <span>Terbaru diperbarui · WIB</span>
+        </div>
+        <div className={styles.columnHead} aria-hidden="true">
+          <span>Pelanggan & pekerjaan</span>
+          <span>Referensi</span>
+          <span>Tahap & tindak lanjut</span>
+          <span>Pembayaran</span>
+          <span>Nilai & sisa invoice</span>
+          <span>Penanggung jawab</span>
+          <span>Diperbarui</span>
+        </div>
+        {!transactions ? (
+          <div className={styles.empty} role="alert">
+            <h2>Database belum tersedia</h2>
+            <p>Daftar belum dapat dibaca. Ini bukan berarti transaksi kosong.</p>
+            <Link href={listUrl}>Coba lagi</Link>
+          </div>
+        ) : transactions.rows.length ? (
+          transactions.rows.map((row) => (
+            <article className={styles.row} key={row.id}>
+              <div className={styles.identity}>
+                <span>{row.customerName}</span>
+                <TransactionResultLink
+                  href={`/admin/transactions/${row.id}?step=${row.workspace.step}&returnTo=${encodeURIComponent(listUrl)}`}
+                  returnTo={listUrl}
+                >
+                  {row.title}
+                </TransactionResultLink>
+              </div>
+              <div className={styles.reference}> {row.referenceNo}</div>
+              <div className={styles.stage}>
+                <strong>{stepLabels[row.workspace.step]}</strong>
+                <small>{row.workspace.action}</small>
+              </div>
+              <div className={styles.payment}>
+                <span className={styles.badge}>{row.workspace.paymentLabel}</span>
+                {row.workspace.pendingPayment ? (
+                  <small className={styles.attention}>Pembayaran menunggu verifikasi</small>
+                ) : null}
+              </div>
+              <div className={styles.amount}>
+                <small>Penawaran</small>
+                <strong>{workspaceMoney(row.workspace.quote)}</strong>
+                <small>Sisa invoice terbit</small>
                 <span>
-                  <strong>{transaction.title}</strong>
-                  <small>
-                    {transaction.referenceNo} · {transaction.customerName}
-                  </small>
-                  <small>
-                    Penawaran: {transactionStatusLabel("commercial", transaction.commercialStatus)} · Pembayaran:{" "}
-                    {transactionStatusLabel("payment", transaction.paymentStatus)} · Produksi:{" "}
-                    {transactionStatusLabel("fulfilment", transaction.fulfilmentStatus)}
-                  </small>
+                  {row.workspace.issuedCount ? workspaceMoney(row.workspace.outstanding) : "Belum ada invoice"}
                 </span>
-                <em className="transaction-status">
-                  Tahap utama · {transactionStageLabel(transactionMainStage(transaction))}
-                </em>
-              </TransactionResultLink>
-            ))
+                {row.workspace.overpayment && row.workspace.overpayment !== "0.00" ? (
+                  <small>Kelebihan: {workspaceMoney(row.workspace.overpayment)}</small>
+                ) : null}
+              </div>
+              <div className={styles.owner}>{row.ownerName ?? "Belum ada penanggung jawab"}</div>
+              <time className={styles.updated} dateTime={row.updatedAt.toISOString()}>
+                {updated(row.updatedAt)} WIB
+              </time>
+              <details className={styles.mobileDetails}>
+                <summary>Informasi pendukung</summary>
+                <dl>
+                  <dt>Referensi</dt>
+                  <dd>{row.referenceNo}</dd>
+                  <dt>Komersial</dt>
+                  <dd>{transactionStatusLabel("commercial", row.commercialStatus)}</dd>
+                  <dt>Produksi / pengiriman</dt>
+                  <dd>{transactionStatusLabel("fulfilment", row.fulfilmentStatus)}</dd>
+                  <dt>Penanggung jawab</dt>
+                  <dd>{row.ownerName ?? "Belum ditentukan"}</dd>
+                  <dt>Diperbarui</dt>
+                  <dd>{updated(row.updatedAt)} WIB</dd>
+                </dl>
+              </details>
+            </article>
+          ))
+        ) : (
+          <div className={styles.empty}>
+            <h2>{filtered ? "Tidak ada transaksi yang cocok" : "Belum ada transaksi pelanggan"}</h2>
+            <p>
+              {filtered
+                ? "Ubah pencarian atau hapus filter untuk melihat transaksi lainnya."
+                : "Mulai dengan membuat transaksi dan rincian penawaran pelanggan."}
+            </p>
+            {filtered ? <Link href={resetUrl}>Hapus pencarian dan filter</Link> : null}
+          </div>
+        )}
+        <nav className={styles.pagination} aria-label="Halaman transaksi">
+          {transactions?.hasPrevious ? (
+            <Link
+              href={transactionUrl({
+                ...query,
+                cursor: transactions.previousCursor ?? undefined,
+                direction: "previous",
+              })}
+            >
+              ← Sebelumnya
+            </Link>
           ) : (
-            <div className="transaction-list-empty">
-              <p className="empty-copy">
-                {query.q || query.status
-                  ? `Tidak ada transaksi yang cocok${query.q ? ` dengan “${query.q}”` : " dengan filter ini"}.`
-                  : "Belum ada transaksi. Mulai dari customer dan penawaran pertama."}
-              </p>
-              {query.q || query.status ? <Link href="/admin/transactions">Hapus pencarian dan filter</Link> : null}
-            </div>
+            <span>← Sebelumnya</span>
           )}
-          <nav className="directory-pagination" aria-label="Pindah halaman transaksi">
-            {transactions?.hasPrevious ? (
-              <Link
-                href={transactionUrl({
-                  q: query.q,
-                  status: query.status,
-                  cursor: transactions.previousCursor ?? undefined,
-                  direction: "previous",
-                })}
-              >
-                ← Sebelumnya
-              </Link>
-            ) : (
-              <span>← Sebelumnya</span>
-            )}
-            <span>25 transaksi per halaman</span>
-            {transactions?.hasNext ? (
-              <Link
-                href={transactionUrl({
-                  q: query.q,
-                  status: query.status,
-                  cursor: transactions.nextCursor ?? undefined,
-                  direction: "next",
-                })}
-              >
-                Berikutnya →
-              </Link>
-            ) : (
-              <span>Berikutnya →</span>
-            )}
-          </nav>
-        </aside>
-        <section className="transaction-empty-detail">
-          <p className="eyebrow">Pilih pekerjaan</p>
-          <h2>Semua keputusan penting tinggal di satu tempat.</h2>
-          <p>
-            Masuk ke satu transaksi untuk meninjau jalur komersial, pembayaran, produksi &amp; pengiriman, serta
-            riwayatnya.
-          </p>
-        </section>
+          <span>25 per halaman</span>
+          {transactions?.hasNext ? (
+            <Link href={transactionUrl({ ...query, cursor: transactions.nextCursor ?? undefined, direction: "next" })}>
+              Berikutnya →
+            </Link>
+          ) : (
+            <span>Berikutnya →</span>
+          )}
+        </nav>
       </div>
       {user.role === "sales" ? (
-        <p className="operations-footnote">
-          Anda dapat membuat customer, membuat transaksi, dan menyiapkan penawaran. Verifikasi pembayaran dan pelepasan
-          produksi memerlukan persetujuan administrator.
+        <p className={styles.footnote}>
+          Verifikasi pembayaran dan pelepasan produksi memerlukan persetujuan administrator.
         </p>
       ) : null}
     </section>

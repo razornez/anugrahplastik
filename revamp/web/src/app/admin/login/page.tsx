@@ -1,10 +1,14 @@
 import { login } from "@/features/content/admin-actions";
+import { getSession } from "@/lib/auth/session";
 import Image from "next/image";
+import { redirect } from "next/navigation";
 import { AdminLoginForm } from "@/components/admin-login-form";
 
 export const instant = false;
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const session = await getSession();
+  if (session) redirect("/admin");
   const { error } = await searchParams;
   const localAutofill =
     process.env.NODE_ENV === "development" && process.env.LOCAL_ADMIN_AUTOFILL === "true"

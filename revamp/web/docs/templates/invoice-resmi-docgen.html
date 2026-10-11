@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <title>Invoice {{nomor_invoice}}</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 16mm 15mm 18mm;
+        @top-center {
+          content: "CV. ANUGRAHPLASTIK MANDIRI BANDUNG  |  {{nomor_invoice}}";
+          color: #52647a;
+          font:
+            8px Arial,
+            Helvetica,
+            sans-serif;
+        }
+        @bottom-right {
+          content: "Halaman " counter(page);
+          color: #52647a;
+          font:
+            8px Arial,
+            Helvetica,
+            sans-serif;
+        }
+      }
+      @page :first {
+        @top-center {
+          content: none;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        color: #15243a;
+        font:
+          10px/1.5 Arial,
+          Helvetica,
+          sans-serif;
+      }
+      .watermark {
+        border: 1px solid #c56b1c;
+        border-radius: 4px;
+        padding: 5px 9px;
+        color: #9a3412;
+        font-size: 10px;
+        font-weight: 700;
+        text-align: center;
+        margin-bottom: 14px;
+      }
+      header {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 18px;
+        align-items: start;
+        border-bottom: 3px solid #0d66b8;
+        padding-bottom: 14px;
+      }
+      .brand {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        min-width: 0;
+      }
+      .brand img {
+        width: 58px;
+        max-height: 58px;
+        object-fit: contain;
+      }
+      .brand-name {
+        color: #071b34;
+        font-size: 17px;
+        font-weight: 800;
+        line-height: 1.15;
+        text-transform: uppercase;
+      }
+      .brand-meta {
+        margin-top: 4px;
+        color: #4e6075;
+        font-size: 8.5px;
+      }
+      .document-title {
+        color: #0d66b8;
+        font-size: 19px;
+        font-weight: 800;
+        text-align: right;
+        letter-spacing: 0.03em;
+      }
+      .document-number {
+        text-align: right;
+        font-size: 9px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin: 22px 0 18px;
+      }
+      .block {
+        border: 1px solid #d6e1eb;
+        border-radius: 7px;
+        padding: 12px 13px;
+        overflow-wrap: anywhere;
+      }
+      .label {
+        display: block;
+        color: #526781;
+        font-size: 8px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .block strong {
+        font-size: 11px;
+      }
+      .fact {
+        display: grid;
+        grid-template-columns: 85px 1fr;
+        gap: 5px;
+        margin-top: 5px;
+      }
+      .fact span:first-child {
+        color: #5a6c80;
+      }
+      h2 {
+        margin: 0 0 7px;
+        font-size: 11px;
+      }
+      .subject {
+        margin: 0 0 15px;
+        color: #4b5b70;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 8.5px;
+      }
+      thead {
+        display: table-header-group;
+      }
+      tr {
+        break-inside: avoid;
+      }
+      th,
+      td {
+        border: 1px solid #c9d8e7;
+        padding: 7px 5px;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      th {
+        background: #0d66b8;
+        color: #fff;
+        font-weight: 700;
+        text-align: left;
+      }
+      tbody tr:nth-child(even) {
+        background: #f1f6fb;
+      }
+      th:nth-child(1),
+      td:nth-child(1) {
+        width: 5%;
+        text-align: center;
+      }
+      th:nth-child(2),
+      td:nth-child(2) {
+        width: 26%;
+      }
+      th:nth-child(3),
+      td:nth-child(3) {
+        width: 12%;
+        text-align: right;
+      }
+      th:nth-child(4),
+      td:nth-child(4) {
+        width: 13%;
+      }
+      th:nth-child(5),
+      td:nth-child(5) {
+        width: 14%;
+        text-align: right;
+      }
+      th:nth-child(6),
+      td:nth-child(6) {
+        width: 15%;
+        text-align: right;
+      }
+      th:nth-child(7),
+      td:nth-child(7) {
+        width: 15%;
+        text-align: right;
+      }
+      .item-note {
+        margin: 8px 0 14px;
+        color: #526781;
+        font-size: 8.5px;
+      }
+      .totals {
+        width: 53%;
+        margin-left: auto;
+        break-inside: avoid;
+      }
+      .totals div {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        border-bottom: 1px solid #dbe4ed;
+        padding: 5px 0;
+      }
+      .totals span:last-child {
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        white-space: nowrap;
+      }
+      .totals .due {
+        margin-top: 5px;
+        border: 0;
+        border-radius: 5px;
+        padding: 9px 10px;
+        background: #e8f3ff;
+        color: #082e5b;
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .footer-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+        margin-top: 25px;
+        break-inside: avoid;
+      }
+      .footer-grid p {
+        margin: 4px 0;
+        white-space: pre-line;
+      }
+      .bank {
+        border: 1px solid #b9d5ec;
+        border-radius: 6px;
+        padding: 10px;
+      }
+      .sign {
+        text-align: right;
+      }
+      .sign-name {
+        margin-top: 47px;
+        font-weight: 700;
+        text-decoration: underline;
+      }
+      footer {
+        margin-top: 22px;
+        border-top: 1px solid #dbe4ed;
+        padding-top: 7px;
+        color: #60718a;
+        font-size: 8px;
+      }
+      /* Same letterhead as the quotation, with the invoice number on the right. */
+      body {
+        color: #18212d;
+        font:
+          10px/1.46 Arial,
+          Helvetica,
+          sans-serif;
+      }
+      header {
+        align-items: center;
+        border-bottom: 2px solid #17212b;
+        padding-bottom: 7px;
+      }
+      .brand {
+        gap: 8px;
+      }
+      .brand img {
+        width: 48px;
+        height: 48px;
+        max-height: none;
+        object-fit: contain;
+      }
+      .brand-name {
+        max-width: 290px;
+        color: #101010;
+        font-size: 18px;
+        font-weight: 800;
+        line-height: 0.98;
+      }
+      .brand-meta {
+        color: #bb1921;
+        font-size: 6.5px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .document-title {
+        font-size: 15px;
+        letter-spacing: 0;
+        text-decoration: underline;
+      }
+      .document-number {
+        margin-top: 3px;
+        font-size: 8px;
+      }
+      .contact {
+        margin: 5px 0 18px;
+        color: #202b37;
+        font-size: 7.5px;
+        text-align: center;
+      }
+      .contact .address {
+        display: block;
+        margin-bottom: 2px;
+      }
+      .contact .detail + .detail::before {
+        content: "  •  ";
+        color: #c8202b;
+      }
+      .grid {
+        margin-top: 15px;
+      }
+      .block {
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+      }
+      th,
+      td {
+        border-color: #59677a;
+      }
+      th {
+        background: #e8f3fb;
+        color: #12263b;
+      }
+      .bank {
+        border-color: #59677a;
+        border-radius: 0;
+      }
+    </style>
+  </head>
+  <body>
+    {{#if isDummy}}
+    <div class="watermark">DRAF CONTOH - BUKAN DOKUMEN RESMI</div>
+    {{/if}} {{#if isPreview}}
+    <div class="watermark">PRATINJAU DESAIN - BUKAN DOKUMEN UNTUK PELANGGAN</div>
+    {{/if}}
+    <header>
+      <div class="brand">
+        {{{logo}}}
+        <div>
+          <div class="brand-name">{{penerbit}}</div>
+          <div class="brand-meta">Spesialis injeksi plastik, spare part, rubber, logam, dan lain-lain</div>
+        </div>
+      </div>
+      <div>
+        <div class="document-title">{{jenis_tagihan}}</div>
+        <div class="document-number">{{nomor_invoice}}</div>
+      </div>
+    </header>
+    <div class="contact">
+      <span class="address">{{alamat_penerbit}}</span>
+      <span class="detail">{{telepon_penerbit}}</span>
+      <span class="detail">{{email_penerbit}}</span>
+      <span class="detail">{{situs_penerbit}}</span>
+    </div>
+    <div class="grid">
+      <div class="block">
+        <span class="label">Ditagihkan kepada</span><strong>{{nama_pelanggan}}</strong
+        ><br />{{alamat_pelanggan}}<br />NPWP: {{npwp_pelanggan}}
+      </div>
+      <div class="block">
+        <span class="label">Rincian dokumen</span>
+        <div class="fact"><span>Tanggal</span><b>{{tanggal}}</b></div>
+        <div class="fact"><span>Jatuh tempo</span><b>{{jatuh_tempo}}</b></div>
+        <div class="fact"><span>Nomor PO</span><b>{{nomor_po}}</b></div>
+        <div class="fact"><span>Transaksi</span><b>{{nomor_transaksi}}</b></div>
+      </div>
+    </div>
+    <h2>{{pekerjaan}}</h2>
+    <table aria-label="Rincian barang dan diskon">
+      <thead>
+        <tr>
+          <th>No.</th>
+          <th>Deskripsi</th>
+          <th>Jumlah</th>
+          <th>Material</th>
+          <th>Harga satuan</th>
+          <th>Total price</th>
+          <th>Diskon</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{{baris_barang}}}
+      </tbody>
+    </table>
+    <p class="item-note">{{catatan_item}} {{catatan_referensi}}</p>
+    <div class="totals">
+      <div><span>{{label_total_harga}}</span><span>{{total_harga}}</span></div>
+      <div><span>Diskon</span><span>-{{diskon}}</span></div>
+      <div><span>{{label_subtotal}}</span><span>{{nilai_setelah_diskon}}</span></div>
+      <div><span>PPN barang / DP</span><span>{{ppn_barang}}</span></div>
+      <div><span>Total sebelum penerapan DP</span><span>{{total_barang}}</span></div>
+      <div><span>DP yang diterapkan</span><span>-{{dp_diterapkan}}</span></div>
+      <div class="due"><span>Jumlah harus dibayar</span><span>{{total_tagihan}}</span></div>
+    </div>
+    <p class="item-note" style="text-align: right">
+      Rincian pajak tagihan ini: dasar setelah DP {{dpp}} · DPP nilai lain (bila berlaku) {{dpp_nilai_lain}} · PPN
+      setelah penerapan DP {{ppn}}.
+    </p>
+    <div class="footer-grid">
+      <div>
+        <span class="label">Syarat pembayaran</span>
+        <p>{{syarat_bayar}}</p>
+        <div class="bank"><b>{{bank}}</b><br />{{nomor_rekening}}<br />a.n. {{nama_rekening}}</div>
+      </div>
+      <div class="sign">
+        <span>Hormat kami,</span>
+        <div class="sign-name">{{penanda_tangan}}</div>
+        <div>{{jabatan}}</div>
+      </div>
+    </div>
+    <footer>
+      Invoice komersial ini bukan faktur pajak resmi. NPWP penerbit: {{npwp_penerbit}}. Cantumkan nomor invoice saat
+      konfirmasi pembayaran.
+    </footer>
+  </body>
+</html>

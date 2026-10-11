@@ -1,0 +1,23 @@
+[Unit]
+Description=Anugrah Plastik analytics worker
+After=network-online.target postgresql.service anugrahplastik-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=anugrahplastik
+Group=anugrahplastik
+WorkingDirectory=/srv/anugrahplastik/current/app
+EnvironmentFile=/etc/anugrahplastik/web.env
+Environment=NODE_ENV=production
+ExecStart=/opt/anugrahplastik/node/bin/node scripts/analytics-worker.cjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

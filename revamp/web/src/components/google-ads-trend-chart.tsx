@@ -1,19 +1,24 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { AdsMetric, AdsPoint } from "@/features/integrations/google-ads-report-model";
+import { placeAdsChartLabels } from "@/features/integrations/google-ads-chart-layout";
 
-export type AdsMetric = "impressions" | "cost" | "conversions" | "conversionValue";
-export type AdsPoint = { date: string; label: string; values: Record<AdsMetric, number> };
+export type { AdsMetric, AdsPoint };
 
-const metricMeta: Record<AdsMetric, { label: string; color: string; dash: string }> = {
-  impressions: { label: "Impresi", color: "#1967d2", dash: "" },
-  cost: { label: "Biaya", color: "#d93025", dash: "7 4" },
-  conversions: { label: "Konversi", color: "#f9ab00", dash: "2 4" },
-  conversionValue: { label: "Nilai konversi", color: "#188038", dash: "10 4 2 4" },
+const metricMeta: Record<AdsMetric, { label: string }> = {
+  clicks: { label: "Klik" },
+  impressions: { label: "Impresi" },
+  averageCpc: { label: "Rata-rata CPC" },
+  cost: { label: "Biaya" },
+  conversions: { label: "Konversi" },
+  conversionValue: { label: "Nilai konversi" },
 };
+const seriesColors = [1, 2, 3, 4].map((slot) => `var(--ads-series-${slot})`);
+const seriesDashes = ["", "7 4", "2 5", "10 4 2 4"];
 
 const number = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 });
-const allMetrics: AdsMetric[] = ["impressions", "cost", "conversions", "conversionValue"];
+const compact = new Intl.NumberFormat("id-ID", { notation: "compact", maximumFractionDigits: 1 });
 
 export function GoogleAdsTrendChart({
   data,
@@ -25,16 +30,28 @@ export function GoogleAdsTrendChart({
   currency?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const container = useRef<HTMLElement>(null);
+  const [width, setWidth] = useState(1000);
+  useEffect(() => {
+    const element = container.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(Math.max(260, entry.contentRect.width)));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const currentIndex = useRef<number | null>(null);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [pinned, setPinned] = useState(false);
   const [keyboardSelection, setKeyboardSelection] = useState(false);
   const money = new Intl.NumberFormat("id-ID", { style: "currency", currency, maximumFractionDigits: 0 });
   const format = (key: AdsMetric, value: number) =>
-    key === "cost" || key === "conversionValue" ? money.format(value) : number.format(value);
-  const width = 1000;
-  const height = 260;
-  const pad = { top: 18, right: 14, bottom: 30, left: 14 };
+    key === "cost" || key === "averageCpc" || key === "conversionValue" ? money.format(value) : number.format(value);
+  const formatShort = (key: AdsMetric, value: number) =>
+    key === "cost" || key === "averageCpc" || key === "conversionValue"
+      ? `${currency === "IDR" ? "Rp" : `${currency} `}${compact.format(value)}`
+      : compact.format(value);
+  const height = 300;
+  const pad = { top: 32, right: 38, bottom: 42, left: 38 };
   const plotWidth = width - pad.left - pad.right;
   const plotHeight = height - pad.top - pad.bottom;
   const selectIndex = (index: number | null) => {
@@ -58,7 +75,7 @@ export function GoogleAdsTrendChart({
       : `${activePoint.label}, ${activePoint.date.slice(0, 4)}`
     : "";
   const markerInterval = Math.max(1, Math.ceil(data.length / 36));
-  const series = metrics.map((key) => {
+  const series = metrics.map((key, slot) => {
     const max = Math.max(0, ...data.map((point) => point.values[key]));
     const path = data
       .map((point, index) => {
@@ -67,8 +84,29 @@ export function GoogleAdsTrendChart({
         return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
       })
       .join(" ");
-    return { key, max, path };
+    return { key, slot, max, path };
   });
+  const valueLabels = placeAdsChartLabels(
+    data.flatMap((point, index) =>
+      series
+        .filter(
+          ({ key, max }) =>
+            point.values[key] > 0 &&
+            (data.length <= 7 ||
+              index === data.length - 1 ||
+              data.findIndex((entry) => entry.values[key] === max) === index),
+        )
+        .map(({ key, slot, max }) => ({
+          id: `${key}-${point.date}`,
+          text: formatShort(key, point.values[key]),
+          slot,
+          x: pad.left + (data.length <= 1 ? plotWidth / 2 : (index / (data.length - 1)) * plotWidth),
+          y: pad.top + (1 - point.values[key] / max) * plotHeight,
+        })),
+    ),
+    width,
+    height,
+  );
 
   const chart = (
     <div className="ads-chart__plot" role="group" aria-label="Grafik tren metrik Google Ads">
@@ -123,19 +161,19 @@ export function GoogleAdsTrendChart({
             <line key={fraction} x1={pad.left} x2={width - pad.right} y1={y} y2={y} className="ads-chart__gridline" />
           );
         })}
-        {series.map(({ key, path }) => (
+        {series.map(({ key, slot, path }) => (
           <path
             key={key}
             d={path}
             fill="none"
-            stroke={metricMeta[key].color}
+            stroke={seriesColors[slot]}
             strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
-            strokeDasharray={metricMeta[key].dash || undefined}
+            strokeDasharray={seriesDashes[slot] || undefined}
           />
         ))}
-        {series.map(({ key, max }) =>
+        {series.map(({ key, slot, max }) =>
           data.map((point, index) => {
             if (index % markerInterval !== 0 && index !== data.length - 1) return null;
             const x = pad.left + (data.length <= 1 ? plotWidth / 2 : (index / (data.length - 1)) * plotWidth);
@@ -146,12 +184,36 @@ export function GoogleAdsTrendChart({
                 cx={x}
                 cy={y}
                 r="4"
-                fill={metricMeta[key].color}
+                fill={seriesColors[slot]}
                 className="ads-chart__point"
               />
             );
           }),
         )}
+        {valueLabels.map(({ id, text, slot, x, y, labelX, labelY }) => (
+          <g key={id}>
+            {Math.abs(labelY - y) > 20 ? (
+              <line
+                x1={x}
+                y1={y}
+                x2={labelX}
+                y2={labelY - 6}
+                stroke={seriesColors[slot]}
+                strokeWidth="1"
+                opacity="0.45"
+              />
+            ) : null}
+            <text
+              x={labelX}
+              y={labelY}
+              textAnchor="middle"
+              fill={slot === 2 ? "var(--ads-label-3)" : seriesColors[slot]}
+              className="ads-chart__value-label"
+            >
+              {text}
+            </text>
+          </g>
+        ))}
         {activePoint && activeIndex !== null && (
           <g className="ads-chart__cursor" aria-hidden="true">
             <line
@@ -160,10 +222,10 @@ export function GoogleAdsTrendChart({
               y1={pad.top}
               y2={height - pad.bottom}
             />
-            {series.map(({ key, max }) => {
+            {series.map(({ key, slot, max }) => {
               const x = pad.left + (data.length <= 1 ? plotWidth / 2 : (activeIndex / (data.length - 1)) * plotWidth);
               const y = pad.top + (max === 0 ? plotHeight : 1 - activePoint.values[key] / max) * plotHeight;
-              return <circle key={key} cx={x} cy={y} r="6" fill={metricMeta[key].color} />;
+              return <circle key={key} cx={x} cy={y} r="6" fill={seriesColors[slot]} />;
             })}
           </g>
         )}
@@ -172,10 +234,10 @@ export function GoogleAdsTrendChart({
         <div className="ads-chart__tooltip" aria-hidden="true">
           <strong>{activeDateLabel}</strong>
           <dl>
-            {allMetrics.map((key) => (
+            {metrics.map((key, slot) => (
               <div key={key}>
                 <dt>
-                  <i style={{ backgroundColor: metricMeta[key].color }} />
+                  <i style={{ backgroundColor: seriesColors[slot] }} />
                   {metricMeta[key].label}
                 </dt>
                 <dd>{format(key, activePoint.values[key])}</dd>
@@ -184,31 +246,37 @@ export function GoogleAdsTrendChart({
           </dl>
         </div>
       )}
-      <div className="ads-chart__dates" aria-hidden="true">
-        <span>{data[0]?.label ?? "—"}</span>
-        <span>{data[Math.floor((data.length - 1) / 2)]?.label ?? "—"}</span>
-        <span>{data.at(-1)?.label ?? "—"}</span>
+      <div className="ads-chart__dates" aria-hidden="true" style={{ marginInline: `${(pad.left / width) * 100}%` }}>
+        {data.map((point, index) => {
+          if (data.length > 7 && index % Math.ceil((data.length - 1) / 4) !== 0 && index !== data.length - 1)
+            return null;
+          return (
+            <span key={point.date} style={{ left: `${data.length <= 1 ? 50 : (index / (data.length - 1)) * 100}%` }}>
+              {point.label}
+            </span>
+          );
+        })}
       </div>
       {keyboardSelection && activePoint && (
         <span className="ads-chart__sr-only" aria-live="polite" aria-atomic="true">
           {activeDateLabel}.{" "}
-          {allMetrics.map((key) => `${metricMeta[key].label}: ${format(key, activePoint.values[key])}`).join(". ")}
+          {metrics.map((key) => `${metricMeta[key].label}: ${format(key, activePoint.values[key])}`).join(". ")}
         </span>
       )}
     </div>
   );
 
   return (
-    <section className="ads-chart" aria-label="Grafik kinerja Google Ads">
+    <section className="ads-chart" ref={container} aria-label="Grafik kinerja Google Ads">
       <div className="ads-chart__header">
         <div className="ads-chart__legend" aria-label="Legenda grafik">
-          {metrics.map((key) => (
+          {metrics.map((key, slot) => (
             <span key={key}>
               <i
                 aria-hidden="true"
                 style={{
-                  borderColor: metricMeta[key].color,
-                  borderTopStyle: metricMeta[key].dash ? "dashed" : "solid",
+                  borderColor: seriesColors[slot],
+                  borderTopStyle: seriesDashes[slot] ? "dashed" : "solid",
                 }}
               />
               {metricMeta[key].label}
@@ -221,11 +289,12 @@ export function GoogleAdsTrendChart({
       </div>
       {chart}
       <p className="ads-chart__note">
-        Setiap garis menunjukkan perubahan relatif. Arahkan kursor, ketuk grafik, atau gunakan tombol panah untuk
-        melihat semua angka pada tanggal tersebut. Tabel tetap tersedia sebagai alternatif.
+        Tinggi tiap garis menunjukkan perubahan relatif metriknya sendiri, bukan perbandingan antar satuan. Nilai pada
+        titik tertera langsung; angka lengkap tersedia pada tabel di bawah.
       </p>
-      <details className="ads-chart__table">
-        <summary>Lihat angka grafik</summary>
+      <details className="ads-chart__table" open>
+        <summary>Angka lengkap per tanggal</summary>
+        <p className="ads-chart__table-hint">Geser tabel ke samping jika semua kolom belum terlihat.</p>
         <div className="ads-chart__table-wrap">
           <table>
             <thead>

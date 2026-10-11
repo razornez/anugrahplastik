@@ -58,6 +58,7 @@ Pemeriksaan yang sama berjalan otomatis pada setiap push dan pull request ke `ma
 - [Protokol delivery](docs/DELIVERY-PROTOCOL.md)
 - [Quality gates](docs/QUALITY-GATES.md)
 - [Runbook](docs/RUNBOOK.md)
+- [Prosedur rilis VPS](docs/VPS-DEPLOYMENT.md)
 - [Epic operasional](docs/OPERATIONS-EPIC.md)
 - [ADR antrean dan storage](docs/ADR-005-analytics-queue-and-private-files.md)
 

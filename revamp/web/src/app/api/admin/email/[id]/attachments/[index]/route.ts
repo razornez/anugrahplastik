@@ -20,13 +20,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   )
     return NextResponse.json({ error: "Lampiran tidak ditemukan." }, { status: 404 });
   const record = await getEmailRecord(id);
-  if (!record || record.size > maxEmailBytes || record.folder !== "inbox")
+  if (!record || record.size > maxEmailBytes || !["inbox", "sent"].includes(record.folder))
     return NextResponse.json(
       { error: "Lampiran tidak tersedia atau terlalu besar untuk ditampilkan." },
       { status: 404 },
     );
   try {
-    const source = await fetchEmailBody(record.folder, record.uid, record.uidValidity);
+    const source = await fetchEmailBody(record.folder === "inbox" ? "inbox" : "sent", record.uid, record.uidValidity);
     if (!source) return NextResponse.json({ error: "Email tidak lagi tersedia." }, { status: 404 });
     const rawMessage = source;
     if (rawMessage.byteLength > maxEmailBytes)

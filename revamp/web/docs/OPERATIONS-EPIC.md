@@ -19,7 +19,7 @@ Membuat satu nomor transaksi `TRX-YYYY-#####` sebagai penghubung customer, peker
 
 Status utama tidak dipaksakan menjadi satu rantai panjang. Tiga jalur ditampilkan bersamaan:
 
-- Komersial: `quotation` → `po_received` → `contract` → `completed` atau `cancelled`.
+- Komersial: `quotation` → `po_received` → `invoice_issued` → `completed` atau `cancelled`.
 - Pembayaran: `awaiting_invoice` → `awaiting_payment` → `partial` → `verified` → `settled`.
 - Pemenuhan: `not_released` → `released` → `sample` → `production` → `shipping` → `bast_pending` → `completed`.
 
@@ -27,7 +27,7 @@ Hanya administrator yang dapat melepaskan produksi, dan hanya setelah ada pembay
 
 ## Dokumen dan komunikasi
 
-Surat penawaran, kontrak, invoice DP/final, surat jalan, dan BAST dirancang tersimpan sebagai arsip privat permanen. Adapter DocGen menggunakan template ID, idempotency key, dan webhook HMAC; URL PDF sementara dari provider selalu disalin ke storage privat. Pengiriman email membutuhkan OAuth mailbox perusahaan dan mencatat message ID, penerima, serta status. Keduanya belum diaktifkan sampai kredensial perusahaan tersedia.
+Surat penawaran, PO pelanggan, invoice DP/final, surat jalan, dan STB disimpan sebagai arsip privat permanen. Kontrak historis tetap dapat diunduh, tetapi tidak dibuat atau dikirim lagi. Adapter DocGen menggunakan template ID, idempotency key, dan webhook HMAC; URL PDF sementara dari provider selalu disalin ke storage privat. Pengiriman email mencatat message ID, penerima, serta status.
 
 Faktur pajak tidak dibuat aplikasi. Operator hanya mencatat nomor, tanggal, status, dan PDF resmi yang diterbitkan melalui sistem pajak yang berlaku.
 

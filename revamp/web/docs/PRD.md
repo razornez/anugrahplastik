@@ -51,7 +51,7 @@ Meningkatkan jumlah RFQ berkualitas dari calon pelanggan yang membutuhkan cetak 
 ## Epic operasional
 
 - Customer, supplier, material, warna/lot, barang, mould, dan file desain privat menjadi master bersama.
-- Transaksi bernomor `TRX-YYYY-#####` menautkan penawaran, PO, kontrak, invoice, pembayaran, batch produksi, pengiriman, dan BAST.
+- Transaksi bernomor `TRX-YYYY-#####` menautkan penawaran, PO, invoice, pembayaran, batch produksi, pengiriman, dan STB.
 - Pembayaran dapat parsial; hanya administrator yang memverifikasi pembayaran dan melepas produksi.
 - File kerja 3D tidak dipublikasikan. Preview browser dibatasi ke STL, OBJ, dan GLB; sumber CAD diunduh tim berwenang.
 - Penagihan transaksi, biaya proyek, dan piutang dicatat per transaksi. Jurnal akuntansi umum, stok fisik, dan pengadaan supplier berada di luar scope epic ini.

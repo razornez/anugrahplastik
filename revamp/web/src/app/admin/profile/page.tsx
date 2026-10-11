@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AdminPageHeader } from "@/components/admin-page-header";
 import { InstallAppButton } from "@/components/install-app-button";
 import { getSession } from "@/lib/auth/session";
 
@@ -11,9 +12,11 @@ export default async function ProfilePage() {
 
   return (
     <section className="profile-page" aria-labelledby="profile-title">
-      <p className="eyebrow">Pengaturan pribadi</p>
-      <h1 id="profile-title">Profil & perangkat</h1>
-      <p className="profile-intro">Kelola akses ruang kerja dan cara aplikasi ini digunakan di perangkat Anda.</p>
+      <AdminPageHeader
+        title="Profil & perangkat"
+        titleId="profile-title"
+        description="Kelola akses ruang kerja dan perangkat yang Anda gunakan."
+      />
       <div className="profile-grid">
         <article className="profile-card">
           <span className="profile-avatar" aria-hidden="true">

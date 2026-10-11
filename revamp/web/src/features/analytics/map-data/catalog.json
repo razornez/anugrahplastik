@@ -1,0 +1,1622 @@
+{
+  "countries": [
+    {
+      "key": "ZWE",
+      "iso": "ZW",
+      "names": ["Zimbabwe"],
+      "point": [29.925444, -18.91164]
+    },
+    {
+      "key": "ZMB",
+      "iso": "ZM",
+      "names": ["Zambia"],
+      "point": [26.395298, -14.660804]
+    },
+    {
+      "key": "YEM",
+      "iso": "YE",
+      "names": ["Yemen"],
+      "point": [45.874383, 15.328226]
+    },
+    {
+      "key": "VNM",
+      "iso": "VN",
+      "names": ["Vietnam"],
+      "point": [105.387292, 21.715416]
+    },
+    {
+      "key": "VEN",
+      "iso": "VE",
+      "names": ["Venezuela"],
+      "point": [-64.599381, 7.182476]
+    },
+    {
+      "key": "VAT",
+      "iso": "VA",
+      "names": ["Vatican", "Vatican City"],
+      "point": [12.453418, 41.903323]
+    },
+    {
+      "key": "VUT",
+      "iso": "VU",
+      "names": ["Vanuatu"],
+      "point": [166.908762, -15.37153]
+    },
+    {
+      "key": "UZB",
+      "iso": "UZ",
+      "names": ["Uzbekistan"],
+      "point": [64.005429, 41.693603]
+    },
+    {
+      "key": "URY",
+      "iso": "UY",
+      "names": ["Uruguay"],
+      "point": [-55.966942, -32.961127]
+    },
+    {
+      "key": "FSM",
+      "iso": "FM",
+      "names": ["Federated States of Micronesia", "Micronesia"],
+      "point": [158.234019, 6.887553]
+    },
+    {
+      "key": "MHL",
+      "iso": "MH",
+      "names": ["Marshall Islands", "Marshall Is."],
+      "point": [171.193609, 7.082568]
+    },
+    {
+      "key": "MNP",
+      "iso": "MP",
+      "names": ["Northern Mariana Islands", "N. Mariana Is."],
+      "point": [145.734397, 15.188188]
+    },
+    {
+      "key": "VIR",
+      "iso": "VI",
+      "names": ["United States Virgin Islands", "U.S. Virgin Is."],
+      "point": [-64.779172, 17.746706]
+    },
+    {
+      "key": "GUM",
+      "iso": "GU",
+      "names": ["Guam"],
+      "point": [144.703614, 13.354173]
+    },
+    {
+      "key": "ASM",
+      "iso": "AS",
+      "names": ["American Samoa"],
+      "point": [-170.747153, -14.32671]
+    },
+    {
+      "key": "PRI",
+      "iso": "PR",
+      "names": ["Puerto Rico"],
+      "point": [-66.481065, 18.234668]
+    },
+    {
+      "key": "USA",
+      "iso": "US",
+      "names": ["United States of America", "United States"],
+      "point": [-97.482602, 39.538479]
+    },
+    {
+      "key": "SGS",
+      "iso": "GS",
+      "names": ["South Georgia and the Islands", "South Georgia and the South Sandwich Islands", "S. Geo. and the Is."],
+      "point": [-31.063179, -55.683402]
+    },
+    {
+      "key": "IOT",
+      "iso": "IO",
+      "names": ["British Indian Ocean Territory", "Br. Indian Ocean Ter."],
+      "point": [71.348349, -6.190826]
+    },
+    {
+      "key": "SHN",
+      "iso": "SH",
+      "names": ["Saint Helena"],
+      "point": [-5.71262, -15.950487]
+    },
+    {
+      "key": "PCN",
+      "iso": "PN",
+      "names": ["Pitcairn Islands", "Pitcairn Is."],
+      "point": [-128.317536, -24.364576]
+    },
+    {
+      "key": "AIA",
+      "iso": "AI",
+      "names": ["Anguilla"],
+      "point": [-63.026361, 18.242979]
+    },
+    {
+      "key": "FLK",
+      "iso": "FK",
+      "names": ["Falkland Islands", "Falkland Islands / Malvinas", "Falkland Is."],
+      "point": [-58.738602, -51.608913]
+    },
+    {
+      "key": "CYM",
+      "iso": "KY",
+      "names": ["Cayman Islands", "Cayman Is."],
+      "point": [-81.24055, 19.319862]
+    },
+    {
+      "key": "BMU",
+      "iso": "BM",
+      "names": ["Bermuda"],
+      "point": [-64.763573, 32.296592]
+    },
+    {
+      "key": "VGB",
+      "iso": "VG",
+      "names": ["British Virgin Islands", "British Virgin Is."],
+      "point": [-64.63661, 18.426606]
+    },
+    {
+      "key": "TCA",
+      "iso": "TC",
+      "names": ["Turks and Caicos Islands", "Turks and Caicos Is."],
+      "point": [-71.752704, 21.81663]
+    },
+    {
+      "key": "MSR",
+      "iso": "MS",
+      "names": ["Montserrat"],
+      "point": [-62.188252, 16.73717]
+    },
+    {
+      "key": "JEY",
+      "iso": "JE",
+      "names": ["Jersey"],
+      "point": [-2.090146, 49.220808]
+    },
+    {
+      "key": "GGY",
+      "iso": "GG",
+      "names": ["Guernsey"],
+      "point": [-2.561736, 49.463533]
+    },
+    {
+      "key": "IMN",
+      "iso": "IM",
+      "names": ["Isle of Man"],
+      "point": [-4.530069, 54.220833]
+    },
+    {
+      "key": "GBR",
+      "iso": "GB",
+      "names": ["United Kingdom"],
+      "point": [-2.116346, 54.402739]
+    },
+    {
+      "key": "ARE",
+      "iso": "AE",
+      "names": ["United Arab Emirates"],
+      "point": [54.547256, 23.466285]
+    },
+    {
+      "key": "UKR",
+      "iso": "UA",
+      "names": ["Ukraine"],
+      "point": [32.140865, 49.724739]
+    },
+    {
+      "key": "UGA",
+      "iso": "UG",
+      "names": ["Uganda"],
+      "point": [32.948555, 1.972589]
+    },
+    {
+      "key": "TKM",
+      "iso": "TM",
+      "names": ["Turkmenistan"],
+      "point": [58.676647, 39.855246]
+    },
+    {
+      "key": "TUR",
+      "iso": "TR",
+      "names": ["Turkey"],
+      "point": [34.508268, 39.345388]
+    },
+    {
+      "key": "TUN",
+      "iso": "TN",
+      "names": ["Tunisia"],
+      "point": [9.007881, 33.687263]
+    },
+    {
+      "key": "TTO",
+      "iso": "TT",
+      "names": ["Trinidad and Tobago"],
+      "point": [-60.9184, 10.9989]
+    },
+    {
+      "key": "TON",
+      "iso": "TO",
+      "names": ["Tonga"],
+      "point": [-175.163014, -21.210026]
+    },
+    {
+      "key": "TGO",
+      "iso": "TG",
+      "names": ["Togo"],
+      "point": [1.058113, 8.80722]
+    },
+    {
+      "key": "TLS",
+      "iso": "TL",
+      "names": ["East Timor", "Timor-Leste"],
+      "point": [125.854679, -8.803705]
+    },
+    {
+      "key": "THA",
+      "iso": "TH",
+      "names": ["Thailand"],
+      "point": [101.073198, 15.45974]
+    },
+    {
+      "key": "TZA",
+      "iso": "TZ",
+      "names": ["United Republic of Tanzania", "Tanzania"],
+      "point": [34.959183, -6.051866]
+    },
+    {
+      "key": "TJK",
+      "iso": "TJ",
+      "names": ["Tajikistan"],
+      "point": [72.587276, 38.199835]
+    },
+    {
+      "key": "TWN",
+      "iso": "TW",
+      "names": ["Taiwan"],
+      "point": [120.868204, 23.652408]
+    },
+    {
+      "key": "SYR",
+      "iso": "SY",
+      "names": ["Syria"],
+      "point": [38.277783, 35.006636]
+    },
+    {
+      "key": "CHE",
+      "iso": "CH",
+      "names": ["Switzerland"],
+      "point": [7.463965, 46.719114]
+    },
+    {
+      "key": "SWE",
+      "iso": "SE",
+      "names": ["Sweden"],
+      "point": [19.01705, 65.85918]
+    },
+    {
+      "key": "SWZ",
+      "iso": "SZ",
+      "names": ["eSwatini", "Eswatini", "Kingdom of eSwatini"],
+      "point": [31.467264, -26.533676]
+    },
+    {
+      "key": "SUR",
+      "iso": "SR",
+      "names": ["Suriname"],
+      "point": [-55.91094, 4.143987]
+    },
+    {
+      "key": "SDS",
+      "iso": "SS",
+      "names": ["South Sudan", "S. Sudan"],
+      "point": [30.390151, 7.230477]
+    },
+    {
+      "key": "SDN",
+      "iso": "SD",
+      "names": ["Sudan"],
+      "point": [29.260657, 16.330746]
+    },
+    {
+      "key": "LKA",
+      "iso": "LK",
+      "names": ["Sri Lanka"],
+      "point": [80.704823, 7.581097]
+    },
+    {
+      "key": "ESP",
+      "iso": "ES",
+      "names": ["Spain"],
+      "point": [-3.464718, 40.090953]
+    },
+    {
+      "key": "KOR",
+      "iso": "KR",
+      "names": ["South Korea", "Republic of Korea"],
+      "point": [128.129504, 36.384924]
+    },
+    {
+      "key": "ZAF",
+      "iso": "ZA",
+      "names": ["South Africa"],
+      "point": [23.665734, -29.708776]
+    },
+    {
+      "key": "SOM",
+      "iso": "SO",
+      "names": ["Somalia"],
+      "point": [45.19238, 3.568925]
+    },
+    {
+      "key": "SOL",
+      "iso": "-99",
+      "names": ["Somaliland"],
+      "point": [46.731595, 9.443889]
+    },
+    {
+      "key": "SLB",
+      "iso": "SB",
+      "names": ["Solomon Islands", "Solomon Is."],
+      "point": [159.170468, -8.029548]
+    },
+    {
+      "key": "SVK",
+      "iso": "SK",
+      "names": ["Slovakia"],
+      "point": [19.049868, 48.734044]
+    },
+    {
+      "key": "SVN",
+      "iso": "SI",
+      "names": ["Slovenia"],
+      "point": [14.915312, 46.06076]
+    },
+    {
+      "key": "SGP",
+      "iso": "SG",
+      "names": ["Singapore"],
+      "point": [103.816925, 1.366587]
+    },
+    {
+      "key": "SLE",
+      "iso": "SL",
+      "names": ["Sierra Leone"],
+      "point": [-11.763677, 8.617449]
+    },
+    {
+      "key": "SYC",
+      "iso": "SC",
+      "names": ["Seychelles"],
+      "point": [55.480175, -4.676659]
+    },
+    {
+      "key": "SRB",
+      "iso": "RS",
+      "names": ["Republic of Serbia", "Serbia"],
+      "point": [20.787989, 44.189919]
+    },
+    {
+      "key": "SEN",
+      "iso": "SN",
+      "names": ["Senegal"],
+      "point": [-14.778586, 15.138125]
+    },
+    {
+      "key": "SAU",
+      "iso": "SA",
+      "names": ["Saudi Arabia"],
+      "point": [44.6996, 23.806908]
+    },
+    {
+      "key": "STP",
+      "iso": "ST",
+      "names": ["São Tomé and Principe", "São Tomé and Príncipe"],
+      "point": [7.021, 0.9709]
+    },
+    {
+      "key": "SMR",
+      "iso": "SM",
+      "names": ["San Marino"],
+      "point": [12.441206, 43.933916]
+    },
+    {
+      "key": "WSM",
+      "iso": "WS",
+      "names": ["Samoa"],
+      "point": [-172.438241, -13.639139]
+    },
+    {
+      "key": "VCT",
+      "iso": "VC",
+      "names": ["Saint Vincent and the Grenadines", "St. Vin. and Gren."],
+      "point": [-61.3359, 13.0879]
+    },
+    {
+      "key": "LCA",
+      "iso": "LC",
+      "names": ["Saint Lucia"],
+      "point": [-60.980094, 13.892371]
+    },
+    {
+      "key": "KNA",
+      "iso": "KN",
+      "names": ["Saint Kitts and Nevis", "St. Kitts and Nevis"],
+      "point": [-62.757975, 17.336558]
+    },
+    {
+      "key": "RWA",
+      "iso": "RW",
+      "names": ["Rwanda"],
+      "point": [30.103894, -1.897196]
+    },
+    {
+      "key": "RUS",
+      "iso": "RU",
+      "names": ["Russia", "Russian Federation"],
+      "point": [44.686469, 58.249357]
+    },
+    {
+      "key": "ROU",
+      "iso": "RO",
+      "names": ["Romania"],
+      "point": [24.972624, 45.733237]
+    },
+    {
+      "key": "QAT",
+      "iso": "QA",
+      "names": ["Qatar"],
+      "point": [51.143509, 25.237383]
+    },
+    {
+      "key": "PRT",
+      "iso": "PT",
+      "names": ["Portugal"],
+      "point": [-8.271754, 39.606675]
+    },
+    {
+      "key": "POL",
+      "iso": "PL",
+      "names": ["Poland"],
+      "point": [19.490468, 51.990316]
+    },
+    {
+      "key": "PHL",
+      "iso": "PH",
+      "names": ["Philippines"],
+      "point": [122.465, 11.198]
+    },
+    {
+      "key": "PER",
+      "iso": "PE",
+      "names": ["Peru"],
+      "point": [-72.90016, -12.976679]
+    },
+    {
+      "key": "PRY",
+      "iso": "PY",
+      "names": ["Paraguay"],
+      "point": [-60.146394, -21.674509]
+    },
+    {
+      "key": "PNG",
+      "iso": "PG",
+      "names": ["Papua New Guinea"],
+      "point": [143.910216, -5.695285]
+    },
+    {
+      "key": "PAN",
+      "iso": "PA",
+      "names": ["Panama"],
+      "point": [-80.352106, 8.72198]
+    },
+    {
+      "key": "PLW",
+      "iso": "PW",
+      "names": ["Palau"],
+      "point": [134.580157, 7.518252]
+    },
+    {
+      "key": "PAK",
+      "iso": "PK",
+      "names": ["Pakistan"],
+      "point": [68.545632, 29.328389]
+    },
+    {
+      "key": "OMN",
+      "iso": "OM",
+      "names": ["Oman"],
+      "point": [57.336553, 22.120427]
+    },
+    {
+      "key": "NOR",
+      "iso": "NO",
+      "names": ["Norway"],
+      "point": [9.679975, 61.357092]
+    },
+    {
+      "key": "PRK",
+      "iso": "KP",
+      "names": ["North Korea", "Dem. Rep. Korea"],
+      "point": [126.444516, 39.885252]
+    },
+    {
+      "key": "NGA",
+      "iso": "NG",
+      "names": ["Nigeria"],
+      "point": [7.50322, 9.439799]
+    },
+    {
+      "key": "NER",
+      "iso": "NE",
+      "names": ["Niger"],
+      "point": [9.504356, 17.446195]
+    },
+    {
+      "key": "NIC",
+      "iso": "NI",
+      "names": ["Nicaragua"],
+      "point": [-85.069347, 12.670697]
+    },
+    {
+      "key": "NZL",
+      "iso": "NZ",
+      "names": ["New Zealand"],
+      "point": [172.787, -39.759]
+    },
+    {
+      "key": "NIU",
+      "iso": "NU",
+      "names": ["Niue"],
+      "point": [-169.862565, -19.045956]
+    },
+    {
+      "key": "COK",
+      "iso": "CK",
+      "names": ["Cook Islands", "Cook Is."],
+      "point": [-159.785675, -21.215993]
+    },
+    {
+      "key": "NLD",
+      "iso": "NL",
+      "names": ["Netherlands"],
+      "point": [5.61144, 52.422211]
+    },
+    {
+      "key": "ABW",
+      "iso": "AW",
+      "names": ["Aruba"],
+      "point": [-69.972795, 12.5174]
+    },
+    {
+      "key": "CUW",
+      "iso": "CW",
+      "names": ["Curaçao"],
+      "point": [-68.920578, 12.145039]
+    },
+    {
+      "key": "NPL",
+      "iso": "NP",
+      "names": ["Nepal"],
+      "point": [83.639914, 28.297925]
+    },
+    {
+      "key": "NRU",
+      "iso": "NR",
+      "names": ["Nauru"],
+      "point": [166.932644, -0.520261]
+    },
+    {
+      "key": "NAM",
+      "iso": "NA",
+      "names": ["Namibia"],
+      "point": [17.108166, -20.575298]
+    },
+    {
+      "key": "MOZ",
+      "iso": "MZ",
+      "names": ["Mozambique"],
+      "point": [37.83789, -13.94323]
+    },
+    {
+      "key": "MAR",
+      "iso": "MA",
+      "names": ["Morocco"],
+      "point": [-7.187296, 31.650723]
+    },
+    {
+      "key": "SAH",
+      "iso": "EH",
+      "names": ["Western Sahara", "W. Sahara"],
+      "point": [-12.630304, 23.967592]
+    },
+    {
+      "key": "MNE",
+      "iso": "ME",
+      "names": ["Montenegro"],
+      "point": [19.143727, 42.803101]
+    },
+    {
+      "key": "MNG",
+      "iso": "MN",
+      "names": ["Mongolia"],
+      "point": [104.150405, 45.997488]
+    },
+    {
+      "key": "MDA",
+      "iso": "MD",
+      "names": ["Moldova"],
+      "point": [28.487904, 47.434999]
+    },
+    {
+      "key": "MCO",
+      "iso": "MC",
+      "names": ["Monaco"],
+      "point": [7.398291, 43.739652]
+    },
+    {
+      "key": "MEX",
+      "iso": "MX",
+      "names": ["Mexico"],
+      "point": [-102.289448, 23.919988]
+    },
+    {
+      "key": "MUS",
+      "iso": "MU",
+      "names": ["Mauritius"],
+      "point": [57.565848, -20.299506]
+    },
+    {
+      "key": "MRT",
+      "iso": "MR",
+      "names": ["Mauritania"],
+      "point": [-9.740299, 19.587062]
+    },
+    {
+      "key": "MLT",
+      "iso": "MT",
+      "names": ["Malta"],
+      "point": [14.433005, 35.892886]
+    },
+    {
+      "key": "MLI",
+      "iso": "ML",
+      "names": ["Mali"],
+      "point": [-2.038455, 18.692713]
+    },
+    {
+      "key": "MDV",
+      "iso": "MV",
+      "names": ["Maldives"],
+      "point": [73.507554, 4.174441]
+    },
+    {
+      "key": "MYS",
+      "iso": "MY",
+      "names": ["Malaysia"],
+      "point": [113.83708, 2.528667]
+    },
+    {
+      "key": "MWI",
+      "iso": "MW",
+      "names": ["Malawi"],
+      "point": [33.608082, -13.386737]
+    },
+    {
+      "key": "MDG",
+      "iso": "MG",
+      "names": ["Madagascar"],
+      "point": [46.704241, -18.628288]
+    },
+    {
+      "key": "MKD",
+      "iso": "MK",
+      "names": ["North Macedonia"],
+      "point": [21.555839, 41.558223]
+    },
+    {
+      "key": "LUX",
+      "iso": "LU",
+      "names": ["Luxembourg"],
+      "point": [6.07762, 49.733732]
+    },
+    {
+      "key": "LTU",
+      "iso": "LT",
+      "names": ["Lithuania"],
+      "point": [24.089932, 55.103703]
+    },
+    {
+      "key": "LIE",
+      "iso": "LI",
+      "names": ["Liechtenstein"],
+      "point": [9.559439, 47.111405]
+    },
+    {
+      "key": "LBY",
+      "iso": "LY",
+      "names": ["Libya"],
+      "point": [18.011015, 26.638944]
+    },
+    {
+      "key": "LBR",
+      "iso": "LR",
+      "names": ["Liberia"],
+      "point": [-9.460379, 6.447177]
+    },
+    {
+      "key": "LSO",
+      "iso": "LS",
+      "names": ["Lesotho"],
+      "point": [28.246639, -29.480158]
+    },
+    {
+      "key": "LBN",
+      "iso": "LB",
+      "names": ["Lebanon"],
+      "point": [35.992892, 34.133368]
+    },
+    {
+      "key": "LVA",
+      "iso": "LV",
+      "names": ["Latvia"],
+      "point": [25.458723, 57.066872]
+    },
+    {
+      "key": "LAO",
+      "iso": "LA",
+      "names": ["Laos", "Lao PDR"],
+      "point": [102.533912, 19.431821]
+    },
+    {
+      "key": "KGZ",
+      "iso": "KG",
+      "names": ["Kyrgyzstan"],
+      "point": [74.532637, 41.66854]
+    },
+    {
+      "key": "KWT",
+      "iso": "KW",
+      "names": ["Kuwait"],
+      "point": [47.313999, 29.413628]
+    },
+    {
+      "key": "KOS",
+      "iso": "XK",
+      "names": ["Kosovo"],
+      "point": [20.860719, 42.593587]
+    },
+    {
+      "key": "KIR",
+      "iso": "KI",
+      "names": ["Kiribati"],
+      "point": [-157.384577, 1.820437]
+    },
+    {
+      "key": "KEN",
+      "iso": "KE",
+      "names": ["Kenya"],
+      "point": [37.907632, 0.549043]
+    },
+    {
+      "key": "KAZ",
+      "iso": "KZ",
+      "names": ["Kazakhstan"],
+      "point": [68.685548, 49.054149]
+    },
+    {
+      "key": "JOR",
+      "iso": "JO",
+      "names": ["Jordan"],
+      "point": [36.375991, 30.805025]
+    },
+    {
+      "key": "JPN",
+      "iso": "JP",
+      "names": ["Japan"],
+      "point": [138.44217, 36.142538]
+    },
+    {
+      "key": "JAM",
+      "iso": "JM",
+      "names": ["Jamaica"],
+      "point": [-77.318767, 18.137124]
+    },
+    {
+      "key": "ITA",
+      "iso": "IT",
+      "names": ["Italy"],
+      "point": [11.076907, 44.732482]
+    },
+    {
+      "key": "ISR",
+      "iso": "IL",
+      "names": ["Israel"],
+      "point": [34.847915, 30.911148]
+    },
+    {
+      "key": "PSX",
+      "iso": "PS",
+      "names": ["Palestine"],
+      "point": [35.291341, 32.047431]
+    },
+    {
+      "key": "IRL",
+      "iso": "IE",
+      "names": ["Ireland"],
+      "point": [-7.798588, 53.078726]
+    },
+    {
+      "key": "IRQ",
+      "iso": "IQ",
+      "names": ["Iraq"],
+      "point": [43.26181, 33.09403]
+    },
+    {
+      "key": "IRN",
+      "iso": "IR",
+      "names": ["Iran"],
+      "point": [54.931495, 32.166225]
+    },
+    {
+      "key": "IDN",
+      "iso": "ID",
+      "names": ["Indonesia"],
+      "point": [101.892949, -0.954404]
+    },
+    {
+      "key": "IND",
+      "iso": "IN",
+      "names": ["India"],
+      "point": [79.358105, 22.686852]
+    },
+    {
+      "key": "ISL",
+      "iso": "IS",
+      "names": ["Iceland"],
+      "point": [-18.673711, 64.779286]
+    },
+    {
+      "key": "HUN",
+      "iso": "HU",
+      "names": ["Hungary"],
+      "point": [19.447867, 47.086841]
+    },
+    {
+      "key": "HND",
+      "iso": "HN",
+      "names": ["Honduras"],
+      "point": [-86.887604, 14.794801]
+    },
+    {
+      "key": "HTI",
+      "iso": "HT",
+      "names": ["Haiti"],
+      "point": [-72.224051, 19.263784]
+    },
+    {
+      "key": "GUY",
+      "iso": "GY",
+      "names": ["Guyana"],
+      "point": [-58.942643, 5.124317]
+    },
+    {
+      "key": "GNB",
+      "iso": "GW",
+      "names": ["Guinea-Bissau"],
+      "point": [-14.52413, 12.163712]
+    },
+    {
+      "key": "GIN",
+      "iso": "GN",
+      "names": ["Guinea"],
+      "point": [-10.016402, 10.618516]
+    },
+    {
+      "key": "GTM",
+      "iso": "GT",
+      "names": ["Guatemala"],
+      "point": [-90.497134, 14.982133]
+    },
+    {
+      "key": "GRD",
+      "iso": "GD",
+      "names": ["Grenada"],
+      "point": [-61.680461, 12.113156]
+    },
+    {
+      "key": "GRC",
+      "iso": "GR",
+      "names": ["Greece"],
+      "point": [21.72568, 39.492763]
+    },
+    {
+      "key": "GHA",
+      "iso": "GH",
+      "names": ["Ghana"],
+      "point": [-1.036941, 7.717639]
+    },
+    {
+      "key": "DEU",
+      "iso": "DE",
+      "names": ["Germany"],
+      "point": [9.678348, 50.961733]
+    },
+    {
+      "key": "GEO",
+      "iso": "GE",
+      "names": ["Georgia"],
+      "point": [43.735724, 41.870087]
+    },
+    {
+      "key": "GMB",
+      "iso": "GM",
+      "names": ["Gambia", "The Gambia"],
+      "point": [-14.998318, 13.641721]
+    },
+    {
+      "key": "GAB",
+      "iso": "GA",
+      "names": ["Gabon"],
+      "point": [11.835939, -0.437739]
+    },
+    {
+      "key": "FRA",
+      "iso": "FR",
+      "names": ["France"],
+      "point": [2.552275, 46.696113]
+    },
+    {
+      "key": "SPM",
+      "iso": "PM",
+      "names": ["Saint Pierre and Miquelon", "St. Pierre and Miquelon"],
+      "point": [-56.332352, 47.040344]
+    },
+    {
+      "key": "WLF",
+      "iso": "WF",
+      "names": ["Wallis and Futuna", "Wallis and Futuna Islands", "Wallis and Futuna Is."],
+      "point": [-178.137436, -14.286415]
+    },
+    {
+      "key": "MAF",
+      "iso": "MF",
+      "names": ["Saint Martin", "Saint-Martin", "St-Martin"],
+      "point": [-63.049399, 18.081302]
+    },
+    {
+      "key": "BLM",
+      "iso": "BL",
+      "names": ["Saint Barthelemy", "Saint Barthélemy", "Saint-Barthélemy", "St-Barthélemy"],
+      "point": [-62.833193, 17.901987]
+    },
+    {
+      "key": "PYF",
+      "iso": "PF",
+      "names": ["French Polynesia", "Fr. Polynesia"],
+      "point": [-149.46157, -17.628081]
+    },
+    {
+      "key": "NCL",
+      "iso": "NC",
+      "names": ["New Caledonia"],
+      "point": [165.084004, -21.064697]
+    },
+    {
+      "key": "ATF",
+      "iso": "TF",
+      "names": ["French Southern and Antarctic Lands", "Fr. S. Antarctic Lands"],
+      "point": [69.122136, -49.303721]
+    },
+    {
+      "key": "ALD",
+      "iso": "AX",
+      "names": ["Aland", "Åland", "Åland Islands"],
+      "point": [19.869671, 60.156467]
+    },
+    {
+      "key": "FIN",
+      "iso": "FI",
+      "names": ["Finland"],
+      "point": [27.276449, 63.252361]
+    },
+    {
+      "key": "FJI",
+      "iso": "FJ",
+      "names": ["Fiji"],
+      "point": [177.975427, -17.826099]
+    },
+    {
+      "key": "ETH",
+      "iso": "ET",
+      "names": ["Ethiopia"],
+      "point": [39.0886, 8.032795]
+    },
+    {
+      "key": "EST",
+      "iso": "EE",
+      "names": ["Estonia"],
+      "point": [25.867126, 58.724865]
+    },
+    {
+      "key": "ERI",
+      "iso": "ER",
+      "names": ["Eritrea"],
+      "point": [38.285566, 15.787401]
+    },
+    {
+      "key": "GNQ",
+      "iso": "GQ",
+      "names": ["Equatorial Guinea", "Eq. Guinea"],
+      "point": [8.9902, 2.333]
+    },
+    {
+      "key": "SLV",
+      "iso": "SV",
+      "names": ["El Salvador"],
+      "point": [-88.890124, 13.685371]
+    },
+    {
+      "key": "EGY",
+      "iso": "EG",
+      "names": ["Egypt"],
+      "point": [29.445837, 26.186173]
+    },
+    {
+      "key": "ECU",
+      "iso": "EC",
+      "names": ["Ecuador"],
+      "point": [-78.188375, -1.259076]
+    },
+    {
+      "key": "DOM",
+      "iso": "DO",
+      "names": ["Dominican Republic", "Dominican Rep."],
+      "point": [-70.653998, 19.104137]
+    },
+    {
+      "key": "DMA",
+      "iso": "DM",
+      "names": ["Dominica"],
+      "point": [-61.344958, 15.458829]
+    },
+    {
+      "key": "DJI",
+      "iso": "DJ",
+      "names": ["Djibouti"],
+      "point": [42.498825, 11.976343]
+    },
+    {
+      "key": "GRL",
+      "iso": "GL",
+      "names": ["Greenland"],
+      "point": [-39.335251, 74.319387]
+    },
+    {
+      "key": "FRO",
+      "iso": "FO",
+      "names": ["Faroe Islands", "Faeroe Islands", "Faeroe Is."],
+      "point": [-7.058429, 62.185604]
+    },
+    {
+      "key": "DNK",
+      "iso": "DK",
+      "names": ["Denmark"],
+      "point": [9.018163, 55.966965]
+    },
+    {
+      "key": "CZE",
+      "iso": "CZ",
+      "names": ["Czechia", "Czech Republic"],
+      "point": [15.377555, 49.882364]
+    },
+    {
+      "key": "CYN",
+      "iso": "-99",
+      "names": ["Northern Cyprus", "Turkish Republic of Northern Cyprus", "N. Cyprus"],
+      "point": [33.692434, 35.216071]
+    },
+    {
+      "key": "CYP",
+      "iso": "CY",
+      "names": ["Cyprus"],
+      "point": [33.084182, 34.913329]
+    },
+    {
+      "key": "CUB",
+      "iso": "CU",
+      "names": ["Cuba"],
+      "point": [-77.975855, 21.334024]
+    },
+    {
+      "key": "HRV",
+      "iso": "HR",
+      "names": ["Croatia"],
+      "point": [16.37241, 45.805799]
+    },
+    {
+      "key": "CIV",
+      "iso": "CI",
+      "names": ["Ivory Coast", "Côte d'Ivoire"],
+      "point": [-5.568618, 7.49139]
+    },
+    {
+      "key": "CRI",
+      "iso": "CR",
+      "names": ["Costa Rica"],
+      "point": [-84.077922, 10.0651]
+    },
+    {
+      "key": "COD",
+      "iso": "CD",
+      "names": ["Democratic Republic of the Congo", "Dem. Rep. Congo"],
+      "point": [23.458829, -1.858167]
+    },
+    {
+      "key": "COG",
+      "iso": "CG",
+      "names": ["Republic of the Congo", "Congo"],
+      "point": [15.9005, 0.142331]
+    },
+    {
+      "key": "COM",
+      "iso": "KM",
+      "names": ["Comoros"],
+      "point": [43.318094, -11.727683]
+    },
+    {
+      "key": "COL",
+      "iso": "CO",
+      "names": ["Colombia"],
+      "point": [-73.174347, 3.373111]
+    },
+    {
+      "key": "CHN",
+      "iso": "CN",
+      "names": ["China", "People's Republic of China"],
+      "point": [106.337289, 32.498178]
+    },
+    {
+      "key": "MAC",
+      "iso": "MO",
+      "names": ["Macao S.A.R", "Macau", "Macao"],
+      "point": [113.556038, 22.129735]
+    },
+    {
+      "key": "HKG",
+      "iso": "HK",
+      "names": ["Hong Kong S.A.R.", "Hong Kong"],
+      "point": [114.097769, 22.448829]
+    },
+    {
+      "key": "CHL",
+      "iso": "CL",
+      "names": ["Chile"],
+      "point": [-72.318871, -38.151771]
+    },
+    {
+      "key": "TCD",
+      "iso": "TD",
+      "names": ["Chad"],
+      "point": [18.645041, 15.142959]
+    },
+    {
+      "key": "CAF",
+      "iso": "CF",
+      "names": ["Central African Republic", "Central African Rep."],
+      "point": [20.906897, 6.989681]
+    },
+    {
+      "key": "CPV",
+      "iso": "CV",
+      "names": ["Cabo Verde", "Cape Verde", "Republic of Cabo Verde"],
+      "point": [-23.639434, 15.074761]
+    },
+    {
+      "key": "CAN",
+      "iso": "CA",
+      "names": ["Canada"],
+      "point": [-101.9107, 60.324287]
+    },
+    {
+      "key": "CMR",
+      "iso": "CM",
+      "names": ["Cameroon"],
+      "point": [12.473488, 4.585041]
+    },
+    {
+      "key": "KHM",
+      "iso": "KH",
+      "names": ["Cambodia"],
+      "point": [104.50487, 12.647584]
+    },
+    {
+      "key": "MMR",
+      "iso": "MM",
+      "names": ["Myanmar"],
+      "point": [95.804497, 21.573855]
+    },
+    {
+      "key": "BDI",
+      "iso": "BI",
+      "names": ["Burundi"],
+      "point": [29.917086, -3.332836]
+    },
+    {
+      "key": "BFA",
+      "iso": "BF",
+      "names": ["Burkina Faso"],
+      "point": [-1.36388, 12.673048]
+    },
+    {
+      "key": "BGR",
+      "iso": "BG",
+      "names": ["Bulgaria"],
+      "point": [25.15709, 42.508785]
+    },
+    {
+      "key": "BRN",
+      "iso": "BN",
+      "names": ["Brunei", "Brunei Darussalam"],
+      "point": [114.551943, 4.448298]
+    },
+    {
+      "key": "BRA",
+      "iso": "BR",
+      "names": ["Brazil"],
+      "point": [-49.55945, -12.098687]
+    },
+    {
+      "key": "BWA",
+      "iso": "BW",
+      "names": ["Botswana"],
+      "point": [24.179216, -22.102634]
+    },
+    {
+      "key": "BIH",
+      "iso": "BA",
+      "names": ["Bosnia and Herzegovina", "Bosnia and Herz."],
+      "point": [18.06841, 44.091051]
+    },
+    {
+      "key": "BOL",
+      "iso": "BO",
+      "names": ["Bolivia"],
+      "point": [-64.593433, -16.666015]
+    },
+    {
+      "key": "BTN",
+      "iso": "BT",
+      "names": ["Bhutan"],
+      "point": [90.040294, 27.536685]
+    },
+    {
+      "key": "BEN",
+      "iso": "BJ",
+      "names": ["Benin"],
+      "point": [2.352018, 10.324775]
+    },
+    {
+      "key": "BLZ",
+      "iso": "BZ",
+      "names": ["Belize"],
+      "point": [-88.712962, 17.202068]
+    },
+    {
+      "key": "BEL",
+      "iso": "BE",
+      "names": ["Belgium"],
+      "point": [4.800448, 50.785392]
+    },
+    {
+      "key": "BLR",
+      "iso": "BY",
+      "names": ["Belarus"],
+      "point": [28.417701, 53.821888]
+    },
+    {
+      "key": "BRB",
+      "iso": "BB",
+      "names": ["Barbados"],
+      "point": [-59.568966, 13.163709]
+    },
+    {
+      "key": "BGD",
+      "iso": "BD",
+      "names": ["Bangladesh"],
+      "point": [89.684963, 24.214956]
+    },
+    {
+      "key": "BHR",
+      "iso": "BH",
+      "names": ["Bahrain"],
+      "point": [50.554816, 26.055972]
+    },
+    {
+      "key": "BHS",
+      "iso": "BS",
+      "names": ["The Bahamas", "Bahamas"],
+      "point": [-77.146688, 26.401789]
+    },
+    {
+      "key": "AZE",
+      "iso": "AZ",
+      "names": ["Azerbaijan"],
+      "point": [47.210994, 40.402387]
+    },
+    {
+      "key": "AUT",
+      "iso": "AT",
+      "names": ["Austria"],
+      "point": [14.130515, 47.518859]
+    },
+    {
+      "key": "AUS",
+      "iso": "AU",
+      "names": ["Australia"],
+      "point": [134.04972, -24.129522]
+    },
+    {
+      "key": "IOA",
+      "iso": "AU",
+      "names": ["Indian Ocean Territories", "Australian Indian Ocean Territories", "Indian Ocean Ter."],
+      "point": [105.67259, -10.490789]
+    },
+    {
+      "key": "HMD",
+      "iso": "HM",
+      "names": ["Heard Island and McDonald Islands", "Heard I. and McDonald Islands", "Heard I. and McDonald Is."],
+      "point": [73.50521, -53.103462]
+    },
+    {
+      "key": "NFK",
+      "iso": "NF",
+      "names": ["Norfolk Island"],
+      "point": [167.954531, -29.033042]
+    },
+    {
+      "key": "ATC",
+      "iso": "AU",
+      "names": ["Ashmore and Cartier Islands", "Ashmore and Cartier Is."],
+      "point": [123.586368, -12.432571]
+    },
+    {
+      "key": "ARM",
+      "iso": "AM",
+      "names": ["Armenia"],
+      "point": [44.800564, 40.459077]
+    },
+    {
+      "key": "ARG",
+      "iso": "AR",
+      "names": ["Argentina"],
+      "point": [-64.173331, -33.501159]
+    },
+    {
+      "key": "ATG",
+      "iso": "AG",
+      "names": ["Antigua and Barbuda", "Antigua and Barb."],
+      "point": [-61.790612, 17.352249]
+    },
+    {
+      "key": "AGO",
+      "iso": "AO",
+      "names": ["Angola"],
+      "point": [17.984249, -12.182762]
+    },
+    {
+      "key": "AND",
+      "iso": "AD",
+      "names": ["Andorra"],
+      "point": [1.539409, 42.547643]
+    },
+    {
+      "key": "DZA",
+      "iso": "DZ",
+      "names": ["Algeria"],
+      "point": [2.808241, 27.397406]
+    },
+    {
+      "key": "ALB",
+      "iso": "AL",
+      "names": ["Albania"],
+      "point": [20.11384, 40.654855]
+    },
+    {
+      "key": "AFG",
+      "iso": "AF",
+      "names": ["Afghanistan"],
+      "point": [66.496586, 34.164262]
+    },
+    {
+      "key": "KAS",
+      "iso": "-99",
+      "names": ["Siachen Glacier"],
+      "point": [77.129553, 35.340606]
+    },
+    {
+      "key": "SXM",
+      "iso": "SX",
+      "names": ["Sint Maarten"],
+      "point": [-63.070133, 18.04088]
+    },
+    {
+      "key": "TUV",
+      "iso": "TV",
+      "names": ["Tuvalu"],
+      "point": [179.209587, -8.513717]
+    }
+  ],
+  "provinces": [
+    {
+      "name": "Bali",
+      "key": "ID-BA",
+      "point": [115.0717281, -8.45537075]
+    },
+    {
+      "name": "West Nusa Tenggara",
+      "key": "ID-NB",
+      "point": [117.9539064, -8.5945205]
+    },
+    {
+      "name": "Banten",
+      "key": "ID-BT",
+      "point": [105.99486265, -6.4370347500000005]
+    },
+    {
+      "name": "Central Java",
+      "key": "ID-JT",
+      "point": [110.144598, -7.30731185]
+    },
+    {
+      "name": "West Java",
+      "key": "ID-JB",
+      "point": [107.6287977, -6.867580950000001]
+    },
+    {
+      "name": "Central Kalimantan",
+      "key": "ID-KT",
+      "point": [113.28996112975763, -1.3743440999999998]
+    },
+    {
+      "name": "South Kalimantan",
+      "key": "ID-KS",
+      "point": [115.45303770735097, -2.7404632500000004]
+    },
+    {
+      "name": "West Kalimantan",
+      "key": "ID-KB",
+      "point": [111.5238102, -0.4802493000000001]
+    },
+    {
+      "name": "Central Sulawesi",
+      "key": "ID-ST",
+      "point": [121.44055714999999, -0.9624846]
+    },
+    {
+      "name": "Gorontalo",
+      "key": "ID-GO",
+      "point": [122.35395955, 0.67282035]
+    },
+    {
+      "name": "North Sulawesi",
+      "key": "ID-SA",
+      "point": [124.18006605, 1.02105145]
+    },
+    {
+      "name": "South Sulawesi",
+      "key": "ID-SN",
+      "point": [120.57343965000001, -3.79247325]
+    },
+    {
+      "name": "Southeast Sulawesi",
+      "key": "ID-SG",
+      "point": [121.88638599999999, -3.8058496]
+    },
+    {
+      "name": "West Sulawesi",
+      "key": "ID-SR",
+      "point": [119.33257950000001, -2.215828092369581]
+    },
+    {
+      "name": "Aceh",
+      "key": "ID-AC",
+      "point": [96.74003354999999, 3.9047842500000005]
+    },
+    {
+      "name": "Bengkulu",
+      "key": "ID-BE",
+      "point": [102.40301835, -3.6013693]
+    },
+    {
+      "name": "Jambi",
+      "key": "ID-JA",
+      "point": [102.80596467973669, -1.7583418]
+    },
+    {
+      "name": "Lampung",
+      "key": "ID-LA",
+      "point": [104.75451204999999, -4.8335349]
+    },
+    {
+      "name": "Riau",
+      "key": "ID-RI",
+      "point": [101.94306040000001, 0.717591400128835]
+    },
+    {
+      "name": "West Sumatra",
+      "key": "ID-SB",
+      "point": [100.5256484, -0.7946578500000001]
+    },
+    {
+      "name": "South Sumatra",
+      "key": "ID-SS",
+      "point": [104.08038785, -3.2750323]
+    },
+    {
+      "name": "North Sumatra",
+      "key": "ID-SU",
+      "point": [99.11984765, 2.2687949]
+    },
+    {
+      "name": "East Nusa Tenggara",
+      "key": "ID-NT",
+      "point": [121.40855275, -8.50998715]
+    },
+    {
+      "name": "Maluku",
+      "key": "ID-MA",
+      "point": [129.36014065, -3.3246153]
+    },
+    {
+      "name": "North Maluku",
+      "key": "ID-MU",
+      "point": [128.15008895, 0.654259]
+    },
+    {
+      "name": "East Java",
+      "key": "ID-JI",
+      "point": [112.7514229, -7.7611834]
+    },
+    {
+      "name": "Bangka-Belitung Islands",
+      "key": "ID-BB",
+      "point": [105.97948579999999, -2.30693425]
+    },
+    {
+      "name": "Riau Islands",
+      "key": "ID-KR",
+      "point": [104.01986785, 1.09047675]
+    },
+    {
+      "name": "Papua",
+      "key": "ID-PA",
+      "point": [137.6149949, -5.29253994113823]
+    },
+    {
+      "name": "West Papua",
+      "key": "ID-PB",
+      "point": [133.09206045000002, -2.2994909]
+    },
+    {
+      "name": "East Kalimantan",
+      "key": "ID-KI",
+      "point": [116.41162015, 0.09476655776577991]
+    },
+    {
+      "name": "North Kalimantan",
+      "key": "ID-KU",
+      "point": [116.28280265000001, 2.7269124]
+    },
+    {
+      "name": "Special Region of Yogyakarta",
+      "key": "ID-YO",
+      "point": [110.42107896587355, -7.8727447999999995]
+    },
+    {
+      "name": "Jakarta Special Capital Region",
+      "key": "ID-JK",
+      "point": [106.8298045, -6.230717522590844]
+    }
+  ]
+}

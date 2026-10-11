@@ -2,12 +2,72 @@ import "server-only";
 import { and, desc, eq, ilike, isNotNull, lt, or, sql } from "drizzle-orm";
 import { ImapFlow } from "imapflow";
 import nodemailer from "nodemailer";
+import { simpleParser } from "mailparser";
+import { mailThreadKey } from "./email-workspace-model";
 import { getDatabase } from "@/lib/database/client";
 import { csEmailOutbox, csEmails, integrations } from "@/lib/database/schema";
 import { decryptSecret, encryptSecret } from "./secrets";
 import { decodeTimeCursor, encodeTimeCursor } from "@/lib/pagination/cursor";
+import { getCsMailboxServerConfig } from "./mailbox-config";
 
 export type MailSettings = { email: string; password: string; host: string; imapPort: number; smtpPort: number };
+export type MailboxFailureCode =
+  "mail_authentication" | "mail_dns_network" | "mail_tls" | "mail_timeout" | "mail_folder" | "mail_unknown";
+
+type MailboxFailure = { code: MailboxFailureCode; message: string };
+
+export class MailboxSyncError extends Error {
+  readonly mailboxCode: MailboxFailureCode;
+
+  constructor(failure: MailboxFailure) {
+    super(failure.message);
+    this.name = "MailboxSyncError";
+    this.mailboxCode = failure.code;
+  }
+}
+
+export function classifyMailboxFailure(error: unknown): MailboxFailure {
+  if (error instanceof MailboxSyncError) {
+    return { code: error.mailboxCode, message: error.message };
+  }
+
+  const detail = [
+    error instanceof Error ? error.name : "",
+    error instanceof Error ? error.message : "",
+    typeof error === "object" && error && "code" in error ? String(error.code ?? "") : "",
+  ]
+    .join(" ")
+    .toLowerCase();
+  if (/auth|credential|login|authentication|invalid.?password|eauth/.test(detail))
+    return {
+      code: "mail_authentication",
+      message: "Mailbox menolak kredensial. Periksa kata sandi Email CS lalu uji koneksi kembali.",
+    };
+  if (/certificate|tls|ssl|self.?signed|wrong version/.test(detail))
+    return {
+      code: "mail_tls",
+      message: "Koneksi aman mailbox tidak dapat diverifikasi. Periksa sertifikat atau pengaturan server email.",
+    };
+  if (/timeout|timed out|etimedout/.test(detail))
+    return {
+      code: "mail_timeout",
+      message: "Mailbox tidak merespons dalam batas waktu. Password belum dapat diverifikasi.",
+    };
+  if (/enotfound|eai_again|getaddrinfo|econnrefused|ehostunreach|enetunreach|network|socket/.test(detail))
+    return {
+      code: "mail_dns_network",
+      message: "Server mailbox tidak dapat dijangkau. Periksa DNS, jaringan, atau layanan email.",
+    };
+  if (/folder|mailbox|inbox|sent/.test(detail))
+    return {
+      code: "mail_folder",
+      message: "Folder mailbox yang diperlukan tidak tersedia. Periksa konfigurasi Inbox dan Sent.",
+    };
+  return {
+    code: "mail_unknown",
+    message: "Sinkronisasi Email CS gagal. Layanan mailbox belum dapat diverifikasi.",
+  };
+}
 
 export async function testMailbox(settings: MailSettings) {
   const imap = new ImapFlow({
@@ -33,8 +93,8 @@ export async function testMailbox(settings: MailSettings) {
     await imap.connect();
     await imap.logout();
     await smtp.verify();
-  } catch {
-    throw new Error("Koneksi email belum berhasil. Periksa kata sandi mailbox atau hubungi administrator domain.");
+  } catch (error) {
+    throw new MailboxSyncError(classifyMailboxFailure(error));
   } finally {
     try {
       await imap.logout();
@@ -50,7 +110,10 @@ export async function getMailboxSettings() {
   if (!database) return null;
   const [row] = await database.select().from(integrations).where(eq(integrations.key, "cs-mail")).limit(1);
   if (!row?.secretCiphertext) return null;
-  return decryptSecret<MailSettings>(row.secretCiphertext);
+  const stored = decryptSecret<MailSettings>(row.secretCiphertext);
+  // Server environment overrides stale hostname/port values encrypted by an
+  // earlier deployment. The password itself always remains in the ciphertext.
+  return { ...stored, ...getCsMailboxServerConfig() };
 }
 
 export async function listEmails(folder: "inbox" | "sent", before?: string, search?: string) {
@@ -167,6 +230,16 @@ export async function listEmails(folder: "inbox" | "sent", before?: string, sear
 
 export async function syncMailbox() {
   const database = getDatabase();
+  if (!database) return { synced: 0, skipped: true };
+  return database.transaction(async (tx) => {
+    const lock = await tx.execute(sql`select pg_try_advisory_xact_lock(hashtext('cs-mail-sync')) as acquired`);
+    if (!(lock.rows[0] as { acquired: boolean })?.acquired) return { synced: 0, skipped: true };
+    return syncMailboxUnlocked();
+  });
+}
+
+async function syncMailboxUnlocked() {
+  const database = getDatabase();
   const settings = await getMailboxSettings();
   if (!database || !settings) return { synced: 0, skipped: true };
   const client = new ImapFlow({
@@ -202,20 +275,33 @@ export async function syncMailbox() {
         const since = new Date();
         since.setDate(since.getDate() - 90);
         const previous = cursors[folder];
-        const uids =
+        const foundUids =
           previous?.uidValidity === String(mailbox.uidValidity)
             ? await client.search({ uid: `${previous.lastUid + 1}:*` }, { uid: true })
             : await client.search({ since }, { uid: true });
-        if (!Array.isArray(uids) || !uids.length) continue;
+        if (!Array.isArray(foundUids)) continue;
+        const uids = foundUids.filter(
+          (uid) => previous?.uidValidity !== String(mailbox.uidValidity) || uid > previous.lastUid,
+        );
+        if (!uids.length) continue;
         const uidValidity = String(mailbox?.uidValidity ?? "unknown");
         for (let offset = 0; offset < uids.length; offset += 200) {
           const batch = uids.slice(offset, offset + 200);
           for await (const message of client.fetch(
             batch.join(","),
-            { uid: true, envelope: true, internalDate: true, size: true },
+            { uid: true, envelope: true, internalDate: true, size: true, headers: ["references", "reply-to", "cc"] },
             { uid: true },
           )) {
             const address = message.envelope?.from?.[0];
+            const header = message.headers ? await simpleParser(message.headers) : null;
+            const references = Array.isArray(header?.references)
+              ? header.references.join(" ")
+              : (header?.references ?? null);
+            const rootKey = mailThreadKey(
+              message.envelope?.messageId ?? null,
+              message.envelope?.inReplyTo ?? null,
+              references,
+            );
             const to =
               message.envelope?.to
                 ?.map((item) => item.address)
@@ -230,6 +316,23 @@ export async function syncMailbox() {
                 size: message.size ?? 0,
                 messageId: message.envelope?.messageId ?? null,
                 inReplyTo: message.envelope?.inReplyTo ?? null,
+                references,
+                replyToAddress:
+                  header?.replyTo?.value
+                    .map((item) => item.address)
+                    .filter(Boolean)
+                    .join(", ") ?? null,
+                ccAddress: Array.isArray(header?.cc)
+                  ? header.cc
+                      .flatMap((item) => item.value)
+                      .map((item) => item.address)
+                      .filter(Boolean)
+                      .join(", ")
+                  : (header?.cc?.value
+                      .map((item) => item.address)
+                      .filter(Boolean)
+                      .join(", ") ?? null),
+                threadKey: rootKey,
                 fromName: address?.name?.slice(0, 255) ?? null,
                 fromAddress: address?.address?.slice(0, 255) ?? null,
                 toAddress: to?.slice(0, 1000) ?? null,
@@ -245,16 +348,18 @@ export async function syncMailbox() {
             synced += inserted.length;
           }
         }
-        const nextCursors = {
-          ...cursors,
-          [folder]: {
-            uidValidity,
-            lastUid: Math.max(previous?.uidValidity === uidValidity ? previous.lastUid : 0, ...uids),
-          },
+        const nextCursor = {
+          uidValidity,
+          lastUid: uids.reduce(
+            (highest, uid) => Math.max(highest, uid),
+            previous?.uidValidity === uidValidity ? previous.lastUid : 0,
+          ),
         };
         await database
           .update(integrations)
-          .set({ metadata: { ...metadata, mailboxCursors: nextCursors } })
+          .set({
+            metadata: sql`jsonb_set(jsonb_set(coalesce(${integrations.metadata}, '{}'::jsonb), '{mailboxCursors}', coalesce(${integrations.metadata}->'mailboxCursors', '{}'::jsonb)), ${`{mailboxCursors,${folder}}`}::text[], ${JSON.stringify(nextCursor)}::jsonb)`,
+          })
           .where(eq(integrations.key, "cs-mail"));
       } finally {
         lock.release();
@@ -263,7 +368,11 @@ export async function syncMailbox() {
     await client.logout();
     await database
       .update(integrations)
-      .set({ lastSyncAt: new Date(), lastError: null })
+      .set({
+        lastSyncAt: new Date(),
+        lastError: null,
+        metadata: sql`coalesce(${integrations.metadata}, '{}'::jsonb) - 'mailLastErrorCode'`,
+      })
       .where(and(eq(integrations.key, "cs-mail"), isNotNull(integrations.secretCiphertext)));
     return { synced, skipped: false };
   } catch (error) {
@@ -272,15 +381,20 @@ export async function syncMailbox() {
     } catch {
       /* best effort close */
     }
+    const failure = classifyMailboxFailure(error);
     await database
       .update(integrations)
-      .set({ lastError: "Sinkronisasi email gagal. Periksa layanan email atau kata sandi mailbox." })
+      .set({
+        lastError: failure.message,
+        metadata: sql`jsonb_set(coalesce(${integrations.metadata}, '{}'::jsonb), '{mailLastErrorCode}', ${JSON.stringify(failure.code)}::jsonb)`,
+      })
       .where(and(eq(integrations.key, "cs-mail"), isNotNull(integrations.secretCiphertext)));
-    throw error;
+    throw new MailboxSyncError(failure);
   }
 }
 
 export async function getEmailRecord(id: string) {
+  if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) return null;
   const database = getDatabase();
   if (!database) return null;
   const [row] = await database.select().from(csEmails).where(eq(csEmails.id, id)).limit(1);
@@ -288,6 +402,7 @@ export async function getEmailRecord(id: string) {
 }
 
 export async function getOutboxRecord(id: string) {
+  if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) return null;
   const database = getDatabase();
   if (!database) return null;
   const [row] = await database.select().from(csEmailOutbox).where(eq(csEmailOutbox.id, id)).limit(1);
@@ -306,6 +421,7 @@ export async function fetchEmailBody(folder: "inbox" | "sent", uid: number, uidV
     const cached = decryptSecret<{ source: string }>(email.bodyCiphertext);
     return Buffer.from(cached.source, "base64");
   }
+  if (!email || email.size > 25 * 1024 * 1024) throw new Error("Email tidak tersedia atau melebihi batas 25 MB.");
 
   const settings = await getMailboxSettings();
   if (!settings) throw new Error("Email CS belum tersambung.");
@@ -329,11 +445,25 @@ export async function fetchEmailBody(folder: "inbox" | "sent", uid: number, uidV
     try {
       if (!client.mailbox || String(client.mailbox.uidValidity) !== uidValidity)
         throw new Error("Email sudah berubah di server. Segarkan daftar email.");
-      let source: Buffer | null = null;
-      for await (const message of client.fetch(String(uid), { uid: true, source: true }, { uid: true })) {
-        source = message.source ?? null;
+      const maxBytes = 25 * 1024 * 1024;
+      const downloaded = await client.download(String(uid), undefined, {
+        uid: true,
+        maxBytes: maxBytes + 1,
+        chunkSize: 64 * 1024,
+      });
+      const chunks: Buffer[] = [];
+      let size = 0;
+      for await (const chunk of downloaded.content) {
+        const bytes = Buffer.from(chunk);
+        size += bytes.length;
+        if (size > maxBytes) {
+          downloaded.content.destroy();
+          throw new Error("Email melebihi batas 25 MB.");
+        }
+        chunks.push(bytes);
       }
-      if (source && email && source.byteLength <= 2 * 1024 * 1024) {
+      const source = size ? Buffer.concat(chunks, size) : null;
+      if (source && email && source.byteLength <= maxBytes) {
         await database
           .update(csEmails)
           .set({ bodyCiphertext: encryptSecret({ source: source.toString("base64") }) })
@@ -344,14 +474,14 @@ export async function fetchEmailBody(folder: "inbox" | "sent", uid: number, uidV
       lock.release();
     }
   } catch (error) {
-    await database
-      .update(integrations)
-      .set({
-        lastError:
-          "Isi email belum dapat diambil dari mailbox. Periksa koneksi email atau buka lagi setelah layanan pulih.",
-      })
-      .where(and(eq(integrations.key, "cs-mail"), isNotNull(integrations.secretCiphertext)));
-    throw error;
+    // A single cached/deleted message can fail independently of the mailbox connection.
+    // Do not mark the whole Email CS integration unhealthy from this on-demand action.
+    // Keep a specific message such as a changed UID for the person opening it.
+    if (error instanceof Error) {
+      throw error;
+    }
+
+    throw new Error("Isi email belum dapat diambil. Muat ulang atau coba lagi setelah layanan mailbox pulih.");
   } finally {
     try {
       await client.logout();

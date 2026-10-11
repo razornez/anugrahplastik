@@ -5,7 +5,12 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { getDatabase } from "@/lib/database/client";
 import { auditLogs, integrationOauthStates, integrations } from "@/lib/database/schema";
 import { encryptSecret, hasIntegrationEncryptionKey } from "@/features/integrations/secrets";
-import { googleAdsRedirectUri } from "@/features/integrations/google-ads-config";
+import {
+  googleAdsCustomerId,
+  googleAdsExpectedEmail,
+  googleAdsRedirectUri,
+} from "@/features/integrations/google-ads-config";
+import { verifyGoogleAdsAccessToken } from "@/features/integrations/google-ads-service";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -55,11 +60,12 @@ export async function GET(request: Request) {
       token_type: string;
       id_token?: string;
     };
-    const expectedEmail = (process.env.GOOGLE_ADS_LOGIN_EMAIL || "razornez@gmail.com").toLowerCase();
+    const expectedEmail = googleAdsExpectedEmail();
     if (
       !tokens.access_token ||
       !tokens.refresh_token ||
       !tokens.id_token ||
+      !expectedEmail ||
       !tokens.scope?.split(" ").includes("https://www.googleapis.com/auth/adwords")
     )
       return fail("google-token-scope");
@@ -73,6 +79,31 @@ export async function GET(request: Request) {
       String(verified.payload.email ?? "").toLowerCase() !== expectedEmail
     )
       return fail("google-account");
+    // Test this access token before replacing an otherwise usable refresh token.
+    // A failed MCC/API configuration must not disconnect the previous connection.
+    let probe;
+    try {
+      probe = await verifyGoogleAdsAccessToken(tokens.access_token);
+    } catch {
+      return fail("google-api-access");
+    }
+    const [existing] = await database
+      .select({ metadata: integrations.metadata })
+      .from(integrations)
+      .where(eq(integrations.key, "google-ads"))
+      .limit(1);
+    const existingMetadata = (existing?.metadata ?? {}) as Record<string, unknown>;
+    const verifiedAt = new Date().toISOString();
+    const metadata = {
+      ...existingMetadata,
+      customerId: googleAdsCustomerId(),
+      accountName: probe.name,
+      adsAccountTimeZone: probe.timeZone,
+      scope: "adwords",
+      authorizedEmail: expectedEmail,
+      lastProbeAt: verifiedAt,
+      lastProbeCode: "success",
+    };
     const encrypted = encryptSecret({ refreshToken: tokens.refresh_token });
     await database
       .insert(integrations)
@@ -80,12 +111,7 @@ export async function GET(request: Request) {
         key: "google-ads",
         status: "connected",
         secretCiphertext: encrypted,
-        metadata: {
-          customerId: process.env.GOOGLE_ADS_CUSTOMER_ID || "6738895829",
-          accountName: "Anugrah Plastik",
-          scope: "adwords",
-          authorizedEmail: expectedEmail,
-        },
+        metadata,
         updatedBy: record.actorId,
         lastError: null,
       })
@@ -94,12 +120,7 @@ export async function GET(request: Request) {
         set: {
           status: "connected",
           secretCiphertext: encrypted,
-          metadata: {
-            customerId: process.env.GOOGLE_ADS_CUSTOMER_ID || "6738895829",
-            accountName: "Anugrah Plastik",
-            scope: "adwords",
-            authorizedEmail: expectedEmail,
-          },
+          metadata,
           updatedBy: record.actorId,
           updatedAt: new Date(),
           lastError: null,
@@ -110,7 +131,7 @@ export async function GET(request: Request) {
       action: "integration.google_ads_connected",
       entityType: "integration",
       entityId: "google-ads",
-      metadata: { customerId: process.env.GOOGLE_ADS_CUSTOMER_ID || "6738895829" },
+      metadata: { customerId: googleAdsCustomerId() },
     });
     return NextResponse.redirect(new URL("/admin/settings/integrations?saved=google-ads", origin));
   } catch {

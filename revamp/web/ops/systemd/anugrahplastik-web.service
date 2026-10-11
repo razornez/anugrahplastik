@@ -1,0 +1,27 @@
+[Unit]
+Description=Anugrah Plastik web application
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=anugrahplastik
+Group=anugrahplastik
+WorkingDirectory=/srv/anugrahplastik/current/app
+EnvironmentFile=/etc/anugrahplastik/web.env
+Environment=NODE_ENV=production
+Environment=PORT=3050
+Environment=HOSTNAME=127.0.0.1
+Environment=NEXT_TELEMETRY_DISABLED=1
+ExecStart=/opt/anugrahplastik/node/bin/node server.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+UMask=0077
+ReadWritePaths=/srv/anugrahplastik/current/app/.next /var/lib/anugrahplastik/private
+
+[Install]
+WantedBy=multi-user.target

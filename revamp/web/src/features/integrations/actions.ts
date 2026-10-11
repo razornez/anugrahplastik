@@ -1,32 +1,32 @@
 "use server";
 
-import { and, eq, lt } from "drizzle-orm";
+import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import nodemailer from "nodemailer";
-import { readFile, stat } from "node:fs/promises";
-import { basename } from "node:path";
 import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/database/client";
 import {
   auditLogs,
   businessTransactions,
-  csEmailOutbox,
   csEmails,
-  customers,
   integrationOauthStates,
   integrations,
   leads,
   transactionDocuments,
 } from "@/lib/database/schema";
-import { privateFilePath } from "@/features/operations/private-storage";
 import { requireOperationsAccess } from "@/features/operations/access";
-import { getEmailRecord, getMailboxSettings, testMailbox, type MailSettings } from "./mail-service";
+import { MailboxSyncError, testMailbox, type MailSettings } from "./mail-service";
 import { encryptSecret, hasIntegrationEncryptionKey } from "./secrets";
-import { googleAdsRedirectUri, isGoogleAdsOAuthConfigured } from "./google-ads-config";
-import { buildCompanyEmail } from "./email-format";
+import {
+  getGoogleAdsOAuthConfigurationIssues,
+  getGoogleAdsReportingConfigurationIssues,
+  googleAdsRedirectUri,
+  isGoogleAdsOAuthConfigured,
+} from "./google-ads-config";
+import { getActiveTemplate, validateEmailDoc } from "./email-templates";
+import { getCsMailboxServerConfig } from "./mailbox-config";
 
 async function requireRole(roles: string[]) {
   const user = await getSession();
@@ -39,21 +39,19 @@ export async function saveCsMailbox(_previousMessage: string | null, formData: F
   const database = getDatabase();
   if (!database) return "Database belum terhubung. Coba lagi setelah database aktif.";
   try {
-    const settings = z
+    const input = z
       .object({
         email: z.string().email().max(255),
         password: z.string().min(1).max(512),
-        host: z.literal("mail.anugrahplastik.com"),
-        imapPort: z.literal(993),
-        smtpPort: z.literal(465),
       })
       .parse({
         email: String(formData.get("email") ?? "").trim(),
         password: String(formData.get("password") ?? ""),
-        host: String(formData.get("host") ?? ""),
-        imapPort: Number(formData.get("imapPort")),
-        smtpPort: Number(formData.get("smtpPort")),
-      }) satisfies MailSettings;
+      });
+    const mailboxServer = getCsMailboxServerConfig();
+    if (!mailboxServer.configuredExplicitly)
+      return "Endpoint cPanel belum disiapkan di server. Isi CS_MAIL_HOST dari halaman Set Up Mail Client sebelum menguji koneksi.";
+    const settings: MailSettings = { ...input, ...mailboxServer };
     if (!hasIntegrationEncryptionKey())
       return "Kunci enkripsi integrasi belum disiapkan pada server. Minta administrator server melengkapinya sebelum memasukkan kata sandi email.";
     if (settings.email.toLowerCase() !== "cs@anugrahplastik.com")
@@ -90,10 +88,13 @@ export async function saveCsMailbox(_previousMessage: string | null, formData: F
     });
   } catch (error) {
     if (error instanceof z.ZodError) return "Periksa kata sandi dan pastikan data koneksi email terisi dengan benar.";
-    if (error instanceof Error && error.message.startsWith("Koneksi email belum berhasil.")) return error.message;
+    // MailboxSyncError already contains a classified, provider-safe message.
+    // Returning it here prevents a timeout or authentication failure from being
+    // misreported as an unavailable application server/database.
+    if (error instanceof MailboxSyncError) return error.message;
     if (error instanceof Error && error.message.startsWith("Kunci keamanan integrasi belum disiapkan"))
       return error.message;
-    return "Koneksi belum tersimpan. Pastikan server dan database tersedia, lalu coba lagi.";
+    return "Koneksi belum tersimpan karena proses belum dapat diselesaikan dengan aman. Periksa status pemeriksaan lalu coba lagi.";
   }
   revalidatePath("/admin/settings/integrations");
   redirect("/admin/settings/integrations?saved=mail");
@@ -125,7 +126,7 @@ export async function startGoogleAdsConnection() {
   if (process.env.NODE_ENV !== "production" && !["localhost", "127.0.0.1"].includes(callbackHost)) {
     redirect("/admin/settings/integrations?error=google-local");
   }
-  if (!clientId || !isGoogleAdsOAuthConfigured()) {
+  if (!clientId || !isGoogleAdsOAuthConfigured() || getGoogleAdsOAuthConfigurationIssues().length) {
     throw new Error(
       "Google Ads belum siap. Administrator server perlu mengisi OAuth Client ID, Client Secret, dan kunci enkripsi integrasi.",
     );
@@ -178,85 +179,101 @@ export async function disconnectGoogleAds() {
   redirect("/admin/settings/integrations");
 }
 
-export async function sendCsEmail(formData: FormData) {
-  const user = await requireRole(["admin", "sales"]);
-  const input = z
-    .object({
-      to: z.string().email().max(255),
-      subject: z.string().trim().min(1).max(998),
-      body: z.string().trim().min(1).max(20_000),
-      idempotencyKey: z.string().uuid(),
-      replyToId: z.string().uuid().optional(),
-    })
-    .parse({
-      to: String(formData.get("to") ?? "").trim(),
-      subject: String(formData.get("subject") ?? ""),
-      body: String(formData.get("body") ?? ""),
-      idempotencyKey: String(formData.get("idempotencyKey") ?? ""),
-      replyToId: String(formData.get("replyToId") ?? "") || undefined,
-    });
+export type IntegrationHealthActionResult = { ok: boolean; message: string };
+
+const MAIL_HEALTH_FAILURE_MESSAGE: Record<string, string> = {
+  mail_authentication: "Mailbox menolak kredensial. Perbarui kata sandi mailbox, lalu uji ulang.",
+  mail_dns_network: "Server mailbox tidak dapat dijangkau. Periksa DNS, jaringan, atau firewall server mailbox.",
+  mail_tls: "Koneksi TLS mailbox tidak dapat diverifikasi. Periksa sertifikat serta pengaturan host dan port.",
+  mail_timeout:
+    "Server mailbox tidak merespons pada IMAP/SMTP. Password belum dapat diverifikasi; periksa firewall atau layanan mailbox, lalu uji ulang.",
+  mail_folder: "Folder Inbox atau Sent tidak tersedia. Periksa konfigurasi folder pada mailbox.",
+  mail_unknown: "Pemeriksaan mailbox gagal tanpa klasifikasi tambahan. Uji ulang setelah server mailbox tersedia.",
+};
+
+async function writeIntegrationHealthAudit(actorId: string, key: "cs-mail" | "google-ads", ok: boolean) {
   const database = getDatabase();
-  const settings = await getMailboxSettings();
-  if (!database || !settings) throw new Error("Email CS belum tersambung.");
-  const linkedEmail = input.replyToId ? await getEmailRecord(input.replyToId) : null;
-  if (input.replyToId && !linkedEmail) throw new Error("Email asal balasan tidak ditemukan.");
-  const [pending] = await database
-    .insert(csEmailOutbox)
-    .values({
-      toAddress: input.to,
-      subject: input.subject,
-      bodyCiphertext: encryptSecret({ body: input.body }),
-      idempotencyKey: input.idempotencyKey,
-      status: "pending",
-      linkedEmailId: linkedEmail?.id ?? null,
-      inReplyTo: linkedEmail?.messageId ?? null,
-      sentBy: user.id,
-    })
-    .onConflictDoNothing()
-    .returning({ id: csEmailOutbox.id });
-  if (!pending) throw new Error("Permintaan email ini sudah pernah diproses. Segarkan halaman sebelum mengirim lagi.");
-  const formattedEmail = buildCompanyEmail(input.body);
+  if (!database) return;
+  await database.insert(auditLogs).values({
+    actorId,
+    action: `integration.${key}.${ok ? "health_check_succeeded" : "health_check_failed"}`,
+    entityType: "integration",
+    entityId: key,
+    metadata: { source: "manual_health_check" },
+  });
+}
+
+/** Manual, admin-only checks. Rendering a page never calls either external service. */
+export async function runCsMailboxHealthCheck(): Promise<IntegrationHealthActionResult> {
+  const user = await requireRole(["admin"]);
   try {
-    const transporter = nodemailer.createTransport({
-      host: settings.host,
-      port: settings.smtpPort,
-      secure: true,
-      auth: { user: settings.email, pass: settings.password },
-      logger: false,
-      debug: false,
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 30_000,
-    });
-    const result = await transporter.sendMail({
-      from: { name: "Anugrah Plastik", address: settings.email },
-      to: input.to,
-      subject: input.subject,
-      text: formattedEmail.text,
-      html: formattedEmail.html,
-      ...(linkedEmail?.messageId ? { inReplyTo: linkedEmail.messageId, references: [linkedEmail.messageId] } : {}),
-      disableFileAccess: true,
-      disableUrlAccess: true,
-    });
-    await database
-      .update(csEmailOutbox)
-      .set({ status: "sent", messageId: result.messageId })
-      .where(eq(csEmailOutbox.id, pending.id));
-    await database.insert(auditLogs).values({
-      actorId: user.id,
-      action: "integration.mail_sent",
-      entityType: "email",
-      entityId: pending.id,
-      metadata: { recipient: input.to, reply: Boolean(linkedEmail) },
-    });
-  } catch {
-    // The SMTP server may accept a message before the connection fails; keep this idempotency key blocked to prevent accidental duplicates.
-    await database.update(csEmailOutbox).set({ status: "uncertain" }).where(eq(csEmailOutbox.id, pending.id));
+    const { runIntegrationSync } = await import("./sync-runner");
+    const result = await runIntegrationSync({ trigger: "manual", services: ["mail"] });
+    const ok = result.mail.status === "success" || result.mail.status === "busy";
+    await writeIntegrationHealthAudit(user.id, "cs-mail", ok);
+    revalidatePath("/admin/settings/integrations");
     revalidatePath("/admin/email");
-    redirect("/admin/email?folder=sent&send=check");
+    return {
+      ok,
+      message:
+        result.mail.status === "busy"
+          ? "Mailbox sedang diperiksa oleh proses lain; tidak ada pekerjaan ganda yang dijalankan."
+          : ok
+            ? `Mailbox berhasil diperiksa${result.mail.count ? `; ${result.mail.count} email baru disimpan.` : "; tidak ada email baru."}`
+            : (MAIL_HEALTH_FAILURE_MESSAGE[result.mail.code ?? ""] ??
+              "Pemeriksaan Email CS gagal. Server mailbox belum dapat diverifikasi; coba lagi setelah layanan tersedia."),
+    };
+  } catch {
+    await writeIntegrationHealthAudit(user.id, "cs-mail", false);
+    revalidatePath("/admin/settings/integrations");
+    return {
+      ok: false,
+      message: "Pemeriksaan Email CS gagal. Periksa koneksi atau kata sandi mailbox, lalu coba lagi.",
+    };
   }
+}
+
+export async function runGoogleAdsHealthCheck(): Promise<IntegrationHealthActionResult> {
+  return runGoogleAdsAccessProbe();
+}
+
+/** Verifies Cloud-project access, MCC hierarchy, and target customer access without changing stored report rows. */
+export async function runGoogleAdsAccessProbe(): Promise<IntegrationHealthActionResult> {
+  const user = await requireRole(["admin"]);
+  const configurationIssues = [
+    ...getGoogleAdsOAuthConfigurationIssues(),
+    ...getGoogleAdsReportingConfigurationIssues(),
+  ];
+  if (configurationIssues.length)
+    return {
+      ok: false,
+      message: `Akses API belum siap: ${configurationIssues.map((issue) => issue.label).join(", ")}.`,
+    };
+  try {
+    const { probeGoogleAdsReporting } = await import("./google-ads-service");
+    await probeGoogleAdsReporting();
+    await writeIntegrationHealthAudit(user.id, "google-ads", true);
+    revalidatePath("/admin/settings/integrations");
+    return { ok: true, message: "Akses API, MCC, dan akun laporan berhasil diverifikasi. Laporan belum diubah." };
+  } catch (error) {
+    await writeIntegrationHealthAudit(user.id, "google-ads", false);
+    revalidatePath("/admin/settings/integrations");
+    const message = error instanceof Error ? error.message : "Verifikasi akses API belum berhasil.";
+    return {
+      ok: false,
+      message,
+    };
+  }
+}
+
+export async function sendCsEmail(formData: FormData) {
+  await requireRole(["admin", "sales"]);
+  const attemptId = String(formData.get("attemptId") ?? "");
+  if (!attemptId) throw new Error("Buka draf dan periksa pratinjau terakhir sebelum mengirim email.");
+  const { sendPreparedDraft } = await import("./email-drafts");
+  const result = await sendPreparedDraft(attemptId);
   revalidatePath("/admin/email");
-  redirect("/admin/email?folder=sent&sent=1");
+  redirect(`/admin/email?folder=sent&email=outbox:${result.attemptId}`);
 }
 
 export async function createProspectFromEmail(formData: FormData) {
@@ -276,93 +293,129 @@ export async function createProspectFromEmail(formData: FormData) {
     });
   const database = getDatabase();
   if (!database) throw new Error("Database belum terhubung.");
-  const [source] = await database
-    .select({ id: csEmails.id, linkedLeadId: csEmails.linkedLeadId })
-    .from(csEmails)
-    .where(eq(csEmails.id, input.emailId))
-    .limit(1);
-  if (!source) throw new Error("Email asal tidak ditemukan.");
-  if (source.linkedLeadId) redirect(`/admin/prospects?selected=${source.linkedLeadId}`);
-  const [existing] = await database.select({ id: leads.id }).from(leads).where(eq(leads.email, input.email)).limit(1);
-  const leadId =
-    existing?.id ??
-    (
-      await database
-        .insert(leads)
-        .values({
-          name: input.name,
-          email: input.email,
-          phone: null,
-          message: input.message,
-          source: "email",
-          status: "new",
-          assignedUserId: user.id,
-        })
-        .returning({ id: leads.id })
-    )[0]?.id;
-  if (!leadId) throw new Error("Prospek belum dapat dibuat.");
-  await database.update(csEmails).set({ linkedLeadId: leadId }).where(eq(csEmails.id, input.emailId));
-  await database.insert(auditLogs).values({
-    actorId: user.id,
-    action: "integration.email_linked_to_prospect",
-    entityType: "lead",
-    entityId: leadId,
-    metadata: { source: "email", emailId: input.emailId },
+  const leadId = await database.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`email-lead-${input.email.toLowerCase()}`}))`);
+    const [source] = await tx
+      .select({ id: csEmails.id, linkedLeadId: csEmails.linkedLeadId })
+      .from(csEmails)
+      .where(and(eq(csEmails.id, input.emailId), eq(csEmails.folder, "inbox")))
+      .limit(1);
+    if (!source) throw new Error("Email asal tidak ditemukan.");
+    if (source.linkedLeadId) return source.linkedLeadId;
+    const [existing] = await tx
+      .select({ id: leads.id })
+      .from(leads)
+      .where(sql`lower(${leads.email}) = ${input.email.toLowerCase()}`)
+      .limit(1);
+    const id =
+      existing?.id ??
+      (
+        await tx
+          .insert(leads)
+          .values({
+            name: input.name,
+            email: input.email,
+            phone: null,
+            message: input.message,
+            source: "email",
+            status: "new",
+            assignedUserId: user.id,
+          })
+          .returning({ id: leads.id })
+      )[0]?.id;
+    if (!id) throw new Error("Prospek belum dapat dibuat.");
+    await tx.update(csEmails).set({ linkedLeadId: id }).where(eq(csEmails.id, input.emailId));
+    await tx.insert(auditLogs).values({
+      actorId: user.id,
+      action: "integration.email_linked_to_prospect",
+      entityType: "lead",
+      entityId: id,
+      metadata: { source: "email", emailId: input.emailId },
+    });
+    return id;
   });
   revalidatePath("/admin/email");
   revalidatePath("/admin/prospects");
   redirect(`/admin/prospects?selected=${leadId}`);
 }
 
-export async function linkEmailToTransaction(formData: FormData) {
+export async function linkEmailToTransaction(formData: FormData): Promise<string | null> {
   const user = await requireRole(["admin", "sales"]);
-  const input = z
-    .object({
-      emailId: z.string().uuid(),
-      referenceNo: z
-        .string()
-        .trim()
-        .regex(/^TRX-\d{4}-\d{5}$/i),
-    })
-    .parse({ emailId: String(formData.get("emailId") ?? ""), referenceNo: String(formData.get("referenceNo") ?? "") });
-  const database = getDatabase();
-  if (!database) throw new Error("Database belum terhubung.");
-  const [email] = await database.select().from(csEmails).where(eq(csEmails.id, input.emailId)).limit(1);
-  if (!email || email.folder !== "inbox") throw new Error("Email masuk tidak ditemukan.");
-  const [transaction] = await database
-    .select({ id: businessTransactions.id, referenceNo: businessTransactions.referenceNo })
-    .from(businessTransactions)
-    .where(eq(businessTransactions.referenceNo, input.referenceNo.toUpperCase()))
-    .limit(1);
-  if (!transaction) redirect(`/admin/email?folder=inbox&email=${email.id}&link=not-found`);
-  await database.update(csEmails).set({ linkedTransactionId: transaction.id }).where(eq(csEmails.id, email.id));
-  await database.insert(auditLogs).values({
-    actorId: user.id,
-    action: "integration.email_linked_to_transaction",
-    entityType: "transaction",
-    entityId: transaction.id,
-    metadata: { emailId: email.id, referenceNo: transaction.referenceNo },
+  const input = z.object({ emailId: z.string().uuid(), transactionId: z.string().uuid() }).safeParse({
+    emailId: String(formData.get("emailId") ?? ""),
+    transactionId: String(formData.get("transactionId") ?? ""),
   });
+  if (!input.success) return "Pilih transaksi dari hasil pencarian terlebih dahulu.";
+  const database = getDatabase();
+  if (!database) return "Database belum terhubung. Pilihan Anda tetap tersedia; coba lagi.";
+  let result;
+  try {
+    result = await database.transaction(async (tx) => {
+      const [email] = await tx
+        .select()
+        .from(csEmails)
+        .where(eq(csEmails.id, input.data.emailId))
+        .limit(1)
+        .for("update");
+      if (!email || email.folder !== "inbox") return "Email masuk tidak ditemukan. Muat ulang halaman.";
+      if (email.linkedTransactionId) return "Email sudah dikaitkan ke transaksi. Muat ulang halaman untuk melihatnya.";
+      const [transaction] = await tx
+        .select({ id: businessTransactions.id, referenceNo: businessTransactions.referenceNo })
+        .from(businessTransactions)
+        .where(
+          and(
+            eq(businessTransactions.id, input.data.transactionId),
+            process.env.NODE_ENV !== "development" ? eq(businessTransactions.dataClass, "production") : undefined,
+          ),
+        )
+        .limit(1);
+      if (!transaction) return "Transaksi tidak ditemukan. Cari dan pilih transaksi kembali.";
+      await tx
+        .update(csEmails)
+        .set({ linkedTransactionId: transaction.id })
+        .where(and(eq(csEmails.id, email.id), isNull(csEmails.linkedTransactionId)));
+      await tx.insert(auditLogs).values({
+        actorId: user.id,
+        action: "integration.email_linked_to_transaction",
+        entityType: "transaction",
+        entityId: transaction.id,
+        metadata: { emailId: email.id, referenceNo: transaction.referenceNo },
+      });
+      return null;
+    });
+  } catch {
+    return "Email belum berhasil dikaitkan. Pilihan Anda tetap tersedia; coba lagi.";
+  }
+  if (result) return result;
   revalidatePath("/admin/email");
-  revalidatePath(`/admin/transactions/${transaction.id}`);
-  redirect(`/admin/email?folder=inbox&email=${email.id}&link=success`);
+  revalidatePath(`/admin/transactions/${input.data.transactionId}`);
+  redirect(`/admin/email?folder=inbox&email=${input.data.emailId}&link=success`);
 }
 
-export async function refreshMailbox() {
+export async function refreshMailbox(formData: FormData) {
   await requireRole(["admin", "sales"]);
-  const { syncMailbox } = await import("./mail-service");
+  const { runIntegrationSync } = await import("./sync-runner");
   let failed = false;
   try {
-    await syncMailbox();
+    const result = await runIntegrationSync({ trigger: "manual", services: ["mail"] });
+    failed = result.mail.status === "failed";
   } catch {
     failed = true;
   }
   revalidatePath("/admin/email");
-  redirect(failed ? "/admin/email?folder=inbox&sync=error" : "/admin/email?folder=inbox&synced=1");
+  const requested = String(formData.get("returnTo") ?? "");
+  const destination = new URL(
+    requested.startsWith("/admin/email?") ? requested : "/admin/email?folder=inbox",
+    "http://localhost",
+  );
+  destination.searchParams.delete("sync");
+  destination.searchParams.delete("synced");
+  destination.searchParams.set(failed ? "sync" : "synced", failed ? "error" : "1");
+  redirect(`/admin/email?${destination.searchParams}`);
 }
 
 export async function refreshGoogleAds() {
-  await requireRole(["admin", "sales"]);
+  await requireRole(["admin"]);
   const { syncGoogleAdsReport } = await import("./google-ads-service");
   try {
     await syncGoogleAdsReport(30);
@@ -374,8 +427,16 @@ export async function refreshGoogleAds() {
   redirect("/admin/marketing?synced=1");
 }
 
+export async function refreshGoogleAdsIfDue() {
+  await requireRole(["admin"]);
+  const { syncGoogleAdsOncePerJakartaDay } = await import("./google-ads-service");
+  const result = await syncGoogleAdsOncePerJakartaDay();
+  if (result === "updated") revalidatePath("/admin/marketing");
+  return result;
+}
+
 export async function refreshGoogleAdsRange(formData: FormData) {
-  await requireRole(["admin", "sales"]);
+  await requireRole(["admin"]);
   const dateInput = z
     .object({
       from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -395,151 +456,104 @@ export async function refreshGoogleAdsRange(formData: FormData) {
     });
   if (!dateInput.success) redirect("/admin/marketing?error=range");
   const { from, to, campaigns, metrics, interval, compare } = dateInput.data;
-  const { validateGoogleAdsRange, syncGoogleAdsReportRange } = await import("./google-ads-service");
-  if (!validateGoogleAdsRange(from, to)) redirect("/admin/marketing?error=range");
-  const allowedMetrics = new Set(["impressions", "cost", "conversions", "conversionValue"]);
+  const configurationIssues = [
+    ...getGoogleAdsOAuthConfigurationIssues(),
+    ...getGoogleAdsReportingConfigurationIssues(),
+  ];
+  if (configurationIssues.length) redirect("/admin/marketing?error=configuration");
+  const database = getDatabase();
+  const [connection] = database
+    ? await database
+        .select({ metadata: integrations.metadata })
+        .from(integrations)
+        .where(eq(integrations.key, "google-ads"))
+        .limit(1)
+    : [];
+  const metadata = (connection?.metadata ?? {}) as Record<string, unknown>;
+  const timeZone = typeof metadata.adsAccountTimeZone === "string" ? metadata.adsAccountTimeZone : "Asia/Jakarta";
+  const { GoogleAdsServiceError, validateGoogleAdsRange, syncGoogleAdsReportRange } =
+    await import("./google-ads-service");
+  if (!validateGoogleAdsRange(from, to, timeZone)) redirect("/admin/marketing?error=range");
+  const { normalizeAdsMetrics } = await import("./google-ads-report-model");
   const validCampaigns =
     campaigns
       ?.split(",")
       .filter((id) => /^\d{1,20}$/.test(id))
       .slice(0, 100) ?? [];
-  const validMetrics =
-    metrics
-      ?.split(",")
-      .filter((item) => allowedMetrics.has(item))
-      .slice(0, 4) ?? [];
+  const validMetrics = normalizeAdsMetrics(metrics);
   const query = new URLSearchParams({ from, to, interval: interval ?? "daily", compare: compare ?? "1" });
   if (validCampaigns.length) query.set("campaigns", validCampaigns.join(","));
   if (validMetrics.length) query.set("metrics", validMetrics.join(","));
   try {
-    await syncGoogleAdsReportRange(from, to);
-  } catch {
+    await syncGoogleAdsReportRange(from, to, timeZone);
+  } catch (error) {
+    const code = error instanceof GoogleAdsServiceError ? error.code : "report_unavailable";
     revalidatePath("/admin/marketing");
-    redirect(`/admin/marketing?${query.toString()}&error=sync`);
+    redirect(`/admin/marketing?${query.toString()}&ads=${encodeURIComponent(code)}`);
   }
   revalidatePath("/admin/marketing");
   redirect(`/admin/marketing?${query.toString()}&synced=1`);
 }
 
-export async function sendTransactionDocument(formData: FormData) {
-  const user = await requireOperationsAccess();
+// Legacy direct-send requests are refused; documents use the shared frozen-preview flow.
+export async function sendTransactionDocument(_formData: FormData) {
+  void _formData;
+  await requireOperationsAccess();
+  throw new Error("Pengiriman langsung tidak tersedia. Siapkan draf dan konfirmasi pratinjau di Email CS.");
+}
+
+export async function prepareTransactionDocumentEmail(formData: FormData) {
+  await requireOperationsAccess();
   const input = z
     .object({
-      transactionId: z.string().uuid(),
-      documentId: z.string().uuid(),
-      to: z.string().email().max(255),
-      subject: z.string().trim().min(1).max(998),
-      body: z.string().trim().min(1).max(20_000),
-      idempotencyKey: z.string().uuid(),
+      transactionId: z.uuid(),
+      documentId: z.uuid(),
+      to: z.email().max(255),
+      subject: z
+        .string()
+        .trim()
+        .min(1)
+        .max(998)
+        .refine((value) => !/[\r\n]/.test(value)),
+      bodyJson: z.string().min(1).max(200_000),
+      confirmedTo: z.email().max(255),
     })
-    .parse({
-      transactionId: String(formData.get("transactionId") ?? ""),
-      documentId: String(formData.get("documentId") ?? ""),
-      to: String(formData.get("to") ?? "").trim(),
-      subject: String(formData.get("subject") ?? ""),
-      body: String(formData.get("body") ?? ""),
-      idempotencyKey: String(formData.get("idempotencyKey") ?? ""),
-    });
+    .parse(Object.fromEntries(formData));
+  if (input.to.toLowerCase() !== input.confirmedTo.toLowerCase()) throw new Error("Konfirmasi penerima tidak cocok.");
   const database = getDatabase();
-  const settings = await getMailboxSettings();
-  if (!database || !settings) throw new Error("Email CS belum tersambung.");
-  const [record] = await database
-    .select({
-      document: transactionDocuments,
-      customerEmail: customers.email,
-      transactionNo: businessTransactions.referenceNo,
-    })
+  if (!database) throw new Error("Database belum tersedia.");
+  const [document] = await database
+    .select()
     .from(transactionDocuments)
-    .innerJoin(businessTransactions, eq(businessTransactions.id, transactionDocuments.transactionId))
-    .innerJoin(customers, eq(customers.id, businessTransactions.customerId))
     .where(
       and(eq(transactionDocuments.id, input.documentId), eq(transactionDocuments.transactionId, input.transactionId)),
     )
     .limit(1);
-  if (
-    !record?.document.storagePath ||
-    !record.customerEmail ||
-    record.customerEmail.toLowerCase() !== input.to.toLowerCase()
-  ) {
-    throw new Error(
-      "Dokumen atau email customer belum siap. Pastikan dokumen privat tersedia dan alamat cocok dengan data customer.",
-    );
-  }
-  const absolutePath = privateFilePath(record.document.storagePath);
-  const fileInfo = await stat(absolutePath);
-  if (!fileInfo.isFile() || fileInfo.size < 1 || fileInfo.size > 15 * 1024 * 1024)
-    throw new Error("Lampiran tidak ditemukan atau lebih besar dari batas 15 MB.");
-  const file = await readFile(absolutePath);
-  const [pending] = await database
-    .insert(csEmailOutbox)
-    .values({
-      toAddress: input.to,
-      subject: input.subject,
-      bodyCiphertext: encryptSecret({ body: input.body }),
-      idempotencyKey: input.idempotencyKey,
-      status: "pending",
-      linkedTransactionId: input.transactionId,
-      sentBy: user.id,
-    })
-    .onConflictDoNothing()
-    .returning({ id: csEmailOutbox.id });
-  if (!pending)
-    throw new Error(
-      "Permintaan dokumen ini sudah pernah diproses. Periksa menu Email terkirim sebelum mencoba kembali.",
-    );
-  const formattedEmail = buildCompanyEmail(input.body);
-  try {
-    const transporter = nodemailer.createTransport({
-      host: settings.host,
-      port: settings.smtpPort,
-      secure: true,
-      auth: { user: settings.email, pass: settings.password },
-      logger: false,
-      debug: false,
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 30_000,
-    });
-    const result = await transporter.sendMail({
-      from: { name: "Anugrah Plastik", address: settings.email },
+  if (!document?.checksum) throw new Error("Checksum dokumen belum tersedia; arsip perlu diperiksa.");
+  const documentSource = {
+    transactionId: input.transactionId,
+    documentId: input.documentId,
+    version: document.version,
+    checksum: document.checksum,
+  };
+  const { validateDocumentEmailSource } = await import("./document-email-source");
+  await validateDocumentEmailSource(database, documentSource, { to: [input.to], cc: [], bcc: [] }, input.subject);
+  const { createDraft } = await import("./email-drafts");
+  const template = await getActiveTemplate(
+    document.type === "quotation" ? "quotation" : document.type.startsWith("invoice") ? "invoice" : "delivery",
+  );
+  const draft = await createDraft(
+    {
       to: input.to,
+      cc: "",
+      bcc: "",
       subject: input.subject,
-      text: formattedEmail.text,
-      html: formattedEmail.html,
-      attachments: [
-        {
-          filename: basename(record.document.originalName || "dokumen.pdf")
-            .replace(/[\r\n"\\]/g, "_")
-            .slice(0, 180),
-          content: file,
-        },
-      ],
-      disableFileAccess: true,
-      disableUrlAccess: true,
-    });
-    await database.transaction(async (tx) => {
-      await tx
-        .update(csEmailOutbox)
-        .set({ status: "sent", messageId: result.messageId })
-        .where(eq(csEmailOutbox.id, pending.id));
-      await tx
-        .update(transactionDocuments)
-        .set({ sentMessageId: result.messageId, recipient: input.to })
-        .where(eq(transactionDocuments.id, input.documentId));
-      await tx.insert(auditLogs).values({
-        actorId: user.id,
-        action: "transaction.document_emailed",
-        entityType: "transaction",
-        entityId: input.transactionId,
-        metadata: { documentId: input.documentId, recipient: input.to, outboxId: pending.id },
-      });
-    });
-  } catch {
-    await database.update(csEmailOutbox).set({ status: "uncertain" }).where(eq(csEmailOutbox.id, pending.id));
-    revalidatePath("/admin/email");
-    redirect(`/admin/transactions/${input.transactionId}?email=check`);
-  }
-  revalidatePath(`/admin/transactions/${input.transactionId}`);
+      content: validateEmailDoc(JSON.parse(input.bodyJson), "new"),
+      originalSubject: "",
+      documentSource,
+    },
+    template.version,
+  );
   revalidatePath("/admin/email");
-  redirect(`/admin/transactions/${input.transactionId}?email=sent`);
+  redirect(`/admin/email?folder=drafts&draft=${draft.id}`);
 }

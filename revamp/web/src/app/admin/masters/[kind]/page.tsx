@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { AdminPageHeader } from "@/components/admin-page-header";
 import { MasterCreateDialog } from "@/components/master-create-dialog";
+import { MasterRecordDialog } from "@/components/master-record-dialog";
+import { DesignListThumbnail } from "@/components/design-list-thumbnail";
+import { DesignDirectoryToolbar } from "@/components/design-directory-toolbar";
 import { DesignUploadForm } from "@/components/design-upload-form";
 import {
   createCustomer,
@@ -8,6 +12,8 @@ import {
   createMould,
   createProduct,
   createSupplier,
+  deleteMasterRecord,
+  updateMasterRecord,
 } from "@/features/operations/actions";
 import {
   getMasterDirectoryPage,
@@ -122,11 +128,7 @@ function CreateAction({ kind }: { kind: MasterKind }) {
         </label>
       </MasterCreateDialog>
     );
-  return (
-    <a className="master-primary-action" href="#design-upload">
-      Unggah file 3D
-    </a>
-  );
+  return null;
 }
 
 export default async function MasterDirectoryPage({
@@ -147,89 +149,132 @@ export default async function MasterDirectoryPage({
     order: query.order === "oldest" ? "oldest" : "newest",
     cursor: query.cursor,
     direction: query.direction === "previous" ? "previous" : "next",
+    format: query.format,
+    materialId: query.material,
   };
   const result = await getMasterDirectoryPage(rawKind, filters);
-  const designOptions = rawKind === "designs" ? await getDesignUploadOptions() : [];
+  const designOptions = rawKind === "designs" ? await getDesignUploadOptions() : null;
   const label = labels[rawKind];
   return (
     <section className="operations-page master-directory">
-      <header className="master-directory__head">
-        <div>
-          <Link className="back-link" href="/admin/masters">
-            ← Data master
-          </Link>
-          <p className="eyebrow">Data master</p>
-          <h1>{label.title}</h1>
-          <p>{label.description}</p>
-        </div>
-        <CreateAction kind={rawKind} />
-      </header>
-      <form className="directory-toolbar" method="get">
-        <label className="sr-only" htmlFor="directory-search">
-          Cari {label.singular}
-        </label>
-        <input
-          id="directory-search"
-          name="q"
-          defaultValue={filters.query}
-          placeholder={`Cari nama atau kode ${label.singular}`}
-        />
-        <select name="status" defaultValue={filters.status}>
-          <option value="">Semua status</option>
-          <option value="active">Aktif</option>
-          <option value="inactive">Nonaktif</option>
-          {rawKind === "moulds" ? <option value="planned">Direncanakan</option> : null}
-          {rawKind === "designs" ? (
-            <>
-              <option value="customer">Customer</option>
-              <option value="internal">Internal</option>
-            </>
-          ) : null}
-        </select>
-        <select name="order" defaultValue={filters.order}>
-          <option value="newest">Terbaru</option>
-          <option value="oldest">Terlama</option>
-        </select>
-        <button type="submit">Terapkan</button>
-      </form>
+      <AdminPageHeader
+        title={label.title}
+        description={label.description}
+        back={{ href: "/admin/masters", label: "Kembali ke Data master" }}
+        actions={
+          rawKind === "designs" && designOptions ? (
+            <DesignUploadForm options={designOptions} />
+          ) : (
+            <CreateAction kind={rawKind} />
+          )
+        }
+      />
       {rawKind === "designs" ? (
-        <section aria-labelledby="design-upload-title" className="design-upload-panel" id="design-upload">
-          <div>
-            <p className="eyebrow">File privat</p>
-            <h2 id="design-upload-title">Tambah file 3D</h2>
-            <p>File disimpan di ruang kerja internal dan harus ditautkan ke barang, customer, atau mould.</p>
-          </div>
-          <DesignUploadForm options={designOptions} />
-        </section>
-      ) : null}
+        <DesignDirectoryToolbar
+          initialQuery={filters.query ?? ""}
+          initialStatus={filters.status ?? ""}
+          initialFormat={filters.format ?? ""}
+          initialMaterialId={filters.materialId ?? ""}
+          initialOrder={filters.order ?? "newest"}
+          materials={designOptions?.materials ?? []}
+        />
+      ) : (
+        <form className="directory-toolbar" method="get">
+          <label className="sr-only" htmlFor="directory-search">
+            Cari {label.singular}
+          </label>
+          <input
+            id="directory-search"
+            name="q"
+            defaultValue={filters.query}
+            placeholder={`Cari nama atau kode ${label.singular}`}
+          />
+          <select name="status" defaultValue={filters.status}>
+            <option value="">Semua status</option>
+            <option value="active">Aktif</option>
+            <option value="inactive">Nonaktif</option>
+            {rawKind === "moulds" ? <option value="planned">Direncanakan</option> : null}
+          </select>
+          <select name="order" defaultValue={filters.order}>
+            <option value="newest">Terbaru</option>
+            <option value="oldest">Terlama</option>
+          </select>
+          <button type="submit">Terapkan</button>
+        </form>
+      )}
       <section className="directory-list">
         <div className="directory-list__head">
-          <strong>{result?.rows.length ?? 0} data pada halaman ini</strong>
-          <span>Menampilkan maksimal 25 data</span>
+          <strong>
+            {result?.rows.length ?? 0} {label.singular} pada halaman ini
+          </strong>
+          <span>{rawKind === "designs" ? "File privat · maksimal 25 hasil" : "Maksimal 25 hasil"}</span>
         </div>
         {result?.rows.length ? (
           result.rows.map((row) => (
-            <article key={row.id}>
-              <span className="master-code">{row.code}</span>
-              <div>
+            <article key={row.id} className={rawKind === "designs" ? "design-list-row" : undefined}>
+              {rawKind === "designs" ? (
+                <Link
+                  className="design-list-row__thumbnail"
+                  href={`/admin/masters/designs/${row.id}`}
+                  aria-label={`Buka preview ${row.title}`}
+                >
+                  <DesignListThumbnail
+                    fileId={row.id}
+                    format={row.code}
+                    hasThumbnail={Boolean(row.thumbnailStoragePath)}
+                    title={row.title}
+                  />
+                </Link>
+              ) : (
+                <span className="master-code">{row.code}</span>
+              )}
+              <div className={rawKind === "designs" ? "design-list-row__copy" : undefined}>
                 <strong>{row.title}</strong>
-                <small>{row.detail}</small>
+                <small>
+                  {rawKind === "designs"
+                    ? row.description ||
+                      [row.materialName ? `Material: ${row.materialName}` : null, row.detail]
+                        .filter(Boolean)
+                        .join(" · ") ||
+                      "Belum ada deskripsi atau relasi kerja."
+                    : row.detail}
+                </small>
               </div>
-              <em>{row.status === "active" ? "Aktif" : row.status}</em>
-              {rawKind === "designs" ? <Link href={`/admin/masters/designs/${row.id}`}>Buka</Link> : null}
+              {rawKind === "designs" ? (
+                <div className="design-list-row__actions">
+                  <em className={`directory-status directory-status--${row.status}`}>
+                    {row.status === "active" ? "Aktif" : row.status}
+                  </em>
+                  <Link href={`/admin/masters/designs/${row.id}`}>Detail</Link>
+                </div>
+              ) : (
+                <>
+                  <em className={`directory-status directory-status--${row.status}`}>
+                    {row.status === "active" ? "Aktif" : row.status}
+                  </em>
+                  <MasterRecordDialog
+                    id={row.id}
+                    kind={rawKind}
+                    title={row.title}
+                    status={row.status}
+                    updateAction={updateMasterRecord}
+                    deleteAction={deleteMasterRecord}
+                  />
+                </>
+              )}
             </article>
           ))
         ) : (
           <div className="directory-empty">
             <p className="empty-copy">
-              {filters.query || filters.status
+              {filters.query || filters.status || filters.format || filters.materialId
                 ? `Tidak ada ${label.singular} yang cocok dengan pencarian atau filter ini.`
                 : `Belum ada ${label.singular} yang tersimpan.`}
             </p>
-            {filters.query || filters.status ? (
+            {filters.query || filters.status || filters.format || filters.materialId ? (
               <Link href={linkFor(rawKind, { order: filters.order })}>Hapus pencarian dan filter</Link>
             ) : rawKind === "designs" ? (
-              <a href="#design-upload">Mulai unggah file 3D</a>
+              <span>Gunakan tombol “Unggah file 3D” di bagian atas.</span>
             ) : null}
           </div>
         )}
@@ -240,6 +285,8 @@ export default async function MasterDirectoryPage({
             href={linkFor(rawKind, {
               q: filters.query,
               status: filters.status,
+              format: filters.format,
+              material: filters.materialId,
               order: filters.order,
               cursor: result.previousCursor ?? undefined,
               direction: "previous",
@@ -256,6 +303,8 @@ export default async function MasterDirectoryPage({
             href={linkFor(rawKind, {
               q: filters.query,
               status: filters.status,
+              format: filters.format,
+              material: filters.materialId,
               order: filters.order,
               cursor: result.nextCursor ?? undefined,
               direction: "next",

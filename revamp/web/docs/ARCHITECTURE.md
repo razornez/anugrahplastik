@@ -34,6 +34,8 @@
 
 ## Keamanan
 
+- Upload lampiran Email CS memvalidasi `Origin` sebelum membaca berkas. Konfigurasi privat opsional `APP_ORIGIN` menetapkan origin publik persis (contoh `https://admin.anugrahplastik.com`), bukan URL dengan path, query, fragment, atau kredensial. Tetapkan sesuai alamat browser pada produksi di belakang reverse proxy; nilai tidak valid menolak upload. Header forwarded tidak menjadi sumber izin. Tanpa konfigurasi, produksi membandingkan origin URL server secara ketat. Hanya development menangani normalisasi loopback Next.js dengan tetap mencocokkan `Host` asli, protokol, dan port. Jangan mengaktifkan pengecualian ini di produksi atau memakai wildcard origin.
+
 - Database hanya berada pada network internal container.
 - Password saat ini memakai bcrypt dengan cost factor 12; migrasi ke Argon2id dilakukan bersama proses rehash akun agar tidak menurunkan kompatibilitas sesi yang sudah ada.
 - Semua secret hanya di environment server.
@@ -41,6 +43,8 @@
 - Tracking berjalan anonim secara default dan dapat dinonaktifkan dari footer atau halaman privasi. Nama, nomor WhatsApp, isi formulir, dan IP tidak masuk ke analitik. Ringkasan insight WhatsApp saat ini dibuka manual oleh admin melalui tautan pesan yang sudah terisi; tidak ada pengiriman otomatis sebelum integrasi resmi tersedia.
 
 ## Menjalankan lapisan data
+
+Pemilih transaksi pada Email CS mencari nama pelanggan, pekerjaan, nomor transaksi, atau nomor penawaran; hanya admin/sales yang dapat mencari dan mengaitkan email masuk. Hasil dibatasi 10 transaksi terbaru, tanpa mengambil seluruh rincian keuangan. Data uji hanya tersedia sebagai pilihan terpisah di development. Foto berasal dari lampiran penawaran transaksi tersebut, diperkecil menjadi WebP melalui endpoint privat yang memeriksa kepemilikan dokumen, ukuran, format, dan checksum. Konfirmasi menggunakan ID transaksi yang divalidasi ulang di server; penguncian baris email dan audit berada dalam satu transaksi database agar tautan yang sudah tersimpan tidak tertimpa.
 
 1. Salin `.env.example` menjadi `.env.local`, lalu isi `DATABASE_URL` dengan koneksi PostgreSQL yang aktif.
 2. Jalankan `pnpm db:generate` untuk membuat migrasi dari skema.

@@ -1,0 +1,1 @@
+ALTER TABLE "invoice_issuer_settings" ADD COLUMN "logo_path" varchar(255) DEFAULT '' NOT NULL;

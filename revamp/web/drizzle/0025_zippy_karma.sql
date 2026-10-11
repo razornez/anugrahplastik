@@ -1,0 +1,1 @@
+ALTER TABLE "cs_email_outbox" ADD COLUMN "html_ciphertext" text;

@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <title>STB {{nomor_stb}}</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 17mm 15mm 19mm;
+        @top-center {
+          content: "CV. ANUGRAHPLASTIK MANDIRI BANDUNG  |  {{nomor_stb}}";
+          color: #52647a;
+          font:
+            8px Arial,
+            Helvetica,
+            sans-serif;
+        }
+        @bottom-right {
+          content: "Halaman " counter(page);
+          color: #52647a;
+          font:
+            8px Arial,
+            Helvetica,
+            sans-serif;
+        }
+      }
+      @page :first {
+        @top-center {
+          content: none;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        color: #172438;
+        font:
+          10px/1.45 Arial,
+          Helvetica,
+          sans-serif;
+      }
+      .draft {
+        border: 1px solid #c78037;
+        color: #92400e;
+        background: #fff7ed;
+        padding: 6px;
+        text-align: center;
+        font-weight: 700;
+        margin-bottom: 14px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        border-bottom: 2px solid #0b5fbe;
+        padding-bottom: 10px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+      .brand img {
+        width: 54px;
+        height: 54px;
+        object-fit: contain;
+      }
+      .brand strong {
+        display: block;
+        font-size: 15px;
+        line-height: 1.15;
+      }
+      .brand small {
+        color: #53667b;
+        font-size: 8px;
+      }
+      .title {
+        text-align: right;
+        white-space: nowrap;
+      }
+      .title h1 {
+        color: #0756a7;
+        font-size: 15px;
+        margin: 0;
+      }
+      .title p {
+        margin: 2px 0;
+        font-size: 9px;
+      }
+      .contact {
+        border-bottom: 1px solid #d7e0ea;
+        padding: 8px 0;
+        color: #53667b;
+        font-size: 8px;
+      }
+      .contact p {
+        margin: 0 0 3px;
+        white-space: pre-line;
+      }
+      .contact span {
+        margin-right: 12px;
+      }
+      .meta {
+        display: grid;
+        grid-template-columns: 1.5fr 1fr;
+        gap: 10px 24px;
+        margin: 20px 0;
+      }
+      .meta small {
+        display: block;
+        color: #5a7086;
+        font-size: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+      }
+      .meta strong {
+        display: block;
+        margin-top: 3px;
+        font-size: 10px;
+        white-space: pre-line;
+      }
+      p {
+        margin: 10px 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+      thead {
+        display: table-header-group;
+      }
+      tr {
+        break-inside: avoid;
+      }
+      th,
+      td {
+        border: 1px solid #b8c8da;
+        padding: 5px 4px;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      th {
+        background: #0b5fbe;
+        color: #fff;
+        font-size: 7.5px;
+        text-align: center;
+      }
+      td {
+        font-size: 8px;
+      }
+      th:nth-child(1),
+      td:nth-child(1) {
+        width: 5%;
+        text-align: center;
+      }
+      th:nth-child(2),
+      td:nth-child(2) {
+        width: 23%;
+      }
+      th:nth-child(3),
+      td:nth-child(3) {
+        width: 7%;
+        text-align: right;
+      }
+      th:nth-child(4),
+      td:nth-child(4) {
+        width: 12%;
+        text-align: right;
+      }
+      th:nth-child(5),
+      td:nth-child(5),
+      th:nth-child(6),
+      td:nth-child(6) {
+        width: 12%;
+        text-align: right;
+      }
+      th:nth-child(7),
+      td:nth-child(7) {
+        width: 10%;
+        text-align: right;
+      }
+      th:nth-child(8),
+      td:nth-child(8) {
+        width: 19%;
+      }
+      .note {
+        margin-top: 12px;
+        white-space: pre-line;
+      }
+      .vehicle {
+        display: flex;
+        gap: 24px;
+        margin-top: 8px;
+      }
+      .vehicle span {
+        flex: 1;
+      }
+      .signatures {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+        margin-top: 26px;
+        break-inside: avoid;
+      }
+      .signature {
+        text-align: center;
+      }
+      .signature strong {
+        display: block;
+      }
+      .signature .space {
+        height: 72px;
+      }
+      .signature .name {
+        border-top: 1px solid #71849a;
+        min-height: 20px;
+        padding-top: 4px;
+      }
+      footer {
+        margin-top: 18px;
+        padding-top: 5px;
+        border-top: 1px solid #d5e0ec;
+        color: #71849a;
+        font-size: 7px;
+      }
+      body {
+        color: #18212d;
+        font:
+          10px/1.46 Arial,
+          Helvetica,
+          sans-serif;
+      }
+      header {
+        justify-content: center;
+        border-bottom: 2px solid #17212b;
+        padding-bottom: 7px;
+      }
+      .brand {
+        justify-content: center;
+        gap: 8px;
+      }
+      .brand img {
+        width: 48px;
+        height: 48px;
+      }
+      .brand strong {
+        max-width: 300px;
+        color: #101010;
+        font-size: 19px;
+        font-weight: 800;
+        line-height: 0.98;
+        text-transform: uppercase;
+      }
+      .brand small {
+        display: block;
+        margin-top: 3px;
+        color: #bb1921;
+        font-size: 6.5px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .contact {
+        margin-bottom: 12px;
+        border: 0;
+        padding: 5px 0 0;
+        color: #202b37;
+        font-size: 7.5px;
+        text-align: center;
+      }
+      .contact p {
+        margin: 0 0 2px;
+      }
+      .contact span + span::before {
+        content: "  •  ";
+        color: #c8202b;
+      }
+      .title {
+        text-align: center;
+      }
+      .title h1 {
+        color: #17212b;
+        font-size: 13px;
+        text-decoration: none;
+      }
+      .title p {
+        font-size: 8px;
+      }
+      .meta {
+        margin: 13px 0 18px;
+      }
+      th,
+      td {
+        border-color: #59677a;
+      }
+      th {
+        background: #e8f3fb;
+        color: #12263b;
+      }
+    </style>
+  </head>
+  <body>
+    {{#if isDummy}}
+    <div class="draft">DRAF CONTOH - BUKAN DOKUMEN RESMI</div>
+    {{/if}} {{#if isPreview}}
+    <div class="draft">PRATINJAU DESAIN - BUKAN DOKUMEN UNTUK PELANGGAN</div>
+    {{/if}}
+    <header>
+      <div class="brand">
+        <img src="{{logo}}" alt="" />
+        <div>
+          <strong>{{penerbit}}</strong>
+          <small>Spesialis injeksi plastik, spare part, rubber, logam, dan lain-lain</small>
+        </div>
+      </div>
+    </header>
+    <div class="contact">
+      <p>{{alamat_penerbit}}</p>
+      <span>{{telepon_penerbit}}</span><span>{{email_penerbit}}</span><span>{{situs_penerbit}}</span>
+    </div>
+    <div class="title">
+      <h1>BERITA ACARA SERAH TERIMA BARANG</h1>
+      <p>{{nomor_stb}} · {{versi}}</p>
+    </div>
+    <section class="meta">
+      <div><small>Pelanggan</small><strong>{{nama_pelanggan}}</strong></div>
+      <div><small>Tanggal surat</small><strong>{{tanggal}}</strong></div>
+      <div><small>Penerima / tujuan</small><strong>{{penerima}}</strong></div>
+      <div><small>Surat jalan / kiriman</small><strong>{{nomor_surat_jalan}} / {{nomor_pengiriman}}</strong></div>
+      <div><small>Lokasi penerimaan</small><strong>{{lokasi}}</strong></div>
+      <div><small>Nomor PO / DO</small><strong>{{referensi_po_do}}</strong></div>
+    </section>
+    <p>
+      Berikut rincian barang yang diserahkan untuk diperiksa bersama. Kolom diterima menunjukkan jumlah yang dicatat
+      untuk penerimaan ini.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>No.</th>
+          <th>Barang</th>
+          <th>KRG</th>
+          <th>Pack / plastik</th>
+          <th>Dikirim</th>
+          <th>Diterima</th>
+          <th>Neto (kg)</th>
+          <th>Keterangan</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{{baris_barang}}}
+      </tbody>
+    </table>
+    <p class="note"><strong>Kondisi:</strong> {{kondisi}}<br /><strong>Catatan:</strong> {{catatan}}</p>
+    <div class="vehicle">
+      <span><strong>Supir:</strong> {{nama_supir}}</span><span><strong>Nomor kendaraan:</strong> {{nomor_polisi}}</span>
+    </div>
+    <p>Mohon periksa jumlah, kondisi, dan catatan di atas sebelum pihak-pihak terkait menandatangani dokumen ini.</p>
+    <section class="signatures">
+      <div class="signature">
+        <strong>Yang menyerahkan</strong>
+        <div class="space"></div>
+        <div class="name">{{nama_penyerah}}</div>
+      </div>
+      <div class="signature">
+        <strong>Yang mengirim / supir</strong>
+        <div class="space"></div>
+        <div class="name">{{nama_supir}}</div>
+      </div>
+      <div class="signature">
+        <strong>Yang menerima</strong>
+        <div class="space"></div>
+        <div class="name">{{nama_penerima_ttd}}</div>
+      </div>
+    </section>
+    <footer>
+      Nama tercetak bukan tanda tangan. PDF ini belum membuktikan barang diterima; unggah salinan yang sudah
+      ditandatangani secara terpisah.
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+[Unit]
+Description=Anugrah Plastik private integration sync
+After=network-online.target anugrahplastik-web.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=anugrahplastik
+Group=anugrahplastik
+WorkingDirectory=/srv/anugrahplastik/current/app
+EnvironmentFile=/etc/anugrahplastik/web.env
+Environment=NODE_ENV=production
+ExecStart=/opt/anugrahplastik/node/bin/node scripts/run-integrations-sync.mjs
+TimeoutStartSec=60
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+UMask=0077

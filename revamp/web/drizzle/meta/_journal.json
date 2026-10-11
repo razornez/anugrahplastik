@@ -1,0 +1,286 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1789888532039,
+      "tag": "0000_strange_zuras",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789903597055,
+      "tag": "0001_strong_kinsey_walden",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789920000000,
+      "tag": "0002_content_release_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790070129308,
+      "tag": "0003_behavior_analytics",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790258400000,
+      "tag": "0004_workspace_prospects",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790337600000,
+      "tag": "0005_anonymous_visitor_journeys",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790337600001,
+      "tag": "0006_strong_shooting_star",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790337600002,
+      "tag": "0007_fast_lord_hawal",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790337600003,
+      "tag": "0008_scalable_directories",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790337600004,
+      "tag": "0009_steady_data_quality",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790337600005,
+      "tag": "0010_analytics_duration_quality",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790337600006,
+      "tag": "0011_analytics_conversion_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790337600007,
+      "tag": "0012_marketing_email_integrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790343656376,
+      "tag": "0013_persistent_integration_connections",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790345100000,
+      "tag": "0014_email_body_cache",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790348700000,
+      "tag": "0015_google_ads_conversion_value",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790348700001,
+      "tag": "0016_google_ads_campaign_filter_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790582978230,
+      "tag": "0017_loose_white_tiger",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790666776251,
+      "tag": "0018_peaceful_slipstream",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790666817391,
+      "tag": "0019_red_switch",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790669562038,
+      "tag": "0020_conscious_doctor_strange",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790672822999,
+      "tag": "0021_lazy_iceman",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790675404089,
+      "tag": "0022_nifty_jack_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790686003496,
+      "tag": "0023_remove-contract-flow",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790737249316,
+      "tag": "0024_zippy_miss_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790737740410,
+      "tag": "0025_zippy_karma",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790839150833,
+      "tag": "0026_great_salo",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790854353238,
+      "tag": "0027_quiet_prowler",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790907872956,
+      "tag": "0028_illegal_veda",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790913741214,
+      "tag": "0029_dry_imperial_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1790944706530,
+      "tag": "0030_curious_onslaught",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791076978253,
+      "tag": "0031_perpetual_vivisector",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791078624059,
+      "tag": "0032_hesitant_lockjaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791114704060,
+      "tag": "0033_heavy_ma_gnuci",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791338333108,
+      "tag": "0034_loose_sir_ram",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1791340982951,
+      "tag": "0035_chilly_blink",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791350400000,
+      "tag": "0036_integration_sync_health",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791440400000,
+      "tag": "0037_email_template_shell_config",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791456062474,
+      "tag": "0038_petite_starhawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1791461857615,
+      "tag": "0039_colorful_mariko_yashida",
+      "breakpoints": true
+    }
+  ]
+}

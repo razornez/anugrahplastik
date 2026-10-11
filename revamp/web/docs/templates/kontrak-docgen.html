@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page {
+        size: A4;
+        margin: 18mm;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        color: #122947;
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      .draft-warning {
+        margin-bottom: 18px;
+        border: 2px solid #b45309;
+        border-radius: 8px;
+        background: #fff7ed;
+        padding: 10px 14px;
+        color: #9a3412;
+        font-size: 12px;
+        font-weight: 800;
+        text-align: center;
+      }
+      header {
+        border-bottom: 3px solid #1967d2;
+        padding-bottom: 14px;
+        margin-bottom: 25px;
+        font-size: 18px;
+        font-weight: 800;
+      }
+      h1 {
+        font-size: 23px;
+        margin: 0 0 20px;
+      }
+      .meta {
+        padding: 15px;
+        background: #f7faff;
+        border: 1px solid #dce8f5;
+        border-radius: 9px;
+      }
+      .meta p {
+        margin: 5px 0;
+      }
+      .terms {
+        margin-top: 25px;
+        white-space: pre-wrap;
+      }
+      .sign {
+        display: flex;
+        gap: 35px;
+        margin-top: 55px;
+      }
+      .sign div {
+        flex: 1;
+        height: 90px;
+        border-bottom: 1px solid #829ab4;
+      }
+      footer {
+        margin-top: 20px;
+        color: #62758b;
+        font-size: 9px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="draft-warning">DRAF CONTOH - BUKAN DOKUMEN RESMI</div>
+    <header>ANUGRAH PLASTIK</header>
+    <h1>Kesepakatan pekerjaan</h1>
+    <div class="meta">
+      <p><strong>Nomor:</strong> {{nomor_dokumen}}</p>
+      <p><strong>Tanggal:</strong> {{tanggal}}</p>
+      <p><strong>Pelanggan:</strong> {{nama_pelanggan}}</p>
+      <p><strong>Pekerjaan:</strong> {{pekerjaan}}</p>
+    </div>
+    <div class="terms"><strong>Ketentuan yang disepakati</strong><br />{{ketentuan}}</div>
+    <div class="sign">
+      <div>Anugrah Plastik</div>
+      <div>Pelanggan</div>
+    </div>
+    <footer>
+      Periksa isi dokumen bersama kedua pihak sebelum ditandatangani. Aplikasi tidak melakukan tanda tangan elektronik.
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <title>Surat penawaran {{nomor_penawaran}}</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 17mm 15mm 19mm;
+        @top-center {
+          content: "CV. ANUGRAHPLASTIK MANDIRI BANDUNG  |  {{nomor_penawaran}}";
+          color: #52647a;
+          font:
+            8px Arial,
+            Helvetica,
+            sans-serif;
+        }
+        @bottom-right {
+          content: "Halaman " counter(page);
+          color: #52647a;
+          font:
+            8px Arial,
+            Helvetica,
+            sans-serif;
+        }
+      }
+      @page :first {
+        @top-center {
+          content: none;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        color: #172438;
+        font:
+          10px/1.48 Arial,
+          Helvetica,
+          sans-serif;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        border-bottom: 2px solid #0b5fbe;
+        padding: 0 0 10px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-width: 0;
+      }
+      .brand img {
+        width: 82px;
+        max-height: 44px;
+        object-fit: contain;
+      }
+      .brand strong {
+        display: block;
+        max-width: 215px;
+        color: #0b172a;
+        font-size: 15px;
+        line-height: 1.1;
+        text-transform: uppercase;
+      }
+      .brand small {
+        display: block;
+        margin-top: 3px;
+        color: #53657a;
+        font-size: 7px;
+      }
+      .title {
+        text-align: right;
+      }
+      .title strong {
+        display: block;
+        color: #0b5fbe;
+        font-size: 16px;
+      }
+      .title span {
+        font-size: 8px;
+      }
+      .contact {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 12px;
+        margin: 8px 0 15px;
+        color: #47566b;
+        font-size: 7.5px;
+      }
+      .contact span:first-child {
+        flex-basis: 100%;
+      }
+      .draft {
+        padding: 5px 9px;
+        border: 1px solid #c88236;
+        color: #963c0a;
+        text-align: center;
+        font-weight: bold;
+        margin-bottom: 12px;
+      }
+      .meta {
+        display: grid;
+        grid-template-columns: 76px 1fr;
+        gap: 3px 7px;
+        margin-bottom: 15px;
+      }
+      .meta span:nth-child(odd) {
+        color: #5b6b7b;
+      }
+      .recipient {
+        border-left: 3px solid #0b5fbe;
+        padding: 7px 10px;
+        margin-bottom: 15px;
+        background: #f3f8fe;
+      }
+      .recipient strong {
+        display: block;
+        font-size: 11px;
+      }
+      .recipient span {
+        display: block;
+      }
+      .intro {
+        margin: 0 0 13px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 8px;
+      }
+      thead {
+        display: table-header-group;
+      }
+      tr {
+        break-inside: avoid;
+      }
+      th,
+      td {
+        border: 1px solid #c5d3e3;
+        padding: 5px 4px;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      th {
+        background: #0b5fbe;
+        color: #fff;
+        text-align: left;
+      }
+      tbody tr:nth-child(even) {
+        background: #f1f6fc;
+      }
+      th:nth-child(1),
+      td:nth-child(1) {
+        width: 5%;
+        text-align: center;
+      }
+      th:nth-child(2),
+      td:nth-child(2) {
+        width: 23%;
+      }
+      th:nth-child(3),
+      td:nth-child(3) {
+        width: 10%;
+      }
+      th:nth-child(4),
+      td:nth-child(4) {
+        width: 12%;
+      }
+      th:nth-child(5),
+      td:nth-child(5) {
+        width: 11%;
+        text-align: right;
+      }
+      th:nth-child(6),
+      td:nth-child(6) {
+        width: 12%;
+        text-align: right;
+      }
+      th:nth-child(7),
+      td:nth-child(7) {
+        width: 14%;
+        text-align: right;
+      }
+      th:nth-child(8),
+      td:nth-child(8) {
+        width: 13%;
+        text-align: right;
+      }
+      .totals {
+        width: 58%;
+        margin: 10px 0 0 auto;
+        border-collapse: collapse;
+      }
+      .totals td {
+        border: 0;
+        border-bottom: 1px solid #d5e0ec;
+        padding: 4px 0;
+        font-size: 8.5px;
+      }
+      .totals td:first-child {
+        width: 68%;
+      }
+      .totals td:last-child {
+        text-align: right;
+        font-weight: bold;
+        white-space: nowrap;
+      }
+      .totals tr:last-child td {
+        color: #0756a7;
+        font-size: 11px;
+        border-top: 2px solid #0b5fbe;
+      }
+      .section {
+        margin-top: 15px;
+        break-inside: avoid;
+      }
+      .section h2 {
+        margin: 0 0 4px;
+        color: #0a4d94;
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .terms {
+        display: grid;
+        grid-template-columns: 90px 1fr;
+        gap: 4px 8px;
+      }
+      .terms span:nth-child(odd) {
+        color: #52647a;
+      }
+      .closing {
+        margin-top: 17px;
+      }
+      .signature {
+        margin-top: 20px;
+        min-height: 63px;
+        break-inside: avoid;
+      }
+      .signature strong {
+        display: block;
+        margin-top: 29px;
+        text-decoration: underline;
+      }
+      footer {
+        margin-top: 15px;
+        padding-top: 7px;
+        border-top: 1px solid #d5e0ec;
+        color: #65758a;
+        font-size: 7px;
+      }
+      /* Shared print identity: match the supplied letterhead without rasterizing it. */
+      body {
+        color: #18212d;
+        font:
+          10px/1.46 Arial,
+          Helvetica,
+          sans-serif;
+      }
+      header {
+        justify-content: center;
+        border-bottom: 2px solid #17212b;
+        padding-bottom: 7px;
+      }
+      .brand {
+        justify-content: center;
+        gap: 8px;
+      }
+      .brand img {
+        width: 48px;
+        height: 48px;
+        max-height: none;
+      }
+      .brand strong {
+        max-width: 300px;
+        color: #101010;
+        font-size: 19px;
+        line-height: 0.98;
+        font-weight: 800;
+      }
+      .brand small {
+        color: #bb1921;
+        font-size: 6.5px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .contact {
+        display: block;
+        margin: 5px 0 17px;
+        color: #202b37;
+        font-size: 7.5px;
+        text-align: center;
+      }
+      .contact span:first-child {
+        display: block;
+        margin-bottom: 2px;
+      }
+      .contact span:not(:first-child) + span:not(:first-child)::before {
+        content: "  •  ";
+        color: #c8202b;
+      }
+      .letter-title {
+        margin: 0 0 13px;
+        color: #0b5fbe;
+        font-size: 12px;
+        font-weight: 800;
+        text-align: center;
+        letter-spacing: 0.08em;
+      }
+      .recipient {
+        border-left: 0;
+        border-radius: 0;
+        padding: 0;
+        background: none;
+      }
+      th,
+      td {
+        border-color: #59677a;
+      }
+      th {
+        background: #e8f3fb;
+        color: #12263b;
+      }
+      .totals td {
+        border-color: #59677a;
+      }
+      .draft {
+        color: #8b340b;
+        background: #fff7ed;
+      }
+    </style>
+  </head>
+  <body>
+    {{#if isDummy}}
+    <div class="draft">DRAF CONTOH - BUKAN DOKUMEN RESMI</div>
+    {{/if}} {{#if isPreview}}
+    <div class="draft">PRATINJAU DESAIN - BUKAN DOKUMEN UNTUK PELANGGAN</div>
+    {{/if}}
+    <header>
+      <div class="brand">
+        <img src="{{logo}}" alt="Logo Anugrah Plastik" />
+        <div>
+          <strong>{{penerbit}}</strong>
+          <small>Spesialis injeksi plastik, spare part, rubber, logam, dan lain-lain</small>
+        </div>
+      </div>
+    </header>
+    <div class="contact">
+      <span>{{{alamat_penerbit}}}</span><span>{{telepon_penerbit}}</span><span>{{email_penerbit}}</span
+      ><span>{{situs_penerbit}}</span>
+    </div>
+    <div class="letter-title">SURAT PENAWARAN</div>
+    <div class="meta">
+      <span>Tanggal</span><strong>{{tanggal}}</strong><span>Nomor</span><strong>{{nomor_penawaran}}</strong
+      ><span>Perihal</span><strong>{{perihal}}</strong><span>Lampiran</span><strong>{{{lampiran}}}</strong>
+    </div>
+    <div class="recipient">
+      <span>Kepada Yth.</span><strong>{{penerima}}</strong><span>{{{alamat_penerima}}}</span
+      ><span>Untuk perhatian: {{pic_penerima}}</span>
+    </div>
+    <p class="intro">
+      Dengan hormat, bersama surat ini kami sampaikan penawaran harga untuk <strong>{{perihal}}</strong>. Rincian barang
+      dan harga tercantum di bawah ini.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>No</th>
+          <th>Nama produk / pekerjaan</th>
+          <th>Moulding</th>
+          <th>Material</th>
+          <th>Jumlah</th>
+          <th>Harga satuan</th>
+          <th>Total price</th>
+          <th>Diskon</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{{baris_barang}}}
+      </tbody>
+    </table>
+    <table class="totals">
+      <tr>
+        <td>Total harga</td>
+        <td>{{total_harga}}</td>
+      </tr>
+      <tr>
+        <td>Diskon</td>
+        <td>-{{diskon}}</td>
+      </tr>
+      <tr>
+        <td>Nilai setelah diskon</td>
+        <td>{{nilai_setelah_diskon}}</td>
+      </tr>
+      <tr>
+        <td>DPP</td>
+        <td>{{dpp}}</td>
+      </tr>
+      <tr>
+        <td>{{label_pajak}}</td>
+        <td>{{pajak}}</td>
+      </tr>
+      <tr>
+        <td>Grand total</td>
+        <td>{{grand_total}}</td>
+      </tr>
+    </table>
+    <div class="section">
+      <h2>Syarat dan catatan</h2>
+      <div class="terms">
+        <span>Masa berlaku</span><strong>{{masa_berlaku}}</strong><span>Ongkos kirim</span
+        ><span>{{{syarat_ongkir}}}</span><span>Pembayaran</span><span>{{{syarat_bayar}}}</span><span>Pengerjaan</span
+        ><span>{{{waktu_pengerjaan}}}</span><span>Catatan</span><span>{{{catatan}}}</span>
+      </div>
+    </div>
+    <p class="closing">
+      Demikian penawaran ini kami sampaikan. Kami berharap dapat bekerja sama dengan Bapak/Ibu. Terima kasih atas
+      perhatian dan kesempatan yang diberikan.
+    </p>
+    <div class="signature">Hormat kami,<strong>{{penanda_tangan}}</strong><span>{{jabatan}}</span></div>
+    <footer>
+      Nomor transaksi internal: {{nomor_transaksi}} · Lampiran yang disebutkan di atas merupakan bagian dari PDF ini.
+    </footer>
+  </body>
+</html>

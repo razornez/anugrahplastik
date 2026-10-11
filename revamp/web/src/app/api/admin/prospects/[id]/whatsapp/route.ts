@@ -1,0 +1,39 @@
+import { eq } from "drizzle-orm";
+import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth/session";
+import { getDatabase } from "@/lib/database/client";
+import { auditLogs, leads } from "@/lib/database/schema";
+import { businessSource } from "@/features/analytics/business-discovery-model";
+
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getSession();
+  const { id } = await params;
+  const database = getDatabase();
+  if (!user || !database) return NextResponse.redirect(new URL("/admin/login", request.url));
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    return NextResponse.redirect(new URL("/admin/prospects", request.url));
+  }
+  const [lead] = await database.select().from(leads).where(eq(leads.id, id));
+  if (!lead) return NextResponse.redirect(new URL("/admin/prospects", request.url));
+  if (lead.source === businessSource && !["admin", "sales"].includes(user.role))
+    return NextResponse.redirect(new URL("/admin/prospects", request.url));
+  if (lead.dataClass !== "production") return NextResponse.redirect(new URL("/admin/prospects", request.url));
+  const phone = lead.phone;
+  if (!phone) {
+    return NextResponse.redirect(new URL(`/admin/prospects?selected=${lead.id}&error=no-phone`, request.url));
+  }
+  await database.transaction(async (transaction) => {
+    await transaction.insert(auditLogs).values({
+      actorId: user.id,
+      action: "prospect.whatsapp_started",
+      entityType: "lead",
+      entityId: lead.id,
+      metadata: { source: "workspace" },
+    });
+  });
+  const text =
+    lead.source === businessSource
+      ? `Halo, kami dari Anugrah Plastik. Apakah ${lead.name} memiliki kebutuhan komponen plastik yang bisa kami bantu?`
+      : `Halo ${lead.name}, terima kasih sudah menghubungi Anugrah Plastik. Kami ingin memahami kebutuhan Anda: ${lead.message}`;
+  return NextResponse.redirect(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`);
+}

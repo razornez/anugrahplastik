@@ -1,0 +1,54 @@
+name: Package Anugrah Plastik VPS release
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit SHA, branch, or tag to package
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anugrahplastik-vps-release-${{ inputs.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: revamp/web
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: revamp/web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: Package allowlisted Linux release
+        run: bash scripts/release/package-linux.sh "$RUNNER_TEMP/anugrahplastik-release-${GITHUB_SHA}.tar.gz"
+      - name: Write artifact checksum
+        run: sha256sum "$RUNNER_TEMP/anugrahplastik-release-${GITHUB_SHA}.tar.gz" > "$RUNNER_TEMP/anugrahplastik-release-${GITHUB_SHA}.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anugrahplastik-vps-release-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/anugrahplastik-release-${{ github.sha }}.tar.gz
+            ${{ runner.temp }}/anugrahplastik-release-${{ github.sha }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14

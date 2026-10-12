@@ -3,6 +3,7 @@ set -euo pipefail
 
 output_path="${1:?Usage: package-linux.sh /absolute/path/anugrahplastik-release.tar.gz}"
 project_root="$(pwd)"
+next_dist_dir="${NEXT_DIST_DIR:-.next}"
 stage_root="$(mktemp -d)"
 release_root="$stage_root/anugrahplastik-release"
 
@@ -15,12 +16,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-test -f "$project_root/.next/standalone/server.js" || {
-  echo "Missing .next/standalone/server.js. Run the production build first." >&2
+test -f "$project_root/$next_dist_dir/standalone/server.js" || {
+  echo "Missing $next_dist_dir/standalone/server.js. Run the production build first." >&2
   exit 1
 }
-test -d "$project_root/.next/static" || {
-  echo "Missing .next/static. Run the production build first." >&2
+test -d "$project_root/$next_dist_dir/static" || {
+  echo "Missing $next_dist_dir/static. Run the production build first." >&2
   exit 1
 }
 test -d "$project_root/drizzle" || {
@@ -29,8 +30,9 @@ test -d "$project_root/drizzle" || {
 }
 
 mkdir -p "$release_root/app/.next" "$release_root/ops"
-cp -a "$project_root/.next/standalone/." "$release_root/app/"
-cp -a "$project_root/.next/static" "$release_root/app/.next/static"
+cp -a "$project_root/$next_dist_dir/standalone/." "$release_root/app/"
+mkdir -p "$release_root/app/$next_dist_dir"
+cp -a "$project_root/$next_dist_dir/static" "$release_root/app/$next_dist_dir/static"
 cp -a "$project_root/public" "$release_root/app/public"
 cp -a "$project_root/drizzle" "$release_root/app/drizzle"
 # The standalone trace includes database modules needed by the web server, but

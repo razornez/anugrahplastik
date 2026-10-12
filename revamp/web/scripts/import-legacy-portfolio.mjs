@@ -189,9 +189,17 @@ function mergePortfolio(value, legacyItems) {
   if (spacer && typeof spacer === "object")
     existing.set("spacer-underground-conduit", { ...spacer, category: "produk", isHot: true, isPublished: true });
   for (const [id, item] of existing)
-    if (id !== "spacer-underground-conduit") existing.set(id, { ...item, isHot: false });
+    if (id !== "spacer-underground-conduit" && id !== "spacer-underground-conduit-dokumentasi")
+      existing.set(id, { ...item, isHot: false });
+  const documentedSpacer = existing.get("spacer-underground-conduit-dokumentasi");
+  if (documentedSpacer && typeof documentedSpacer === "object")
+    existing.set("spacer-underground-conduit-dokumentasi", { ...documentedSpacer, isHot: true, isPublished: true });
   const items = [...existing.values()].sort((a, b) =>
-    a.id === "spacer-underground-conduit" ? -1 : b.id === "spacer-underground-conduit" ? 1 : 0,
+    a.id === "spacer-underground-conduit" || a.id === "spacer-underground-conduit-dokumentasi"
+      ? -1
+      : b.id === "spacer-underground-conduit" || b.id === "spacer-underground-conduit-dokumentasi"
+        ? 1
+        : 0,
   );
   if (items.length > 60) throw new Error(`Portfolio berisi ${items.length} item, melampaui batas aman 60.`);
   return { ...content, portfolio: { ...portfolio, items } };

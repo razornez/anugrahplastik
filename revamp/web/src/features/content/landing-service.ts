@@ -1,4 +1,3 @@
-import { cacheLife, cacheTag } from "next/cache";
 import { desc, eq } from "drizzle-orm";
 import { getDatabase } from "@/lib/database/client";
 import { contentBlocks, contentRevisions, users } from "@/lib/database/schema";
@@ -17,10 +16,6 @@ function parseLandingContent(value: unknown): LandingContent {
 }
 
 export async function getPublishedLandingContent(): Promise<LandingContent> {
-  "use cache";
-  cacheLife("days");
-  cacheTag("landing.page");
-
   const database = getDatabase();
   if (!database) return defaultLandingContent;
 

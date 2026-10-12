@@ -19,6 +19,9 @@ const featuredProduct = {
   category: "produk",
   caption:
     "Spacer plastik custom untuk menjaga jarak dan posisi underground conduit agar jalur kabel tetap rapi saat instalasi.",
+  imagePath: "/images-webp/products/frame-grid-hitam.webp",
+  altText: "Spacer plastik hitam untuk underground conduit",
+  isPublished: true,
   isHot: true,
 };
 

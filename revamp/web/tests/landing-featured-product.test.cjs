@@ -22,6 +22,7 @@ test("featured portfolio product keeps the original landing card and visible fir
   assert.match(template, /Spacer for Underground Conduit/);
   assert.match(content, /isHot: typeof record\.isHot === "boolean" \? record\.isHot : false/);
   assert.match(script, /Spacer for Underground Conduit/);
+  assert.match(script, /frame-grid-hitam\.webp/);
   assert.match(script, /content\.featured_product_reconciled/);
   assert.match(styles, /\.ap-pcard__hot svg/);
 });

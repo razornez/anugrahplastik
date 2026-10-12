@@ -9,7 +9,8 @@ dotenv.config({ path: ".env.local", quiet: true });
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL lokal belum tersedia.");
-if (!["localhost", "127.0.0.1", "::1"].includes(new URL(databaseUrl).hostname)) {
+const isLocalDatabase = ["localhost", "127.0.0.1", "::1"].includes(new URL(databaseUrl).hostname);
+if (!isLocalDatabase && process.env.ALLOW_PRODUCTION_LANDING_ASSET_RECONCILE !== "yes") {
   throw new Error("Rekonsiliasi aset landing hanya boleh dijalankan pada database lokal.");
 }
 

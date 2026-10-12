@@ -1,22 +1,26 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import dotenv from "dotenv";
 import pg from "pg";
 import sharp from "sharp";
 
-dotenv.config({ path: ".env.local", quiet: true });
+if (!process.env.DATABASE_URL) {
+  const { default: dotenv } = await import("dotenv");
+  dotenv.config({ path: ".env.local", quiet: true });
+}
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL belum tersedia.");
 const host = new URL(databaseUrl).hostname;
-if (!["localhost", "127.0.0.1", "::1"].includes(host))
+if (!["localhost", "127.0.0.1", "::1"].includes(host) && process.env.ALLOW_PRODUCTION_LEGACY_PORTFOLIO_IMPORT !== "yes")
   throw new Error(
     "Impor portfolio hanya boleh dijalankan pada database lokal. Gunakan rilis terverifikasi untuk produksi.",
   );
 
 const root = resolve(import.meta.dirname, "../../..");
-const sourceDirectory = join(root, "img", "portfolio");
+const sourceDirectory = process.env.LEGACY_PORTFOLIO_SOURCE_DIR
+  ? resolve(process.env.LEGACY_PORTFOLIO_SOURCE_DIR)
+  : join(root, "img", "portfolio");
 const storageRoot = process.env.PRIVATE_STORAGE_PATH
   ? isAbsolute(process.env.PRIVATE_STORAGE_PATH)
     ? process.env.PRIVATE_STORAGE_PATH
@@ -220,7 +224,9 @@ try {
       isPublished: true,
       isHot: false,
     };
-    legacyItems.push(item);
+    // The first legacy source was previously repurposed as the primary Spacer
+    // card. Retain its media asset for recovery, but avoid a second public card.
+    if (filename !== "2018-02-27-PHOTO-00000017.jpg") legacyItems.push(item);
     const { rows: existingRows } = await client.query("select id from media_assets where id = $1", [assetId]);
     if (existingRows[0]) continue;
     const image = await optimize(filename);

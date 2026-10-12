@@ -25,3 +25,23 @@ test("featured portfolio product keeps the original landing card and visible fir
   assert.match(script, /content\.featured_product_reconciled/);
   assert.match(styles, /\.ap-pcard__hot svg/);
 });
+
+test("legacy portfolio importer preserves the landing contract and SEO pages are discoverable", async () => {
+  const [importer, sitemap, seoPages, serviceRoute, productRoute] = await Promise.all([
+    read("scripts/import-legacy-portfolio.mjs"),
+    read("src/app/sitemap.ts"),
+    read("src/features/marketing/seo-pages.ts"),
+    read("src/app/[slug]/page.tsx"),
+    read("src/app/produk/[slug]/page.tsx"),
+  ]);
+  assert.match(importer, /files\.length !== 43/);
+  assert.match(importer, /sourceImages: files\.length/);
+  assert.match(importer, /isHot: true/);
+  assert.match(importer, /hanya boleh dijalankan pada database lokal/);
+  assert.match(sitemap, /getLandingPublishedAt/);
+  assert.doesNotMatch(sitemap, /const lastModified = new Date\(\)/);
+  assert.match(seoPages, /spacer-underground-conduit/);
+  assert.match(seoPages, /injection-molding-bandung/);
+  assert.match(serviceRoute, /generateStaticParams/);
+  assert.match(productRoute, /generateStaticParams/);
+});

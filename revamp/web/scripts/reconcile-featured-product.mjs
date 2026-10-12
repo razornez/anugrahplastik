@@ -15,7 +15,8 @@ const key = "landing.page";
 const featuredProduct = {
   id: "spacer-underground-conduit",
   title: "Spacer for Underground Conduit",
-  category: "Produk Custom",
+  // Category is the stable filter ID, not its display label.
+  category: "produk",
   caption:
     "Spacer plastik custom untuk menjaga jarak dan posisi underground conduit agar jalur kabel tetap rapi saat instalasi.",
   isHot: true,
@@ -43,7 +44,9 @@ function reconcileContent(value) {
     if (shouldFeature) matched = true;
     const next = {
       ...current,
-      isHot: typeof current.isHot === "boolean" ? current.isHot : false,
+      // Spacer is intentionally the single featured product. Older drafts
+      // could carry stale flags from an experimental editor build.
+      isHot: false,
       ...(shouldFeature ? featuredProduct : {}),
     };
     if (JSON.stringify(next) !== JSON.stringify(current)) changed = true;

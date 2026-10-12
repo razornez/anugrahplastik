@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { AnalyticsPreferenceControl } from "@/components/analytics-preference-control";
 import Link from "next/link";
 
-export const metadata: Metadata = { title: "Privasi Analitik | Anugrah Plastik" };
+export const metadata: Metadata = {
+  title: "Kebijakan Privasi | Anugrah Plastik",
+  description: "Kebijakan privasi dan pengaturan analitik website Anugrah Plastik.",
+  alternates: { canonical: "/privasi" },
+};
 
 export default function PrivacyPage() {
   return (

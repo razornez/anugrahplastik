@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-export const metadata: Metadata = { title: "Syarat Penggunaan | Anugrah Plastik" };
+export const metadata: Metadata = {
+  title: "Syarat Penggunaan | Anugrah Plastik",
+  description: "Ketentuan penggunaan website dan informasi layanan Anugrah Plastik.",
+  alternates: { canonical: "/syarat-penggunaan" },
+};
 
 export default function TermsPage() {
   return (

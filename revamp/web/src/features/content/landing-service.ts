@@ -32,6 +32,16 @@ export async function getPublishedLandingContent(): Promise<LandingContent> {
   return parseLandingContent(record?.publishedContent ?? record?.legacyContent);
 }
 
+export async function getLandingPublishedAt(): Promise<Date> {
+  const database = getDatabase();
+  if (!database) return new Date("2026-01-01T00:00:00.000Z");
+  const [record] = await database
+    .select({ publishedAt: contentBlocks.publishedAt, updatedAt: contentBlocks.updatedAt })
+    .from(contentBlocks)
+    .where(eq(contentBlocks.key, LANDING_CONTENT_KEY));
+  return record?.publishedAt ?? record?.updatedAt ?? new Date("2026-01-01T00:00:00.000Z");
+}
+
 export async function getDraftLandingContent(): Promise<LandingContent> {
   const database = getDatabase();
   if (!database) return defaultLandingContent;

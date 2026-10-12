@@ -15,6 +15,7 @@
     "db:seed:home": "node scripts/seed-home-demo.mjs",
     "db:seed:masters-3d": "node scripts/seed-master-3d-local.mjs",
     "content:reconcile-featured-product": "node scripts/reconcile-featured-product.mjs",
+    "content:import-legacy-portfolio": "node scripts/import-legacy-portfolio.mjs",
     "finance:e2e": "node scripts/test-finance-e2e.mjs",
     "db:studio": "drizzle-kit studio",
     "analytics:worker": "node scripts/analytics-worker.cjs",

@@ -40,7 +40,7 @@ export const seoPages: SeoPage[] = [
     heading: "Komponen plastik custom untuk kebutuhan produksi.",
     intro:
       "Kami membantu menerjemahkan kebutuhan part menjadi proses produksi yang sesuai. Detail material, bentuk, dan jumlah dibahas setelah evaluasi kebutuhan.",
-    image: "/images-webp/mesin/Anugrah%20Plastik%20%28105%29.webp",
+    image: "/images-webp/mesin/injection-workshop.webp",
     imageAlt: "Mesin produksi plastik di workshop Anugrah Plastik",
     points: [
       "Diskusi fungsi dan bentuk part",

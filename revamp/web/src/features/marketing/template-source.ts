@@ -154,19 +154,38 @@ function withoutClassElement(markup: string, className: string, tagName = "span"
   return element ? `${markup.slice(0, element.start)}${markup.slice(element.end)}` : markup;
 }
 
+/** Replace only the text node inside an existing template element.
+ *
+ * The landing template owns all visual markup. Keeping this operation bounded to
+ * the selected element avoids a card inheriting another card's label when the
+ * template contains nested divs.
+ */
+function replaceClassElementText(markup: string, className: string, value: string, tagName = "div") {
+  const element = elementByClass(markup, className, tagName);
+  if (!element) return markup;
+
+  const openingEnd = element.html.indexOf(">") + 1;
+  const closingStart = element.html.lastIndexOf("</");
+  if (openingEnd <= 0 || closingStart < openingEnd) return markup;
+
+  const replacement = `${element.html.slice(0, openingEnd)}${escapeHtml(value)}${element.html.slice(closingStart)}`;
+  return `${markup.slice(0, element.start)}${replacement}${markup.slice(element.end)}`;
+}
+
 const hotBadge = `<span class="ap-pcard__hot" aria-label="Produk unggulan"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c4 0 7-2.6 7-6.3 0-2.6-1.7-4.7-4.2-6.8.1 1.8-.5 3.1-1.8 4.1.2-4-1.7-7.2-4.6-9.1.3 4.2-3.4 6.5-3.4 10.6C5 18.6 8 22 12 22Z" /><path d="M9.5 19.3c0-1.7 1.1-2.7 2.6-3.8.1 1.1.5 1.8 1.4 2.4.8.6 1.1 1.3 1.1 2.1" /></svg><span>Unggulan</span></span>`;
 
 function renderMaterialCards(markup: string, content: LandingContent) {
   const base = elementByClass(markup, "ap-mat");
   if (!base) return markup;
-  const cards = content.material.items.map((item) =>
-    base.html
+  const cards = content.material.items.map((item) => {
+    let card = base.html
       .replace(/(<img class="ap-mat-image"[^>]*\bsrc=")[^"]*(")/i, `$1${escapeHtml(item.imagePath)}$2`)
-      .replace(/(<img class="ap-mat-image"[^>]*\balt=")[^"]*(")/i, `$1${escapeHtml(item.altText)}$2`)
-      .replace(/(<div class="ap-mat-code"[\s\S]*?>)[\s\S]*?(<\/div>)/i, `$1${escapeHtml(item.code)}$2`)
-      .replace(/(<div class="ap-mat-sub"[\s\S]*?>)[\s\S]*?(<\/div>)/i, `$1${escapeHtml(item.name)}$2`)
-      .replace(/(<p class="ap-mat-desc">)[\s\S]*?(<\/p>)/i, `$1${escapeHtml(item.description)}$2`),
-  );
+      .replace(/(<img class="ap-mat-image"[^>]*\balt=")[^"]*(")/i, `$1${escapeHtml(item.altText)}$2`);
+    card = replaceClassElementText(card, "ap-mat-code", item.code);
+    card = replaceClassElementText(card, "ap-mat-sub", item.name);
+    card = replaceClassElementText(card, "ap-mat-desc", item.description, "p");
+    return card;
+  });
   return replaceContainerChildren(markup, "ap-material-grid", cards.join(""));
 }
 

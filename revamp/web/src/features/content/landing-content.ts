@@ -352,6 +352,27 @@ export const defaultLandingContent: LandingContent = {
         imagePath: "/images-webp/materials/rubber-bakelite.webp",
         altText: "Cincin karet dan komponen bakelit hitam",
       },
+      {
+        code: "ABS",
+        name: "Tahan benturan",
+        description: "Untuk komponen yang perlu dievaluasi sesuai fungsi.",
+        imagePath: "/images-webp/materials/abs.webp",
+        altText: "Butiran ABS dan komponen plastik hitam",
+      },
+      {
+        code: "POM",
+        name: "Acetal",
+        description: "Untuk komponen presisi yang dievaluasi sesuai kebutuhan.",
+        imagePath: "/images-webp/materials/pom.webp",
+        altText: "Butiran POM dan komponen presisi",
+      },
+      {
+        code: "TPU",
+        name: "Elastis",
+        description: "Untuk komponen fleksibel yang dibahas sesuai proyek.",
+        imagePath: "/images-webp/materials/tpu.webp",
+        altText: "Material TPU dan komponen fleksibel",
+      },
     ],
   },
   portfolio: {

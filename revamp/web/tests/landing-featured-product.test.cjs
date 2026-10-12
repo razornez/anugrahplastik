@@ -46,3 +46,21 @@ test("legacy portfolio importer preserves the landing contract and SEO pages are
   assert.match(serviceRoute, /generateStaticParams/);
   assert.match(productRoute, /generateStaticParams/);
 });
+
+test("landing asset reconciliation retains portfolio cards and gives each material its own content", async () => {
+  const [renderer, content, reconciliation, seoPages] = await Promise.all([
+    read("src/features/marketing/template-source.ts"),
+    read("src/features/content/landing-content.ts"),
+    read("scripts/reconcile-landing-assets.mjs"),
+    read("src/features/marketing/seo-pages.ts"),
+  ]);
+  assert.match(renderer, /replaceClassElementText\(card, "ap-mat-code", item\.code\)/);
+  assert.match(renderer, /replaceClassElementText\(card, "ap-mat-sub", item\.name\)/);
+  assert.match(content, /code: "ABS"/);
+  assert.match(content, /code: "POM"/);
+  assert.match(content, /code: "TPU"/);
+  assert.match(reconciliation, /spacer-underground-conduit-dokumentasi/);
+  assert.match(reconciliation, /restoredPortfolio/);
+  assert.match(reconciliation, /hanya boleh dijalankan pada database lokal/);
+  assert.match(seoPages, /injection-workshop\.webp/);
+});

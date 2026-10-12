@@ -197,6 +197,13 @@ button {
 .ap-material-layout h2 {
   color: #fff;
 }
+
+/* The material section has a navy background. Keep the heading legible even
+   when its template styles are loaded after the landing stylesheet. */
+#ap-material .ap-material-layout h2,
+#ap-material .ap-material-layout h2 * {
+  color: #fff;
+}
 .ap-material-layout .ap-kicker {
   color: #68b5ff;
 }

@@ -1,5 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -248,12 +249,13 @@ export function EmailDraftComposer({ initial, currentUserId }: { initial: DraftV
       {value.documentSource ? (
         <p className="integration-alert">
           Dokumen transaksi versi {value.documentSource.version} menjadi lampiran wajib. PDF akan diperiksa lagi sebelum
-          pengiriman. <a href={`/admin/transactions/${value.documentSource.transactionId}`}>Kembali ke transaksi</a>
+          pengiriman.{" "}
+          <Link href={`/admin/transactions/${value.documentSource.transactionId}`}>Kembali ke transaksi</Link>
         </p>
       ) : null}
       {sent ? (
         <p className="integration-success" role="status">
-          {sent}. <a href="/admin/email?folder=sent">Periksa status pengiriman</a>
+          {sent}. <Link href="/admin/email?folder=sent">Periksa status pengiriman</Link>
         </p>
       ) : (
         <fieldset disabled={busy}>

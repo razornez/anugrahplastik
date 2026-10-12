@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import dotenv from "dotenv";
 import pg from "pg";
 import sharp from "sharp";
 
-dotenv.config({ path: ".env.local", quiet: true });
+if (!process.env.DATABASE_URL) {
+  const { default: dotenv } = await import("dotenv");
+  dotenv.config({ path: ".env.local", quiet: true });
+}
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL lokal belum tersedia.");

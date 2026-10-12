@@ -281,6 +281,20 @@
       "when": 1791461857615,
       "tag": "0039_colorful_mariko_yashida",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791763200000,
+      "tag": "0040_remote_desktop_launch_tickets",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791793624389,
+      "tag": "0041_tiny_menace",
+      "breakpoints": true
     }
   ]
 }

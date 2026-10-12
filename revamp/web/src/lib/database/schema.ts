@@ -63,9 +63,18 @@ export const contentRevisions = pgTable("content_revisions", {
 export const mediaAssets = pgTable("media_assets", {
   id: uuid("id").defaultRandom().primaryKey(),
   path: varchar("path", { length: 500 }).notNull().unique(),
+  storagePath: varchar("storage_path", { length: 500 }),
+  previewPath: varchar("preview_path", { length: 500 }),
   altText: varchar("alt_text", { length: 220 }).notNull(),
   caption: text("caption"),
   mimeType: varchar("mime_type", { length: 100 }).notNull(),
+  byteSize: integer("byte_size"),
+  previewByteSize: integer("preview_byte_size"),
+  sha256: varchar("sha256", { length: 64 }),
+  width: integer("width"),
+  height: integer("height"),
+  scope: varchar("scope", { length: 32 }).notNull().default("landing"),
+  uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
   status: varchar("status", { length: 20 }).notNull().default("draft"),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -333,6 +342,28 @@ export const auditLogs = pgTable(
   (table) => [
     index("audit_logs_created_at_idx").on(table.createdAt),
     index("audit_logs_entity_created_at_idx").on(table.entityType, table.entityId, table.createdAt),
+  ],
+);
+
+/**
+ * A short-lived, one-time authorization for downloading an RDP profile.
+ * Only a SHA-256 digest is stored, never the launch token itself.
+ */
+export const remoteDesktopLaunchTickets = pgTable(
+  "remote_desktop_launch_tickets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("remote_desktop_launch_tickets_actor_created_idx").on(table.actorId, table.createdAt),
+    index("remote_desktop_launch_tickets_expires_idx").on(table.expiresAt),
   ],
 );
 

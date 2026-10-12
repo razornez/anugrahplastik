@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { campaignAttributionKeys } from "./attribution";
 
 const phonePattern = /^[+0-9][0-9 -]{7,22}$/;
 
@@ -12,7 +13,11 @@ export const leadFormSchema = z.object({
     .max(2000, "Pesan terlalu panjang."),
   landingPath: z.string().max(500).optional(),
   website: z.string().max(0).optional(),
-  attribution: z.record(z.string(), z.string()).optional(),
+  attribution: z
+    .object(
+      Object.fromEntries(campaignAttributionKeys.map((key) => [key, z.string().trim().min(1).max(512).optional()])),
+    )
+    .optional(),
 });
 
 export type LeadFormValues = z.infer<typeof leadFormSchema>;

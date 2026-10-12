@@ -49,7 +49,7 @@ function renderVisitorChart(days, sessions) {
 
 test("grafik 30 hari menampilkan periode penuh, penanda mingguan, dan tabel 30 tanggal terbuka", () => {
   const html = renderVisitorChart(30);
-  assert.match(html, /2 Sep 2026–1 Okt 2026/);
+  assert.match(html, /2 Sep 2026 sampai 1 Okt 2026/);
   assert.match(html, /30 hari kalender/);
   assert.match(html, /<details[^>]*open=""/);
   assert.equal((html.match(/<tbody>.*?<\/tbody>/) ?? [""])[0].match(/<tr>/g)?.length, 30);
@@ -69,7 +69,7 @@ test("grafik tujuh hari dengan data pada tiap tanggal menampilkan semua nilai ta
 
 test("grafik 7 hari memberi tujuh label tanggal dan tetap membedakan dua seri", () => {
   const html = renderVisitorChart(7);
-  assert.match(html, /25 Sep 2026–1 Okt 2026/);
+  assert.match(html, /25 Sep 2026 sampai 1 Okt 2026/);
   assert.equal((html.match(/<tbody>.*?<\/tbody>/) ?? [""])[0].match(/<tr>/g)?.length, 7);
   assert.equal((html.match(/growth-visitor-chart__dates[^]*?<\/div>/) ?? [""])[0].match(/<span/g)?.length, 7);
   assert.match(html, /growth-visitor-chart__line--new/);

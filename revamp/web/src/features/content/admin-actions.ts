@@ -10,9 +10,10 @@ import { auditLogs, contentBlocks, contentRevisions, users } from "@/lib/databas
 import { clearSession, createSession, getSession, type SessionUser } from "@/lib/auth/session";
 import { clientAddress, takeRateLimit } from "@/lib/security/rate-limit";
 import {
-  defaultLandingContent,
+  hasForbiddenLandingCopySeparator,
   LANDING_CONTENT_KEY,
   landingContentSchema,
+  upgradeLandingContent,
   type LandingContent,
 } from "./landing-content";
 
@@ -109,10 +110,9 @@ export async function saveLandingContent(formData: FormData) {
     },
   );
 
-  if (!parsed.success) {
-    redirect("/admin/content?error=content");
-  }
+  if (!parsed.success) redirect("/admin/content?error=content");
   const content: LandingContent = parsed.data;
+  if (hasForbiddenLandingCopySeparator(content)) redirect("/admin/content?error=copy");
 
   const action = String(formData.get("action") || "draft") === "publish" ? "publish" : "draft";
   const expectedVersion = Number(formData.get("expected-version"));
@@ -173,8 +173,9 @@ export async function restoreLandingRevision(revisionId: string, formData: FormD
     .select()
     .from(contentRevisions)
     .where(and(eq(contentRevisions.id, revisionId), eq(contentRevisions.contentBlockId, block.id)));
-  const parsed = landingContentSchema.safeParse({ ...defaultLandingContent, ...(revision?.content ?? {}) });
+  const parsed = landingContentSchema.safeParse(upgradeLandingContent(revision?.content));
   if (!parsed.success) redirect("/admin/content?error=revision");
+  if (hasForbiddenLandingCopySeparator(parsed.data)) redirect("/admin/content?error=copy");
   const version = block.version + 1;
   await database.transaction(async (transaction) => {
     const [saved] = await transaction

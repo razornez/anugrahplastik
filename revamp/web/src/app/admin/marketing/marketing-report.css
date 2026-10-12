@@ -214,6 +214,69 @@
   min-height: 44px;
 }
 
+.admin-shell .marketing-page .marketing-lead-funnel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr) auto;
+  align-items: center;
+  gap: 24px;
+  margin-top: 18px;
+  border: 1px solid var(--admin-line);
+  border-radius: 20px;
+  background: var(--admin-surface);
+  padding: 22px;
+  box-shadow: var(--admin-shadow);
+}
+
+.admin-shell .marketing-lead-funnel h2 {
+  margin: 5px 0 7px;
+  color: var(--admin-ink);
+  font-size: 22px;
+}
+
+.admin-shell .marketing-lead-funnel p {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.admin-shell .marketing-lead-funnel dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.admin-shell .marketing-lead-funnel dl > div {
+  min-width: 0;
+  border-radius: 12px;
+  background: var(--admin-surface-soft);
+  padding: 12px;
+}
+
+.admin-shell .marketing-lead-funnel dt {
+  color: var(--admin-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.admin-shell .marketing-lead-funnel dd {
+  margin: 6px 0 0;
+  color: var(--admin-ink);
+  font-family: var(--admin-font-display);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-shell .marketing-lead-funnel > a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
 .admin-shell .ads-performance .ads-chart__dates {
   position: relative;
   display: block;
@@ -401,6 +464,14 @@
   .admin-shell .ads-performance__tile {
     padding: 16px;
   }
+
+  .admin-shell .marketing-page .marketing-lead-funnel {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-shell .marketing-lead-funnel > a {
+    justify-self: start;
+  }
 }
 
 @media (min-width: 981px) and (max-width: 1200px) {
@@ -502,5 +573,18 @@
   .admin-shell .marketing-page .ads-performance .ads-performance__tile select {
     font-size: 12px;
     padding-right: 12px;
+  }
+
+  .admin-shell .marketing-page .marketing-lead-funnel {
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .admin-shell .marketing-lead-funnel dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-shell .marketing-lead-funnel > a {
+    width: 100%;
   }
 }

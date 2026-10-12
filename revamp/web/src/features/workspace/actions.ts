@@ -8,6 +8,7 @@ import { getSession } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/database/client";
 import { auditLogs, leadNotes, leads, users } from "@/lib/database/schema";
 import { businessSource } from "@/features/analytics/business-discovery-model";
+import { isProspectStatus } from "./prospect-status";
 
 async function requireWorkspaceUser() {
   const user = await getSession();
@@ -98,6 +99,29 @@ export async function addProspectNote(formData: FormData) {
       entityType: "lead",
       entityId: parsed.data.leadId,
       metadata: { source: "workspace" },
+    });
+  });
+  refreshProspects(parsed.data.leadId);
+}
+
+export async function updateProspectStatus(formData: FormData) {
+  const user = await requireWorkspaceUser();
+  if (!["admin", "sales"].includes(user.role)) return;
+  const parsed = z.object({ leadId: z.string().uuid(), status: z.string().trim() }).safeParse({
+    leadId: formData.get("leadId"),
+    status: formData.get("status"),
+  });
+  if (!parsed.success || !isProspectStatus(parsed.data.status)) return;
+  const database = getDatabase();
+  if (!database || !(await prospectDataClass(parsed.data.leadId))) return;
+  await database.transaction(async (transaction) => {
+    await transaction.update(leads).set({ status: parsed.data.status }).where(eq(leads.id, parsed.data.leadId));
+    await transaction.insert(auditLogs).values({
+      actorId: user.id,
+      action: "prospect.status_changed",
+      entityType: "lead",
+      entityId: parsed.data.leadId,
+      metadata: { status: parsed.data.status, source: "workspace" },
     });
   });
   refreshProspects(parsed.data.leadId);

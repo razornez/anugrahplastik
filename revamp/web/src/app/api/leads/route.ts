@@ -3,6 +3,7 @@ import { getDatabase } from "@/lib/database/client";
 import { leads } from "@/lib/database/schema";
 import { clientAddress, takeRateLimit } from "@/lib/security/rate-limit";
 import { leadFormSchema } from "@/features/leads/schema";
+import { campaignLeadSource } from "@/features/leads/attribution";
 
 export async function POST(request: Request) {
   const address = clientAddress(request.headers);
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
         landingPath: parsed.data.landingPath || null,
         referrer: request.headers.get("referer"),
         attribution: parsed.data.attribution ?? null,
+        source: campaignLeadSource(parsed.data.attribution),
       })
       .returning({ id: leads.id });
     if (!lead) throw new Error("Lead tidak dapat dibuat.");

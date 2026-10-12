@@ -59,6 +59,15 @@ function FinanceIcon() {
   );
 }
 
+function RemoteDesktopIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <rect x="3.5" y="4.5" width="17" height="12" rx="2" />
+      <path d="M8.5 20h7M12 16.5V20" />
+    </svg>
+  );
+}
+
 function MasterIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -133,6 +142,9 @@ export function AdminSidebar({ name, role, onLogout, initialTheme }: AdminSideba
     ...(role === "admin" || role === "sales"
       ? [{ href: "/admin/finance", label: "Keuangan", icon: <FinanceIcon /> }]
       : []),
+    ...(role === "admin"
+      ? [{ href: "/admin/remote-desktop", label: "Remote Desktop", icon: <RemoteDesktopIcon /> }]
+      : []),
     ...(role === "admin" || role === "sales" ? [{ href: "/admin/email", label: "Email CS", icon: <MailIcon /> }] : []),
     { href: "/admin/content", label: "Konten landing", icon: <ContentIcon /> },
     ...(role === "admin" ? [{ href: "/admin/masters", label: "Data master", icon: <MasterIcon /> }] : []),
@@ -170,6 +182,7 @@ export function AdminSidebar({ name, role, onLogout, initialTheme }: AdminSideba
               pathname === item.href ||
               (item.href === "/admin/transactions" && pathname.startsWith("/admin/transactions/")) ||
               (item.href === "/admin/finance" && pathname.startsWith("/admin/finance")) ||
+              (item.href === "/admin/remote-desktop" && pathname.startsWith("/admin/remote-desktop")) ||
               (item.href === "/admin/growth" &&
                 ["/admin/prospects", "/admin/marketing", "/admin/insights"].includes(pathname))
                 ? "page"
@@ -219,6 +232,7 @@ export function AdminSidebar({ name, role, onLogout, initialTheme }: AdminSideba
               pathname === item.href ||
               (item.href === "/admin/transactions" && pathname.startsWith("/admin/transactions/")) ||
               (item.href === "/admin/finance" && pathname.startsWith("/admin/finance")) ||
+              (item.href === "/admin/remote-desktop" && pathname.startsWith("/admin/remote-desktop")) ||
               (item.href === "/admin/growth" &&
                 ["/admin/prospects", "/admin/marketing", "/admin/insights"].includes(pathname))
                 ? "page"

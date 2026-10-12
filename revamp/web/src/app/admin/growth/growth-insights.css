@@ -613,6 +613,105 @@
   background: var(--admin-surface-soft);
   padding: 10px;
 }
+.admin-shell .seo-ranking-list li {
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.admin-shell .seo-ranking-list__identity {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.admin-shell .seo-ranking-list__identity a {
+  min-width: 0;
+  display: grid;
+  color: inherit;
+  text-decoration: none;
+}
+.admin-shell .seo-ranking-list__identity small {
+  overflow-wrap: anywhere;
+  color: var(--admin-muted);
+}
+.admin-shell .seo-ranking-list__identity em {
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px;
+  background: var(--admin-line);
+  color: var(--admin-muted);
+  padding: 3px 7px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 1.25;
+}
+.admin-shell .seo-ranking-list li > b {
+  align-self: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.admin-shell .seo-ranking-list__details {
+  grid-column: 2 / -1;
+}
+.admin-shell .seo-ranking-list__details summary {
+  min-height: 36px;
+  color: var(--admin-blue);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.admin-shell .seo-ranking-list__details ul {
+  display: grid;
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.admin-shell .seo-ranking-list__details li {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;
+  padding: 8px;
+  background: var(--admin-surface);
+  font-size: 12px;
+}
+.admin-shell .seo-ranking-list__details a {
+  color: var(--admin-blue);
+  font-weight: 700;
+}
+.admin-shell .growth-competitors__method-help {
+  margin-top: 10px;
+}
+.admin-shell .growth-competitors__method-help summary {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--admin-line);
+  border-radius: 50%;
+  color: var(--admin-blue);
+  cursor: pointer;
+  font-weight: 800;
+}
+.admin-shell .growth-competitors__method-help p {
+  margin: 8px 0 0;
+  color: var(--admin-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+@media (max-width: 560px) {
+  .admin-shell .seo-ranking-list li {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    padding: 12px;
+  }
+  .admin-shell .seo-ranking-list__details {
+    grid-column: 1 / -1;
+  }
+  .admin-shell .seo-ranking-list__details summary {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+}
 .admin-shell .seo-ranking-list__place {
   color: var(--admin-blue);
   font-family: var(--admin-font-display);

@@ -38,7 +38,7 @@ export function outgoingStatusLabel(status: string) {
     partial: "Ditolak sebagian",
     failed: "Gagal sebelum diterima",
     uncertain: "Status belum pasti",
-    simulated: "Uji lokal — tidak dikirim",
+    simulated: "Uji lokal, tidak dikirim",
     stale: "Pratinjau perlu diperbarui",
   };
   return labels[status] ?? "Status perlu ditinjau";

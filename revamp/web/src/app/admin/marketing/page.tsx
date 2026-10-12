@@ -28,6 +28,8 @@ import {
   isGoogleAdsReportingConfigured,
 } from "@/features/integrations/google-ads-config";
 import { getIntegrationHealth, INTEGRATION_HEALTH_STALE_HOURS } from "@/features/integrations/integration-health";
+import { getPaidGoogleLeadFunnel } from "@/features/workspace/paid-lead-report";
+import { prospectStatusLabel } from "@/features/workspace/prospect-status";
 import { redirect } from "next/navigation";
 import "./marketing-report.css";
 
@@ -73,13 +75,14 @@ export default async function MarketingPage({
   const days = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
   const previousFrom = dateShift(from, -days);
   const previousTo = dateShift(from, -1);
-  const [allCurrent, current, previous, campaignOptions] = await Promise.all([
+  const [allCurrent, current, previous, campaignOptions, paidLeadFunnel] = await Promise.all([
     getGoogleAdsOverview(from, to, undefined, accountTimeZone),
     getGoogleAdsOverview(from, to, selectedCampaigns, accountTimeZone),
     compare
       ? getGoogleAdsOverview(previousFrom, previousTo, selectedCampaigns, accountTimeZone)
       : Promise.resolve(null),
     getGoogleAdsCampaigns(),
+    getPaidGoogleLeadFunnel(from, to),
   ]);
   const currentRows = current?.rows ?? [];
   const hasPreviousData = (previous?.rows.length ?? 0) > 0;
@@ -125,7 +128,7 @@ export default async function MarketingPage({
   const campaignRows = [...campaigns.values()]
     .filter((item) => !selectedCampaigns.length || selectedCampaigns.includes(item.id))
     .sort((a, b) => b.cost - a.cost);
-  const periodLabel = `${dateLabel(from, accountTimeZone)}${from.slice(0, 4) !== to.slice(0, 4) ? ` ${from.slice(0, 4)}` : ""} – ${dateLabel(to, accountTimeZone)} ${to.slice(0, 4)} · ${days} hari kalender (${accountTimeZone})`;
+  const periodLabel = `${dateLabel(from, accountTimeZone)}${from.slice(0, 4) !== to.slice(0, 4) ? ` ${from.slice(0, 4)}` : ""} sampai ${dateLabel(to, accountTimeZone)} ${to.slice(0, 4)} · ${days} hari kalender (${accountTimeZone})`;
   const reportingReady = isGoogleAdsOAuthConfigured() && isGoogleAdsReportingConfigured();
   const reportingIssues = getGoogleAdsReportingConfigurationIssues();
   const adsHealth = getIntegrationHealth({
@@ -302,6 +305,35 @@ export default async function MarketingPage({
         </div>
         <Link className="admin-primary-button" href="/admin/insights">
           Buka laporan pengunjung
+        </Link>
+      </article>
+      <article className="marketing-lead-funnel" aria-labelledby="marketing-lead-funnel-title">
+        <div>
+          <p className="admin-eyebrow">KUALITAS LEAD DARI GOOGLE ADS</p>
+          <h2 id="marketing-lead-funnel-title">Dari formulir ke penawaran</h2>
+          <p>
+            Hanya lead beratribusi Google Ads pada periode ini. Ubah status di Prospek agar angka iklan tidak disamakan
+            dengan penjualan.
+          </p>
+        </div>
+        {paidLeadFunnel ? (
+          <dl>
+            <div>
+              <dt>Formulir</dt>
+              <dd>{number.format(paidLeadFunnel.total)}</dd>
+            </div>
+            {(["qualified", "quoted", "won"] as const).map((status) => (
+              <div key={status}>
+                <dt>{prospectStatusLabel(status)}</dt>
+                <dd>{number.format(paidLeadFunnel.counts[status])}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <p className="marketing-lead-funnel__empty">Database belum terhubung; kualitas lead belum dapat dihitung.</p>
+        )}
+        <Link className="admin-secondary-button" href="/admin/prospects?origin=incoming">
+          Tinjau prospek
         </Link>
       </article>
     </section>

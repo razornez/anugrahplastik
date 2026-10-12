@@ -321,7 +321,7 @@ async function DocumentList({
           ) : null}
           {document.sentMessageId ? <small>Sudah diserahkan ke server email untuk dikirim.</small> : null}
           {(document.payload as { lastEmailState?: string } | null)?.lastEmailState === "simulated" ? (
-            <small>Simulasi selesai — tidak ada email yang dikirim.</small>
+            <small>Simulasi selesai. Tidak ada email yang dikirim.</small>
           ) : null}
           {(document.payload as { lastEmailAttemptId?: string } | null)?.lastEmailAttemptId ? (
             <small>
@@ -1305,7 +1305,7 @@ export default async function TransactionDetailPage({
         }
       />
       {transaction.header.dataClass !== "production" ? (
-        <p className="transaction-flow-notice">Transaksi uji / contoh — bukan pelanggan nyata.</p>
+        <p className="transaction-flow-notice">Transaksi uji atau contoh, bukan pelanggan nyata.</p>
       ) : null}
       {docGenDummyMode() ? (
         <p className="transaction-flow-notice" role="status">

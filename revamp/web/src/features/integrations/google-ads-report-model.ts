@@ -112,7 +112,7 @@ export function toAdsChartPoints(
             new Date(`${group.dates[0]}T12:00:00Z`),
           )
         : interval === "weekly"
-          ? `${adsDateLabel(group.dates[0], timeZone)}–${adsDateLabel(group.dates.at(-1)!, timeZone)}`
+          ? `${adsDateLabel(group.dates[0], timeZone)} sampai ${adsDateLabel(group.dates.at(-1)!, timeZone)}`
           : adsDateLabel(date, timeZone),
     values: sumAdsRows(group.rows),
   }));

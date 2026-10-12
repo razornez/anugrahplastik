@@ -5,7 +5,7 @@ const labels: Record<TransactionTrack, Record<string, string>> = {
   commercial: {
     quotation: "Menyiapkan penawaran",
     po_received: "PO diterima",
-    contract: "Tahap lama — perlu ditinjau",
+    contract: "Tahap lama, perlu ditinjau",
     invoice_issued: "Invoice terbit",
     completed: "Komersial selesai",
     cancelled: "Dibatalkan",

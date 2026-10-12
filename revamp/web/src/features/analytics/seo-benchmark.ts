@@ -43,9 +43,23 @@ export function rankSeoSnapshot(snapshot: SeoAuditSnapshot, category: "jasa" | "
       const positions = snapshot.results
         .filter((result) => keywords.includes(result.keyword as (typeof keywords)[number]))
         .map((result) => result.positions[item.domain] ?? null);
+      const contributions = snapshot.results
+        .filter((result) => keywords.includes(result.keyword as (typeof keywords)[number]))
+        .map((result) => {
+          const position = result.positions[item.domain] ?? null;
+          return {
+            keyword: result.keyword,
+            position,
+            points: position == null ? 0 : 11 - position,
+            link: result.links[item.domain] ?? null,
+            title: result.titles?.[item.domain] ?? null,
+            snippet: result.snippets?.[item.domain] ?? null,
+          };
+        });
       return {
         ...item,
-        points: positions.reduce<number>((sum, position) => sum + (position == null ? 0 : 11 - position), 0),
+        contributions,
+        points: contributions.reduce<number>((sum, item) => sum + item.points, 0),
         visible: positions.filter((position) => position != null).length,
         best: Math.min(...positions.filter((position): position is number => position != null), 11),
         observation: snapshot.pages.find((page) => page.domain === item.domain && page.category === category) ?? null,

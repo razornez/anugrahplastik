@@ -47,7 +47,7 @@ export async function businessDiscoveryAction(
     if (error instanceof z.ZodError) return { message: "Periksa pilihan kandidat, status, dan penanggung jawab." };
     const safeMessages = [
       "Database belum terhubung.",
-      "Pilih wilayah dan isi frasa industri sepanjang 3–120 karakter.",
+      "Pilih wilayah dan isi frasa industri sepanjang 3 hingga 120 karakter.",
       "SERPAPI_API_KEY belum tersedia dalam konfigurasi privat.",
       "Jatah pencarian perusahaan tidak tersedia. Batas empat permintaan dan cadangan audit tetap dilindungi.",
       "Identitas tempat belum stabil. Konfirmasikan identitas dari sumber sebelum menambahkan ke Prospek.",

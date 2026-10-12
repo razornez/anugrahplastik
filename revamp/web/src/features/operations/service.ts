@@ -325,22 +325,22 @@ export async function getDesignUploadOptions() {
       ...productRows.map((item) => ({
         id: item.id,
         type: "product" as const,
-        label: `${item.name} · ${item.code} — Barang`,
+        label: `${item.name} · ${item.code}, Barang`,
       })),
       ...customerRows.map((item) => ({
         id: item.id,
         type: "customer" as const,
-        label: `${item.name} · ${item.code} — Customer`,
+        label: `${item.name} · ${item.code}, Customer`,
       })),
       ...mouldRows.map((item) => ({
         id: item.id,
         type: "mould" as const,
-        label: `${item.name} · ${item.code} — Mould`,
+        label: `${item.name} · ${item.code}, Mould`,
       })),
       ...transactionRows.map((item) => ({
         id: item.id,
         type: "transaction" as const,
-        label: `${item.name} · ${item.code} — Transaksi`,
+        label: `${item.name} · ${item.code}, Transaksi`,
       })),
     ],
     customers: customerRows.map((item) => ({ id: item.id, label: `${item.name} · ${item.code}` })),

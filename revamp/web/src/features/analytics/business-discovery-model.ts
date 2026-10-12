@@ -56,7 +56,7 @@ export function normalizeBusinessQuery(phrase: string, cityId: string) {
   const city = businessCities.find((item) => item.id === cityId);
   const cleaned = phrase.trim().replace(/\s+/g, " ");
   if (!city || cleaned.length < 3 || cleaned.length > 120 || /[\u0000-\u001f\u007f]/.test(cleaned))
-    throw new Error("Pilih wilayah dan isi frasa industri sepanjang 3–120 karakter.");
+    throw new Error("Pilih wilayah dan isi frasa industri sepanjang 3 hingga 120 karakter.");
   return { phrase: cleaned, city, queryKey: `${city.id}:${cleaned.toLocaleLowerCase("id-ID")}` };
 }
 

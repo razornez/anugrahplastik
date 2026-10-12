@@ -23,9 +23,11 @@ export default async function ContentPage({
       : "Perubahan disimpan sebagai rancangan. Halaman utama belum berubah."
     : query.error === "conflict"
       ? "Konten sudah diubah pengguna lain. Muat ulang halaman sebelum menyimpan kembali."
-      : query.error
-        ? "Perubahan belum dapat disimpan. Periksa isian lalu coba lagi."
-        : "Perubahan di sini aman untuk dicoba. Halaman utama hanya berubah saat diterbitkan.";
+      : query.error === "copy"
+        ? "Gunakan kalimat, koma, atau titik. Jangan memakai strip sebagai pemisah teks."
+        : query.error
+          ? "Perubahan belum dapat disimpan. Periksa isian lalu coba lagi."
+          : "Perubahan di sini aman untuk dicoba. Halaman utama hanya berubah saat diterbitkan.";
 
   return (
     <section className="content-workspace" aria-labelledby="content-title">

@@ -79,7 +79,7 @@ export async function saveGrowthSearchAudit(_previous: string | null, formData: 
     for (const [domainIndex, domain] of domains.entries()) {
       const raw = String(formData.get(`position-${index}-${domainIndex}`) ?? "").trim();
       if (raw && (!/^\d+$/.test(raw) || Number(raw) < 1 || Number(raw) > 10))
-        return `Posisi untuk “${keyword}” harus 1–10 atau kosong.`;
+        return `Posisi untuk “${keyword}” harus 1 sampai 10 atau kosong.`;
       positions[domain] = raw ? Number(raw) : null;
     }
     const sourceUrl = `https://www.google.com/search?hl=id&gl=id&q=${encodeURIComponent(keyword)}`;

@@ -130,7 +130,7 @@ export default async function IntegrationsPage({
     : mailboxHealth.label === "Email siap digunakan"
       ? "Tersambung dan sehat"
       : isLocalRuntime && mailboxHealth.label === "Data diperbarui manual"
-        ? "Kredensial tersimpan — perbarui manual"
+        ? "Kredensial tersimpan. Perbarui secara manual."
         : "Kredensial tersimpan, koneksi belum sehat";
   const mailRecovery =
     isLocalRuntime && mailMetadata.mailLastErrorCode === "mail_timeout"
@@ -322,7 +322,7 @@ export default async function IntegrationsPage({
             {!mailServer.configuredExplicitly ? (
               <>
                 <span>Konfigurasi endpoint</span>
-                <strong>Belum diatur — gunakan hostname dari cPanel Set Up Mail Client</strong>
+                <strong>Belum diatur. Gunakan hostname dari cPanel Set Up Mail Client.</strong>
               </>
             ) : null}
             <span>Data terakhir diperbarui</span>

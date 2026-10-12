@@ -341,8 +341,8 @@ export async function getAnalyticsReport(
 
 function formStatusLabel(value: string | null) {
   if (value === "valid") return "Permintaan berhasil tersimpan";
-  if (value === "duplicate") return "Pengiriman berulang — tidak dihitung lagi";
-  if (value === "test") return "Data uji — tidak dihitung";
+  if (value === "duplicate") return "Pengiriman berulang, tidak dihitung lagi";
+  if (value === "test") return "Data uji tidak dihitung";
   if (value === "not_found") return "Permintaan belum ditemukan";
   return "Pengiriman belum terverifikasi";
 }

@@ -28,32 +28,44 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
   return (
     <section className="login-experience">
-      <div className="login-context">
+      <aside className="login-context" aria-hidden="true">
         <Image
           src="/images-webp/mesin/Anugrah Plastik (71).webp"
-          alt="Proses produksi Anugrah Plastik"
+          alt=""
           fill
           priority
           sizes="(max-width: 760px) 100vw, 50vw"
         />
-        <div>
-          <span>ANUGRAH PLASTIK</span>
-          <h1>Ruang kerja untuk setiap permintaan yang berarti.</h1>
-          <p>Kelola prospek, konten, dan pembelajaran pemasaran dalam satu tempat.</p>
+        <div className="login-context__copy">
+          <Image alt="" className="login-context__mark" height={42} src="/brand/anugrah-plastik-mark.png" width={42} />
+          <p className="eyebrow">Area kerja internal</p>
+          <p className="login-context__message">Kelola prospek, konten, dan operasional dalam satu tempat.</p>
         </div>
-      </div>
-      <div className="login-panel">
-        <div className="login-mark">AP</div>
-        <p className="eyebrow">Back office</p>
-        <h2>Selamat datang kembali.</h2>
-        <span>Masuk untuk melanjutkan pekerjaan hari ini.</span>
+      </aside>
+      <main className="login-panel" aria-labelledby="login-title">
+        <header className="login-panel__header">
+          <Image
+            alt="Anugrah Plastik"
+            className="login-mark"
+            height={46}
+            priority
+            src="/brand/anugrah-plastik-mark.png"
+            width={46}
+          />
+          <div>
+            <p className="eyebrow">ANUGRAH PLASTIK</p>
+            <p className="login-panel__brand">Ruang kerja internal</p>
+          </div>
+        </header>
+        <h1 id="login-title">Masuk ke ruang kerja</h1>
+        <p className="login-panel__intro">Gunakan akun yang telah diberikan untuk melanjutkan pekerjaan.</p>
         <AdminLoginForm
           action={login}
           email={localAutofill?.email}
           password={localAutofill?.password}
           message={message}
         />
-      </div>
+      </main>
     </section>
   );
 }

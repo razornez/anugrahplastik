@@ -200,7 +200,7 @@ export function TransactionQuoteEditor({
                 <option value="dpp_11_12">PPN 12% × DPP 11/12</option>
                 <option value="standard">PPN 12% × harga bersih</option>
                 <option disabled value="legacy">
-                  Tarif lama — perlu ditinjau
+                  Tarif lama, perlu ditinjau
                 </option>
               </select>
             </label>

@@ -136,7 +136,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
           <span>Uang masuk tervalidasi</span>
           <strong>{rupiah(data.summary.incoming)}</strong>
           <small>
-            {dateWib(data.range.from)} – {dateWib(data.range.to)}
+            {dateWib(data.range.from)} sampai {dateWib(data.range.to)}
           </small>
         </article>
         <article>

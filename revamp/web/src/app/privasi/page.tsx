@@ -40,6 +40,11 @@ export default function PrivacyPage() {
           dihapus.
         </p>
         <p>
+          Jika iklan Google aktif, tag Google hanya dimuat ketika analitik diizinkan pada perangkat ini. Setelah
+          formulir berhasil tersimpan, kami dapat mencatat click ID iklan dan parameter kampanye bersama lead untuk
+          mengukur efektivitas iklan. Nama, nomor WhatsApp, dan isi pesan tidak dikirim ke tag Google.
+        </p>
+        <p>
           Pemilik akun Google dapat mencabut akses melalui{" "}
           <a href="https://myaccount.google.com/connections">pengaturan koneksi akun Google</a>. Hanya administrator
           Anugrah Plastik yang dapat menghubungkan atau memutus sambungan di back office.

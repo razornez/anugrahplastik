@@ -188,7 +188,7 @@ test("Email CS shows honest sync status from successful and attempted mailbox ru
   const actions = readFileSync(join(__dirname, "../src/features/integrations/actions.ts"), "utf8");
   assert.match(page, /Terakhir berhasil/);
   assert.match(page, /Percobaan terakhir/);
-  assert.match(page, /Mode lokal — manual/);
+  assert.match(page, /Mode lokal, dijalankan manual/);
   assert.match(page, /Pembaruan berikutnya/);
   assert.match(page, /MailboxRefreshControl/);
   assert.match(page, /mailboxHealth\.recovery/);

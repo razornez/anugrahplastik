@@ -328,6 +328,66 @@
   background: color-mix(in srgb, var(--admin-muted) 35%, var(--admin-surface));
 }
 
+.admin-shell .landing-media-picker {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--admin-line, #dbe5f0);
+  border-radius: 12px;
+  background: var(--admin-surface-muted, #f7f9fc);
+}
+
+.admin-shell .landing-media-picker__current {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.admin-shell .landing-media-picker__current > img {
+  width: 96px;
+  height: 72px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.admin-shell .landing-media-picker__assets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 8px;
+  max-height: 208px;
+  overflow: auto;
+}
+
+.admin-shell .landing-media-picker__assets button {
+  min-height: 56px;
+  overflow: hidden;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.admin-shell .landing-media-picker__assets button[aria-pressed="true"] {
+  border-color: #1457c7;
+}
+
+.admin-shell .landing-media-picker__assets img {
+  width: 100%;
+  height: 64px;
+  object-fit: cover;
+}
+
+@media (max-width: 520px) {
+  .admin-shell .landing-media-picker__current {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+  .admin-shell .landing-media-picker__current > img {
+    width: 72px;
+    height: 60px;
+  }
+}
+
 /* The mini landing intentionally stays light: it is an accurate public preview. */
 .admin-shell .landing-mini {
   border-color: color-mix(in srgb, var(--admin-line) 72%, #ffffff);

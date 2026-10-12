@@ -13,7 +13,7 @@ function groupedPoints(points: TrendPoint[]) {
     const week = points.slice(index, index + 7);
     groups.push({
       date: week[0].date,
-      label: `${dateLabel(week[0].date)}–${dateLabel(week.at(-1)!.date)}`,
+      label: `${dateLabel(week[0].date)} sampai ${dateLabel(week.at(-1)!.date)}`,
       sessions: week.reduce((sum, point) => sum + point.sessions, 0),
       forms: week.reduce((sum, point) => sum + point.forms, 0),
     });

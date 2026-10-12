@@ -31,7 +31,7 @@ export function EmailDraftComposer({ initial, currentUserId }: { initial: DraftV
     null,
   );
   const [sent, setSent] = useState(
-    initial.status === "draft" ? "" : "Draf ini sudah diproses — periksa status pengiriman",
+    initial.status === "draft" ? "" : "Draf ini sudah diproses. Periksa status pengiriman.",
   );
   const dirty = useRef(false);
   const saving = useRef(false);
@@ -258,7 +258,7 @@ export function EmailDraftComposer({ initial, currentUserId }: { initial: DraftV
       ) : (
         <fieldset disabled={busy}>
           <label>
-            To — penerima utama
+            To, penerima utama
             <input
               type="text"
               inputMode="email"
@@ -281,11 +281,11 @@ export function EmailDraftComposer({ initial, currentUserId }: { initial: DraftV
           {copies ? (
             <>
               <label>
-                CC — penerima salinan
+                CC, penerima salinan
                 <input inputMode="email" value={value.cc} onChange={(event) => change({ cc: event.target.value })} />
               </label>
               <label>
-                BCC — salinan tersembunyi
+                BCC, salinan tersembunyi
                 <input inputMode="email" value={value.bcc} onChange={(event) => change({ bcc: event.target.value })} />
               </label>
             </>
@@ -413,7 +413,7 @@ export function EmailDraftComposer({ initial, currentUserId }: { initial: DraftV
               : "Pengiriman menggunakan isi dan penerima di atas. Periksa kembali sebelum mengonfirmasi."}
           </p>
           <button disabled={busy} type="button" className="admin-primary-button" onClick={() => void send()}>
-            {preview.simulation ? "Jalankan simulasi — tidak mengirim email" : "Konfirmasi kirim email"}
+            {preview.simulation ? "Jalankan simulasi. Email tidak dikirim." : "Konfirmasi kirim email"}
           </button>
           <button disabled={busy} type="button" onClick={() => setPreview(null)}>
             Kembali mengedit

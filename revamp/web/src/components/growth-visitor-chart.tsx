@@ -45,7 +45,7 @@ export function GrowthVisitorChart({ data }: { data: VisitorCohorts }) {
     <div className="growth-visitor-chart">
       <p className="growth-visitor-chart__range">
         {first && last
-          ? `${fullDate.format(dateAtJakartaMidnight(first))}–${fullDate.format(dateAtJakartaMidnight(last))}`
+          ? `${fullDate.format(dateAtJakartaMidnight(first))} sampai ${fullDate.format(dateAtJakartaMidnight(last))}`
           : ""}
         <span> · {data.days} hari kalender</span>
       </p>

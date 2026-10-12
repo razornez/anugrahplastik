@@ -2,8 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminPageHeader } from "@/components/admin-page-header";
 import { MarketingWorkspaceNav } from "@/components/marketing-workspace-nav";
-import { addProspectNote, assignProspect } from "@/features/workspace/actions";
+import { addProspectNote, assignProspect, updateProspectStatus } from "@/features/workspace/actions";
 import { prospectSourceLabel } from "@/features/workspace/prospect-display";
+import { prospectStatusLabel, prospectStatuses } from "@/features/workspace/prospect-status";
 import { getProspects } from "@/features/workspace/service";
 import { getSession } from "@/lib/auth/session";
 import { businessSource } from "@/features/analytics/business-discovery-model";
@@ -105,7 +106,11 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Pr
               Status
               <select name="status" defaultValue={query.status ?? ""}>
                 <option value="">Semua status</option>
-                <option value="new">Baru</option>
+                {prospectStatuses.map((status) => (
+                  <option key={status} value={status}>
+                    {prospectStatusLabel(status)}
+                  </option>
+                ))}
               </select>
             </label>
             <button type="submit">Cari</button>
@@ -139,6 +144,9 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Pr
                   <span className="prospect-list__message">{prospect.message}</span>
                   <span className="prospect-list__meta">
                     <span>{prospectSourceLabel(prospect.source)}</span>
+                    <span className={`prospect-status prospect-status--${prospect.status}`}>
+                      {prospectStatusLabel(prospect.status)}
+                    </span>
                     <span>
                       {prospect.assignedName ? `Ditangani ${prospect.assignedName}` : "Belum ada penanggung jawab"}
                     </span>
@@ -236,6 +244,23 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Pr
                 <span>{isResearch ? "Ringkasan riset · bukan pesan pelanggan" : "Isi permintaan"}</span>
                 <p>{selected.message}</p>
               </section>
+
+              {["admin", "sales"].includes(user.role) ? (
+                <form className="prospect-status-form" action={updateProspectStatus}>
+                  <input type="hidden" name="leadId" value={selected.id} />
+                  <label>
+                    Status tindak lanjut
+                    <select name="status" defaultValue={selected.status}>
+                      {prospectStatuses.map((status) => (
+                        <option key={status} value={status}>
+                          {prospectStatusLabel(status)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="submit">Simpan status</button>
+                </form>
+              ) : null}
 
               <form className="assignment-form" action={assignProspect}>
                 <input type="hidden" name="leadId" value={selected.id} />

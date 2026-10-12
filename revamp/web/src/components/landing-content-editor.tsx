@@ -13,6 +13,7 @@ type SectionId =
   | "process"
   | "material"
   | "portfolio"
+  | "trust"
   | "evidence"
   | "faq"
   | "contact"
@@ -207,13 +208,35 @@ const sections: SectionDefinition[] = [
     label: "Portfolio",
     eyebrow: "Hasil produksi",
     title: "Judul kumpulan hasil kerja",
-    description: "Judul di atas kumpulan foto hasil produksi yang dapat ditata pada tahap berikutnya.",
+    description: "Kelola kategori, urutan, foto, keterangan, dan label produk unggulan.",
     fields: [
       field(
         "portfolio.title",
         "Judul",
         (c) => c.portfolio.title,
-        (c, v) => ({ ...c, portfolio: { title: v } }),
+        (c, v) => ({ ...c, portfolio: { ...c.portfolio, title: v } }),
+      ),
+    ],
+  },
+  {
+    id: "trust",
+    label: "Klien & mitra",
+    eyebrow: "Kepercayaan",
+    title: "Logo dan bukti kerja sama",
+    description: "Tampilkan logo atau foto klien dan mitra yang memang sudah diizinkan untuk dipublikasikan.",
+    fields: [
+      field(
+        "trust.title",
+        "Judul",
+        (c) => c.trust.title,
+        (c, v) => ({ ...c, trust: { ...c.trust, title: v } }),
+      ),
+      field(
+        "trust.description",
+        "Deskripsi",
+        (c) => c.trust.description,
+        (c, v) => ({ ...c, trust: { ...c.trust, description: v } }),
+        true,
       ),
     ],
   },
@@ -497,8 +520,20 @@ export function LandingContentEditor({
               )}
             </label>
           ))}
-          {activeSectionId === "evidence" ? (
+          {activeSectionId === "evidence" || activeSectionId === "why" || activeSectionId === "process" ? (
             <EvidenceFields content={draft} onChange={setDraft} disabled={!canEdit} />
+          ) : null}
+          {activeSectionId === "about" ||
+          activeSectionId === "material" ||
+          activeSectionId === "portfolio" ||
+          activeSectionId === "trust" ||
+          activeSectionId === "faq" ? (
+            <LandingVisualFields
+              activeSectionId={activeSectionId}
+              content={draft}
+              disabled={!canEdit}
+              onChange={setDraft}
+            />
           ) : null}
         </fieldset>
         <div className="landing-editor__step-actions">
@@ -1151,4 +1186,771 @@ function EvidenceFields({
       </fieldset>
     </div>
   );
+}
+
+type LandingMediaAsset = { id: string; url: string; previewUrl: string; altText: string; byteSize: number };
+
+function moveItem<T>(items: T[], index: number, direction: -1 | 1) {
+  const target = index + direction;
+  if (target < 0 || target >= items.length) return items;
+  const next = [...items];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
+}
+
+function LandingMediaPicker({
+  value,
+  altText,
+  disabled,
+  onChange,
+  onAltTextChange,
+}: {
+  value: string;
+  altText: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+  onAltTextChange: (value: string) => void;
+}) {
+  const [assets, setAssets] = useState<LandingMediaAsset[]>([]);
+  const [used, setUsed] = useState(0);
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    let mounted = true;
+    void fetch("/api/admin/landing-media", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { assets: LandingMediaAsset[]; used: number } | null) => {
+        if (!mounted || !payload) return;
+        setAssets(payload.assets);
+        setUsed(payload.used);
+      })
+      .catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
+  }, []);
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    if (!altText.trim()) {
+      setMessage("Isi alt text sebelum mengunggah gambar.");
+      return;
+    }
+    const formData = new FormData();
+    formData.set("file", file);
+    formData.set("altText", altText);
+    setMessage("Mengoptimalkan gambar...");
+    const response = await fetch("/api/admin/landing-media", { method: "POST", body: formData });
+    const payload = (await response.json()) as { asset?: LandingMediaAsset; error?: string };
+    if (!response.ok || !payload.asset) {
+      setMessage(payload.error ?? "Gambar belum dapat diunggah.");
+      return;
+    }
+    onChange(payload.asset.url);
+    setAssets((current) => [...current, payload.asset!]);
+    setUsed((current) => current + payload.asset!.byteSize);
+    setMessage("Gambar siap digunakan.");
+  };
+  const preview = value.startsWith("/api/media/")
+    ? `${value.replace("/api/media/", "/api/admin/landing-media/")}?size=small`
+    : value;
+  return (
+    <div className="landing-media-picker">
+      <label>
+        Alt text gambar
+        <input disabled={disabled} onChange={(event) => onAltTextChange(event.target.value)} value={altText} />
+      </label>
+      <div className="landing-media-picker__current">
+        {value ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img alt={altText || "Pratinjau gambar"} src={preview} />
+        ) : null}
+        <label>
+          Unggah JPEG, PNG, atau WebP
+          <input
+            accept="image/jpeg,image/png,image/webp"
+            disabled={disabled}
+            onChange={(event) => void upload(event.target.files?.[0])}
+            type="file"
+          />
+        </label>
+      </div>
+      <p>{message || `Pustaka memakai ${(used / 1024 / 1024).toFixed(1)} MB dari 500 MB.`}</p>
+      {assets.length ? (
+        <div className="landing-media-picker__assets" aria-label="Pilih gambar dari pustaka">
+          {assets.map((asset) => (
+            <button
+              aria-pressed={asset.url === value}
+              disabled={disabled}
+              key={asset.id}
+              onClick={() => onChange(asset.url)}
+              type="button"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img alt={asset.altText} src={`/api/admin/landing-media/${asset.id}?size=small`} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function LandingVisualFields({
+  activeSectionId,
+  content,
+  onChange,
+  disabled,
+}: {
+  activeSectionId: SectionId;
+  content: LandingContent;
+  onChange: React.Dispatch<React.SetStateAction<LandingContent>>;
+  disabled: boolean;
+}) {
+  const set = (next: LandingContent) => onChange(next);
+  if (activeSectionId === "faq") {
+    return (
+      <div className="landing-editor__evidence">
+        <fieldset>
+          <legend>Pertanyaan dan jawaban</legend>
+          {content.faq.items.map((item, index) => (
+            <div className="landing-editor__repeat" key={`faq-${index}`}>
+              <input
+                aria-label={`Pertanyaan ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    faq: {
+                      ...content.faq,
+                      items: content.faq.items.map((value, position) =>
+                        position === index ? { ...value, question: event.target.value } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.question}
+              />
+              <textarea
+                aria-label={`Jawaban ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    faq: {
+                      ...content.faq,
+                      items: content.faq.items.map((value, position) =>
+                        position === index ? { ...value, answer: event.target.value } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.answer}
+              />
+              <button
+                disabled={disabled || content.faq.items.length <= 1}
+                onClick={() =>
+                  set({
+                    ...content,
+                    faq: { ...content.faq, items: content.faq.items.filter((_, position) => position !== index) },
+                  })
+                }
+                type="button"
+              >
+                Hapus pertanyaan
+              </button>
+            </div>
+          ))}
+          <button
+            disabled={disabled || content.faq.items.length >= 8}
+            onClick={() =>
+              set({
+                ...content,
+                faq: {
+                  ...content.faq,
+                  items: [...content.faq.items, { question: "Pertanyaan baru", answer: "Jawaban singkat dan jelas." }],
+                },
+              })
+            }
+            type="button"
+          >
+            + Tambah pertanyaan
+          </button>
+        </fieldset>
+      </div>
+    );
+  }
+  if (activeSectionId === "about") {
+    return (
+      <div className="landing-editor__evidence">
+        <fieldset>
+          <legend>Foto dan statistik Tentang Kami</legend>
+          <LandingMediaPicker
+            altText={content.about.image.altText}
+            disabled={disabled}
+            onAltTextChange={(altText) =>
+              set({ ...content, about: { ...content.about, image: { ...content.about.image, altText } } })
+            }
+            onChange={(imagePath) =>
+              set({ ...content, about: { ...content.about, image: { ...content.about.image, imagePath } } })
+            }
+            value={content.about.image.imagePath}
+          />
+          <label>
+            Label di atas foto
+            <input
+              disabled={disabled}
+              onChange={(event) => set({ ...content, about: { ...content.about, imageBadge: event.target.value } })}
+              value={content.about.imageBadge}
+            />
+          </label>
+          {content.about.stats.map((item, index) => (
+            <div className="landing-editor__repeat" key={`stat-${index}`}>
+              <input
+                aria-label={`Angka statistik ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    about: {
+                      ...content.about,
+                      stats: content.about.stats.map((value, position) =>
+                        position === index ? { ...value, value: event.target.value } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.value}
+              />
+              <input
+                aria-label={`Label statistik ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    about: {
+                      ...content.about,
+                      stats: content.about.stats.map((value, position) =>
+                        position === index ? { ...value, label: event.target.value } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.label}
+              />
+            </div>
+          ))}
+        </fieldset>
+      </div>
+    );
+  }
+  if (activeSectionId === "material") {
+    return (
+      <div className="landing-editor__evidence">
+        <fieldset>
+          <legend>Kartu material</legend>
+          {content.material.items.map((item, index) => (
+            <div className="landing-editor__repeat" key={`material-${index}`}>
+              <input
+                aria-label={`Kode material ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    material: {
+                      ...content.material,
+                      items: content.material.items.map((value, position) =>
+                        position === index ? { ...value, code: event.target.value } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.code}
+              />
+              <input
+                aria-label={`Nama material ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    material: {
+                      ...content.material,
+                      items: content.material.items.map((value, position) =>
+                        position === index ? { ...value, name: event.target.value } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.name}
+              />
+              <textarea
+                aria-label={`Deskripsi material ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    material: {
+                      ...content.material,
+                      items: content.material.items.map((value, position) =>
+                        position === index ? { ...value, description: event.target.value } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.description}
+              />
+              <LandingMediaPicker
+                altText={item.altText}
+                disabled={disabled}
+                onAltTextChange={(altText) =>
+                  set({
+                    ...content,
+                    material: {
+                      ...content.material,
+                      items: content.material.items.map((value, position) =>
+                        position === index ? { ...value, altText } : value,
+                      ),
+                    },
+                  })
+                }
+                onChange={(imagePath) =>
+                  set({
+                    ...content,
+                    material: {
+                      ...content.material,
+                      items: content.material.items.map((value, position) =>
+                        position === index ? { ...value, imagePath } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.imagePath}
+              />
+              <button
+                disabled={disabled || index === 0}
+                onClick={() =>
+                  set({
+                    ...content,
+                    portfolio: { ...content.portfolio, items: moveItem(content.portfolio.items, index, -1) },
+                  })
+                }
+                type="button"
+              >
+                Geser ke atas
+              </button>
+              <button
+                disabled={disabled || index === content.portfolio.items.length - 1}
+                onClick={() =>
+                  set({
+                    ...content,
+                    portfolio: { ...content.portfolio, items: moveItem(content.portfolio.items, index, 1) },
+                  })
+                }
+                type="button"
+              >
+                Geser ke bawah
+              </button>
+              <button
+                disabled={disabled || content.material.items.length <= 1}
+                onClick={() =>
+                  set({
+                    ...content,
+                    material: {
+                      ...content.material,
+                      items: content.material.items.filter((_, position) => position !== index),
+                    },
+                  })
+                }
+                type="button"
+              >
+                Hapus material
+              </button>
+            </div>
+          ))}
+          <button
+            disabled={disabled || content.material.items.length >= 12}
+            onClick={() =>
+              set({
+                ...content,
+                material: {
+                  ...content.material,
+                  items: [
+                    ...content.material.items,
+                    { code: "", name: "", description: "", imagePath: "/images-webp/materials/hdpe.webp", altText: "" },
+                  ],
+                },
+              })
+            }
+            type="button"
+          >
+            + Tambah material
+          </button>
+        </fieldset>
+      </div>
+    );
+  }
+  if (activeSectionId === "portfolio") {
+    return (
+      <div className="landing-editor__evidence">
+        <fieldset>
+          <legend>Kategori portfolio</legend>
+          {content.portfolio.filters.map((item, index) => (
+            <div className="landing-editor__repeat" key={`filter-${item.id}`}>
+              <input
+                aria-label={`ID kategori ${index + 1}`}
+                disabled={disabled || item.id === "all"}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    portfolio: {
+                      ...content.portfolio,
+                      filters: content.portfolio.filters.map((value, position) =>
+                        position === index
+                          ? { ...value, id: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") }
+                          : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.id}
+              />
+              <input
+                aria-label={`Label kategori ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    portfolio: {
+                      ...content.portfolio,
+                      filters: content.portfolio.filters.map((value, position) =>
+                        position === index ? { ...value, label: event.target.value } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.label}
+              />
+            </div>
+          ))}
+        </fieldset>
+        <fieldset>
+          <legend>Produk dan hasil produksi</legend>
+          {content.portfolio.items.map((item, index) => (
+            <div className="landing-editor__repeat" key={`portfolio-${item.id}`}>
+              <input
+                aria-label={`ID portfolio ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    portfolio: {
+                      ...content.portfolio,
+                      items: content.portfolio.items.map((value, position) =>
+                        position === index
+                          ? { ...value, id: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") }
+                          : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.id}
+              />
+              <input
+                aria-label={`Judul portfolio ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    portfolio: {
+                      ...content.portfolio,
+                      items: content.portfolio.items.map((value, position) =>
+                        position === index ? { ...value, title: event.target.value } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.title}
+              />
+              <select
+                aria-label={`Kategori portfolio ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    portfolio: {
+                      ...content.portfolio,
+                      items: content.portfolio.items.map((value, position) =>
+                        position === index ? { ...value, category: event.target.value } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.category}
+              >
+                {content.portfolio.filters
+                  .filter((filter) => filter.id !== "all")
+                  .map((filter) => (
+                    <option key={filter.id} value={filter.id}>
+                      {filter.label}
+                    </option>
+                  ))}
+              </select>
+              <textarea
+                aria-label={`Keterangan portfolio ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    portfolio: {
+                      ...content.portfolio,
+                      items: content.portfolio.items.map((value, position) =>
+                        position === index ? { ...value, caption: event.target.value } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.caption}
+              />
+              <label>
+                <input
+                  checked={item.isHot}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    set({
+                      ...content,
+                      portfolio: {
+                        ...content.portfolio,
+                        items: content.portfolio.items.map((value, position) =>
+                          position === index ? { ...value, isHot: event.target.checked } : value,
+                        ),
+                      },
+                    })
+                  }
+                  type="checkbox"
+                />{" "}
+                Produk unggulan
+              </label>
+              <label>
+                <input
+                  checked={item.isPublished}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    set({
+                      ...content,
+                      portfolio: {
+                        ...content.portfolio,
+                        items: content.portfolio.items.map((value, position) =>
+                          position === index ? { ...value, isPublished: event.target.checked } : value,
+                        ),
+                      },
+                    })
+                  }
+                  type="checkbox"
+                />{" "}
+                Tampilkan
+              </label>
+              <LandingMediaPicker
+                altText={item.altText}
+                disabled={disabled}
+                onAltTextChange={(altText) =>
+                  set({
+                    ...content,
+                    portfolio: {
+                      ...content.portfolio,
+                      items: content.portfolio.items.map((value, position) =>
+                        position === index ? { ...value, altText } : value,
+                      ),
+                    },
+                  })
+                }
+                onChange={(imagePath) =>
+                  set({
+                    ...content,
+                    portfolio: {
+                      ...content.portfolio,
+                      items: content.portfolio.items.map((value, position) =>
+                        position === index ? { ...value, imagePath } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.imagePath}
+              />
+              <button
+                disabled={disabled || content.portfolio.items.length <= 1}
+                onClick={() =>
+                  set({
+                    ...content,
+                    portfolio: {
+                      ...content.portfolio,
+                      items: content.portfolio.items.filter((_, position) => position !== index),
+                    },
+                  })
+                }
+                type="button"
+              >
+                Hapus produk
+              </button>
+            </div>
+          ))}
+          <button
+            disabled={disabled || content.portfolio.items.length >= 60}
+            onClick={() =>
+              set({
+                ...content,
+                portfolio: {
+                  ...content.portfolio,
+                  items: [
+                    ...content.portfolio.items,
+                    {
+                      id: `produk-${content.portfolio.items.length + 1}`,
+                      title: "Produk baru",
+                      category: content.portfolio.filters.find((item) => item.id !== "all")?.id ?? "produk",
+                      caption: "Keterangan produk.",
+                      imagePath: "/images-webp/products/frame-grid-hitam.webp",
+                      altText: "Produk plastik",
+                      isPublished: false,
+                      isHot: false,
+                    },
+                  ],
+                },
+              })
+            }
+            type="button"
+          >
+            + Tambah produk
+          </button>
+        </fieldset>
+      </div>
+    );
+  }
+  if (activeSectionId === "trust") {
+    return (
+      <div className="landing-editor__evidence">
+        <fieldset>
+          <legend>Logo klien dan mitra</legend>
+          {content.trust.partners.map((item, index) => (
+            <div className="landing-editor__repeat" key={`partner-${index}`}>
+              <input
+                aria-label={`Nama mitra ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    trust: {
+                      ...content.trust,
+                      partners: content.trust.partners.map((value, position) =>
+                        position === index ? { ...value, name: event.target.value } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.name}
+              />
+              <input
+                aria-label={`Keterangan mitra ${index + 1}`}
+                disabled={disabled}
+                onChange={(event) =>
+                  set({
+                    ...content,
+                    trust: {
+                      ...content.trust,
+                      partners: content.trust.partners.map((value, position) =>
+                        position === index ? { ...value, subtitle: event.target.value } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.subtitle}
+              />
+              <label>
+                <input
+                  checked={item.isFeatured}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    set({
+                      ...content,
+                      trust: {
+                        ...content.trust,
+                        partners: content.trust.partners.map((value, position) =>
+                          position === index ? { ...value, isFeatured: event.target.checked } : value,
+                        ),
+                      },
+                    })
+                  }
+                  type="checkbox"
+                />{" "}
+                Mitra unggulan
+              </label>
+              <LandingMediaPicker
+                altText={item.altText}
+                disabled={disabled}
+                onAltTextChange={(altText) =>
+                  set({
+                    ...content,
+                    trust: {
+                      ...content.trust,
+                      partners: content.trust.partners.map((value, position) =>
+                        position === index ? { ...value, altText } : value,
+                      ),
+                    },
+                  })
+                }
+                onChange={(imagePath) =>
+                  set({
+                    ...content,
+                    trust: {
+                      ...content.trust,
+                      partners: content.trust.partners.map((value, position) =>
+                        position === index ? { ...value, imagePath } : value,
+                      ),
+                    },
+                  })
+                }
+                value={item.imagePath}
+              />
+              <button
+                disabled={disabled}
+                onClick={() =>
+                  set({
+                    ...content,
+                    trust: {
+                      ...content.trust,
+                      partners: content.trust.partners.filter((_, position) => position !== index),
+                    },
+                  })
+                }
+                type="button"
+              >
+                Hapus mitra
+              </button>
+            </div>
+          ))}
+          <button
+            disabled={disabled || content.trust.partners.length >= 24}
+            onClick={() =>
+              set({
+                ...content,
+                trust: {
+                  ...content.trust,
+                  partners: [
+                    ...content.trust.partners,
+                    {
+                      name: "Mitra baru",
+                      subtitle: "",
+                      imagePath: "/images-webp/products/frame-grid-hitam.webp",
+                      altText: "Logo mitra",
+                      isFeatured: false,
+                    },
+                  ],
+                },
+              })
+            }
+            type="button"
+          >
+            + Tambah mitra
+          </button>
+        </fieldset>
+      </div>
+    );
+  }
+  return null;
 }

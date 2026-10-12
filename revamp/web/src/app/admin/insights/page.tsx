@@ -26,7 +26,7 @@ function duration(seconds: number | null) {
 }
 
 function activeDuration(seconds: number | null, quality: string) {
-  if (quality !== "measured") return "Data lama — belum terverifikasi";
+  if (quality !== "measured") return "Data lama, belum terverifikasi";
   return `${duration(seconds)} · waktu aktif, maks. 30 mnt`;
 }
 
@@ -127,7 +127,7 @@ export default async function InsightsPage({
   ].filter(Boolean).length;
   const formatDay = (date: Date) =>
     date.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", year: "numeric" });
-  const periodLabel = `${formatDay(jakartaReportStart(filters.days, now))}–${formatDay(now)} · ${filters.days} hari`;
+  const periodLabel = `${formatDay(jakartaReportStart(filters.days, now))} sampai ${formatDay(now)} · ${filters.days} hari`;
   const summary = geographySummary(report.geography);
   const buckets = geographyBuckets(report.geography, extent).map((bucket) => ({
     ...bucket,
@@ -177,27 +177,27 @@ export default async function InsightsPage({
       <div className="visitor-stat-row">
         <article>
           <span>Kunjungan website</span>
-          <strong>{report.available ? report.totals.sessions.toLocaleString("id-ID") : "—"}</strong>
+          <strong>{report.available ? report.totals.sessions.toLocaleString("id-ID") : "Belum tersedia"}</strong>
           <small>Sesi selama periode ini</small>
         </article>
         <article>
           <span>Percobaan kirim formulir</span>
-          <strong>{report.available ? report.totals.formEvents.toLocaleString("id-ID") : "—"}</strong>
+          <strong>{report.available ? report.totals.formEvents.toLocaleString("id-ID") : "Belum tersedia"}</strong>
           <small>Kunjungan yang mengirim form</small>
         </article>
         <article>
           <span>Permintaan valid tersimpan</span>
-          <strong>{report.available ? report.totals.forms.toLocaleString("id-ID") : "—"}</strong>
+          <strong>{report.available ? report.totals.forms.toLocaleString("id-ID") : "Belum tersedia"}</strong>
           <small>Sudah cocok dengan data tersimpan</small>
         </article>
         <article>
           <span>Klik tombol bertanya</span>
-          <strong>{report.available ? report.totals.ctaClicks.toLocaleString("id-ID") : "—"}</strong>
+          <strong>{report.available ? report.totals.ctaClicks.toLocaleString("id-ID") : "Belum tersedia"}</strong>
           <small>Kunjungan yang menekan tombol</small>
         </article>
         <article>
           <span>Klik WhatsApp</span>
-          <strong>{report.available ? report.totals.whatsappClicks.toLocaleString("id-ID") : "—"}</strong>
+          <strong>{report.available ? report.totals.whatsappClicks.toLocaleString("id-ID") : "Belum tersedia"}</strong>
           <small>Kunjungan yang membuka WhatsApp</small>
         </article>
       </div>
@@ -307,7 +307,10 @@ export default async function InsightsPage({
           <div className="section-heading">
             <div>
               <p className="eyebrow">Perjalanan kunjungan</p>
-              <h2>{report.available ? report.totals.sessions.toLocaleString("id-ID") : "—"} kunjungan sesuai filter</h2>
+              <h2>
+                {report.available ? report.totals.sessions.toLocaleString("id-ID") : "Belum tersedia"} kunjungan sesuai
+                filter
+              </h2>
               <p>{report.journeys.length} ditampilkan pada halaman ini.</p>
             </div>
           </div>

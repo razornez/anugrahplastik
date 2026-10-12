@@ -38,8 +38,8 @@ export function CompetitorAuditForm({ competitors }: { competitors: Competitor[]
       <h2>Catat pemeriksaan minggu ini</h2>
       <input type="hidden" name="domains" value={domains.map((item) => item.domain).join(",")} />
       <p>
-        Cari setiap frasa di Google dari desktop dengan lokasi Bandung dan bahasa Indonesia. Isi posisi 1–10; kosongkan
-        bila situs tidak muncul pada sepuluh hasil organik pertama. Iklan tidak dihitung.
+        Cari setiap frasa di Google dari desktop dengan lokasi Bandung dan bahasa Indonesia. Isi posisi 1 sampai 10;
+        kosongkan bila situs tidak muncul pada sepuluh hasil organik pertama. Iklan tidak dihitung.
       </p>
       <p>
         Hasil pencarian dapat berbeda menurut waktu dan lokasi. Unggah tangkapan layar pemeriksaan untuk arsip internal.

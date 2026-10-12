@@ -99,15 +99,19 @@ export function BusinessDiscoveryPanel({ data, isAdmin }: { data: BusinessBoardD
         <dl className={styles.counts}>
           <div>
             <dt>Ditemukan</dt>
-            <dd>{data.available ? number(data.candidates.length) : "—"}</dd>
+            <dd>{data.available ? number(data.candidates.length) : "Belum tersedia"}</dd>
           </div>
           <div>
             <dt>Belum ditinjau</dt>
-            <dd>{data.available ? number(data.candidates.filter((item) => item.status === "new").length) : "—"}</dd>
+            <dd>
+              {data.available
+                ? number(data.candidates.filter((item) => item.status === "new").length)
+                : "Belum tersedia"}
+            </dd>
           </div>
           <div>
             <dt>Masuk Prospek</dt>
-            <dd>{data.available ? number(data.candidates.filter((item) => item.leadId).length) : "—"}</dd>
+            <dd>{data.available ? number(data.candidates.filter((item) => item.leadId).length) : "Belum tersedia"}</dd>
           </div>
         </dl>
       </div>
@@ -248,7 +252,7 @@ export function BusinessDiscoveryPanel({ data, isAdmin }: { data: BusinessBoardD
                       <circle cx={group.x} cy={group.y} r="49" className={styles.halo} />
                       <circle cx={group.x} cy={group.y} r="35" className={styles.pin} />
                       <text x={group.x} y={group.y + 8} className={styles.pinNumber}>
-                        {checked ? number(total) : "—"}
+                        {checked ? number(total) : "Belum tersedia"}
                       </text>
                       <text x={group.x} y={group.labelY} className={styles.mapLabel}>
                         {group.short}

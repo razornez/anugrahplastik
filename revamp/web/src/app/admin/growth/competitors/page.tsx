@@ -69,18 +69,42 @@ export default async function CompetitorAuditPage() {
                   {category.label} · {category.keywords.length} kata kunci
                 </h3>
                 <p>
-                  Skor = jumlah (11 − posisi) untuk posisi 1–10; di luar 10 besar = 0. Nilai sama diurutkan menurut
-                  jumlah kata kunci yang masuk, lalu posisi terbaik; nilai tetap sama berbagi peringkat.
+                  Skor dihitung dari jumlah (11 dikurangi posisi) untuk posisi 1 sampai 10. Di luar 10 besar bernilai 0.
+                  Nilai sama diurutkan menurut jumlah kata kunci yang masuk, lalu posisi terbaik; nilai tetap sama
+                  berbagi peringkat.
                 </p>
                 <ol className="seo-ranking-list">
                   {rankSeoSnapshot(automaticAudit, category.key).map((site) => (
                     <li key={site.domain}>
-                      <span className="seo-ranking-list__place">{site.rank ? `#${site.rank}` : "—"}</span>
-                      <a href={`https://${site.domain}/`} target="_blank" rel="noopener noreferrer">
-                        <strong>{site.name}</strong>
-                        <small>{site.domain} ↗</small>
-                      </a>
+                      <span className="seo-ranking-list__place">{site.rank ? `#${site.rank}` : ""}</span>
+                      <span className="seo-ranking-list__identity">
+                        <a href={`https://${site.domain}/`} target="_blank" rel="noopener noreferrer">
+                          <strong>{site.name}</strong>
+                          <small>{site.domain} ↗</small>
+                        </a>
+                        {!site.rank ? <em>Tidak ditemukan di 10 besar</em> : null}
+                      </span>
                       <b>{site.points} poin</b>
+                      <details className="seo-ranking-list__details">
+                        <summary>Lihat rincian nilai</summary>
+                        <ul>
+                          {site.contributions.map((item) => (
+                            <li key={item.keyword}>
+                              <strong>{item.keyword}</strong>
+                              <span>
+                                {item.position
+                                  ? `Posisi #${item.position}, ${item.points} poin`
+                                  : "Tidak ditemukan di 10 besar, 0 poin"}
+                              </span>
+                              {item.link ? (
+                                <a href={item.link} target="_blank" rel="noopener noreferrer">
+                                  Bukti hasil Google ↗
+                                </a>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
                     </li>
                   ))}
                 </ol>
@@ -205,7 +229,7 @@ export default async function CompetitorAuditPage() {
             >
               DataForSEO ↗
             </a>{" "}
-            · sekitar US$0,0006–0,002/pencarian · SERP bayar per pencarian.
+            · sekitar US$0,0006 hingga US$0,002 per pencarian · SERP bayar per pencarian.
           </li>
           <li>
             <a href="https://serpapi.com/pricing" target="_blank" rel="noopener noreferrer">

@@ -10,5 +10,5 @@ export default async function LandingPreviewPage() {
   if (!user || (user.role !== "admin" && user.role !== "content")) redirect("/admin/login");
 
   const content = await getDraftLandingContent();
-  return <NativeLandingTemplate content={content} />;
+  return <NativeLandingTemplate content={content} preview />;
 }

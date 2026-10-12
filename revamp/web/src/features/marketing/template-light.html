@@ -11,7 +11,7 @@
         <title>Jasa Cetak Plastik Manual &amp; Injection Bandung | CV. Anugrahplastik Mandiri</title>
         <meta
           name="description"
-          content="CV. Anugrahplastik Mandiri Bandung — jasa cetak plastik manual & injection custom. Bahan HD, PVC, PP, Nilon, PS, Acrylic & sparepart mesin tekstil/diesel. Konsultasi & penawaran via WhatsApp."
+          content="CV. Anugrahplastik Mandiri Bandung melayani cetak plastik manual dan injection custom. Tersedia bahan HD, PVC, PP, Nilon, PS, Acrylic, serta spare part mesin tekstil dan diesel. Konsultasi dan penawaran melalui WhatsApp."
         />
         <meta
           name="keywords"
@@ -392,10 +392,11 @@
           }
         </style>
       </helmet>
-      <div id="ap-root" style="position: relative; overflow: hidden">
+      <div id="ap-root" style="position: relative">
         <!-- TOP UTILITY BAR -->
         <div id="ap-topbar" style="background: #08203b; color: #cdd9e8; font-size: 13px; letter-spacing: 0.2px">
           <div
+            class="ap-topbar__inner"
             style="
               max-width: 1180px;
               margin: 0 auto;
@@ -407,6 +408,7 @@
             "
           >
             <span
+              class="ap-topbar__promise"
               style="
                 display: inline-flex;
                 align-items: center;
@@ -446,6 +448,7 @@
           "
         >
           <div
+            class="ap-header__inner"
             style="
               max-width: 1180px;
               margin: 0 auto;
@@ -456,25 +459,11 @@
               gap: 24px;
             "
           >
-            <a href="#ap-hero" style="display: flex; align-items: center; gap: 12px">
-              <span
-                style="
-                  width: 42px;
-                  height: 42px;
-                  border-radius: 11px;
-                  background: linear-gradient(135deg, #1457c7, #0e4099);
-                  display: grid;
-                  place-items: center;
-                  font-family: &quot;Archivo&quot;, sans-serif;
-                  font-weight: 900;
-                  color: #fff;
-                  font-size: 18px;
-                  box-shadow: 0 8px 18px -8px #1457c7aa;
-                "
-                >AP</span
-              >
-              <span style="display: flex; flex-direction: column; line-height: 1.05">
+            <a class="ap-brand" href="#ap-hero" style="display: flex; align-items: center; gap: 12px">
+              <img class="ap-brand__mark" src="/brand/anugrah-plastik-mark.png" alt="" width="42" height="42" />
+              <span class="ap-brand__copy" style="display: flex; flex-direction: column; line-height: 1.05">
                 <span
+                  class="ap-brand__name"
                   style="
                     font-family: &quot;Archivo&quot;, sans-serif;
                     font-weight: 800;
@@ -485,6 +474,7 @@
                   >ANUGRAH PLASTIK</span
                 >
                 <span
+                  class="ap-brand__tagline"
                   style="
                     font-family: &quot;Space Mono&quot;, monospace;
                     font-size: 10px;
@@ -535,6 +525,8 @@
               <button
                 id="ap-burger"
                 aria-label="Menu"
+                aria-controls="ap-mobile"
+                aria-expanded="false"
                 class="ap-burger"
                 style="
                   display: none;
@@ -559,7 +551,8 @@
           <!-- mobile menu -->
           <div
             id="ap-mobile"
-            style="display: none; border-top: 1px solid #e2e8f1; background: #fff; padding: 14px 24px 22px"
+            hidden
+            style="border-top: 1px solid #e2e8f1; background: #fff; padding: 14px 24px 22px"
           >
             <div style="display: flex; flex-direction: column; gap: 4px; font-weight: 600; color: #0b1b2b">
               <a class="ap-mlink" href="#ap-about" style="padding: 12px 6px; border-bottom: 1px solid #eef2f8"
@@ -633,16 +626,20 @@
                 color: #9fb1c8;
                 font-weight: 700;
               "
-              >EST&nbsp;·&nbsp;2020&nbsp;&mdash;&nbsp;CETAK PLASTIK PRESISI</span
+              >EST&nbsp;·&nbsp;2020&nbsp;·&nbsp;CETAK PLASTIK PRESISI</span
             >
           </div>
-          <div style="max-width: 1180px; margin: 0 auto; padding: 74px 24px 84px; position: relative; z-index: 2">
+          <div
+            class="ap-hero__inner"
+            style="max-width: 1180px; margin: 0 auto; padding: 74px 24px 84px; position: relative; z-index: 2"
+          >
             <div
               class="ap-hero-flex"
               style="display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px; align-items: center"
             >
-              <div>
+              <div class="ap-hero__copy">
                 <span
+                  class="ap-hero__eyebrow"
                   style="
                     display: inline-flex;
                     align-items: center;
@@ -712,35 +709,32 @@
                     ></span></span
                   ><br /><span id="ap-hero-title-after">dan siap produksi.</span>
                 </h1>
-                <p style="font-size: 18px; line-height: 1.65; color: #46566a; max-width: 520px; margin: 24px 0 0">
+                <p
+                  class="ap-hero__description"
+                  style="font-size: 18px; line-height: 1.65; color: #46566a; max-width: 520px; margin: 24px 0 0"
+                >
                   Kirim sampel, foto, atau gambar. Kami bantu memilih proses dan material untuk
                   <strong style="color: #0b1b2b">spare part pengganti maupun produk plastik custom.</strong>
                 </p>
-                <div style="display: flex; flex-wrap: wrap; gap: 14px; margin-top: 32px">
+                <div class="ap-hero-actions" style="display: flex; flex-wrap: wrap; gap: 14px; margin-top: 32px">
                   <a
-                    class="ap-btn-wa"
-                    data-wa
-                    href="https://wa.me/628122339587"
+                    class="ap-btn-primary"
+                    href="#ap-contact"
                     style="
                       display: inline-flex;
                       align-items: center;
                       gap: 10px;
-                      background: #1fa855;
+                      background: #1457c7;
                       color: #fff;
                       font-weight: 700;
                       font-size: 16px;
                       padding: 16px 26px;
                       border-radius: 13px;
-                      box-shadow: 0 16px 30px -14px #1fa855;
+                      box-shadow: 0 16px 30px -14px #1457c7;
                       transition: background 0.2s;
                     "
                   >
-                    <svg width="19" height="19" viewBox="0 0 448 512" fill="currentColor">
-                      <path
-                        d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zM223.9 438.7c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-5.5-2.8-23.4-8.6-44.6-27.6-16.5-14.7-27.6-32.8-30.8-38.4-3.2-5.6-.3-8.6 2.5-11.4 2.5-2.5 5.5-6.5 8.3-9.7 2.8-3.2 3.7-5.6 5.6-9.3 1.9-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 13.3 5.7 23.7 9.1 31.7 11.7 13.3 4.2 25.4 3.6 35 2.2 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"
-                      />
-                    </svg>
-                    Kirim Sampel untuk Evaluasi
+                    Minta penawaran <span aria-hidden="true">→</span>
                   </a>
                   <a
                     class="ap-btn-ghost"
@@ -1009,7 +1003,7 @@
                       margin-top: 1px;
                     "
                   >
-                    1–2 minggu
+                    1 sampai 2 minggu
                   </div>
                 </div>
               </div>
@@ -1212,11 +1206,12 @@
           >
             <div data-reveal style="position: relative">
               <img
-                src="img/new/PRODUK 1 [RESIZE].jpg"
+                src="/images-webp/products/frame-grid-hitam.webp"
                 alt="Rangka grid plastik injection custom warna hitam hasil produksi Anugrah Plastik"
                 style="width: 100%; height: 430px; object-fit: cover; border-radius: 20px; border: 1px solid #e2e8f1"
               />
               <div
+                class="ap-about-badge"
                 style="
                   position: absolute;
                   right: -16px;
@@ -1230,6 +1225,7 @@
                 "
               >
                 <div
+                  id="ap-about-badge-text"
                   style="
                     font-family: &quot;Archivo&quot;, sans-serif;
                     font-weight: 800;
@@ -1266,7 +1262,7 @@
                 >Tentang Kami</span
               >
               <h2
-                class="ap-sech"
+                class="ap-sech ap-about__title"
                 style="
                   font-family: &quot;Archivo&quot;, sans-serif;
                   font-weight: 800;
@@ -1279,17 +1275,17 @@
               >
                 Home industri alat teknik berbahan plastik
               </h2>
-              <p style="font-size: 17px; line-height: 1.75; color: #46566a; margin: 20px 0 0">
+              <p class="ap-about__body" style="font-size: 17px; line-height: 1.75; color: #46566a; margin: 20px 0 0">
                 Kami bergerak di bidang alat-alat teknik: membuat peralatan dari
                 <strong style="color: #0b1b2b">plastik, karet, bakelit, carbon, polyurethane, hingga logam/plat</strong
                 >. Untuk bahan plastik kami melayani HD, PVC, PP, Nilon, PS, AS Acrylic, spon, serta sparepart mesin
                 tekstil dan diesel.
               </p>
-              <p style="font-size: 17px; line-height: 1.75; color: #46566a; margin: 14px 0 0">
+              <p class="ap-about__body" style="font-size: 17px; line-height: 1.75; color: #46566a; margin: 14px 0 0">
                 Komitmen pada bahan yang berkualitas dan tahan lama membuat usaha kami terus berkembang sampai sekarang.
               </p>
-              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 32px">
-                <div style="border-left: 3px solid #1457c7; padding-left: 14px">
+              <div class="ap-about__stats" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 32px">
+                <div class="ap-about__stat" style="border-left: 3px solid #1457c7; padding-left: 14px">
                   <div
                     style="
                       font-family: &quot;Archivo&quot;, sans-serif;
@@ -1303,7 +1299,7 @@
                   </div>
                   <div style="font-size: 13px; color: #5c6b7e; font-weight: 600; margin-top: 3px">terdaftar resmi</div>
                 </div>
-                <div style="border-left: 3px solid #1457c7; padding-left: 14px">
+                <div class="ap-about__stat" style="border-left: 3px solid #1457c7; padding-left: 14px">
                   <div
                     style="
                       font-family: &quot;Archivo&quot;, sans-serif;
@@ -1319,7 +1315,7 @@
                     teknik: manual &amp; injection
                   </div>
                 </div>
-                <div style="border-left: 3px solid #1457c7; padding-left: 14px">
+                <div class="ap-about__stat" style="border-left: 3px solid #1457c7; padding-left: 14px">
                   <div
                     style="
                       font-family: &quot;Archivo&quot;, sans-serif;
@@ -1385,7 +1381,7 @@
                 Alasan pelanggan mempercayakan cetak plastiknya ke kami
               </h2>
             </div>
-            <div data-reveal style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 44px">
+            <div class="ap-why-grid" data-reveal style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 44px">
               <div
                 class="ap-why"
                 style="
@@ -1400,6 +1396,7 @@
                 "
               >
                 <div
+                  class="ap-why-icon"
                   style="
                     width: 54px;
                     height: 54px;
@@ -1427,7 +1424,7 @@
                     <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z" />
                   </svg>
                 </div>
-                <h3
+                <h3 aria-label="Bahan berkualitas dan tahan lama"
                   style="
                     font-family: &quot;Archivo&quot;, sans-serif;
                     font-weight: 700;
@@ -1436,10 +1433,10 @@
                     color: #0b1b2b;
                   "
                 >
-                  Bahan berkualitas &amp; tahan lama
+                  <span class="ap-why-title-full" aria-hidden="true">Bahan berkualitas &amp; tahan lama</span><span class="ap-why-title-short">Bahan<br />berkualitas</span>
                 </h3>
                 <p style="font-size: 15px; line-height: 1.6; color: #5c6b7e; margin: 10px 0 0">
-                  Kami memilih jenis bahan terbaik untuk tiap kebutuhan — HD, LD, PP, Nilon, kaca/acrylic — dengan warna
+                  Kami memilih jenis bahan terbaik untuk tiap kebutuhan. Tersedia HD, LD, PP, Nilon, kaca, dan acrylic, dengan warna
                   yang bisa disesuaikan permintaan.
                 </p>
               </div>
@@ -1457,6 +1454,7 @@
                 "
               >
                 <div
+                  class="ap-why-icon"
                   style="
                     width: 54px;
                     height: 54px;
@@ -1484,7 +1482,7 @@
                     <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />
                   </svg>
                 </div>
-                <h3
+                <h3 aria-label="Custom sesuai sample"
                   style="
                     font-family: &quot;Archivo&quot;, sans-serif;
                     font-weight: 700;
@@ -1493,7 +1491,7 @@
                     color: #0b1b2b;
                   "
                 >
-                  Custom sesuai sample
+                  <span class="ap-why-title-full" aria-hidden="true">Custom sesuai sample</span><span class="ap-why-title-short">Custom<br />sample</span>
                 </h3>
                 <p style="font-size: 15px; line-height: 1.6; color: #5c6b7e; margin: 10px 0 0">
                   Kirimkan gambar atau contoh barang, kami buatkan molding-nya. Bentuk apapun bisa diwujudkan sesuai
@@ -1514,6 +1512,7 @@
                 "
               >
                 <div
+                  class="ap-why-icon"
                   style="
                     width: 54px;
                     height: 54px;
@@ -1541,7 +1540,7 @@
                     <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
                   </svg>
                 </div>
-                <h3
+                <h3 aria-label="Produksi in-house"
                   style="
                     font-family: &quot;Archivo&quot;, sans-serif;
                     font-weight: 700;
@@ -1550,7 +1549,7 @@
                     color: #0b1b2b;
                   "
                 >
-                  Produksi in-house
+                  <span class="ap-why-title-full" aria-hidden="true">Produksi in-house</span><span class="ap-why-title-short">Produksi<br />sendiri</span>
                 </h3>
                 <p style="font-size: 15px; line-height: 1.6; color: #5c6b7e; margin: 10px 0 0">
                   Dari pembuatan molding hingga produksi dan packing, semua dikerjakan di workshop kami dengan peralatan
@@ -1571,6 +1570,7 @@
                 "
               >
                 <div
+                  class="ap-why-icon"
                   style="
                     width: 54px;
                     height: 54px;
@@ -1598,7 +1598,7 @@
                     <path d="M22 4 12 14.01l-3-3" />
                   </svg>
                 </div>
-                <h3
+                <h3 aria-label="Legal dan terdaftar resmi"
                   style="
                     font-family: &quot;Archivo&quot;, sans-serif;
                     font-weight: 700;
@@ -1607,10 +1607,10 @@
                     color: #0b1b2b;
                   "
                 >
-                  Legal &amp; terdaftar resmi
+                  <span class="ap-why-title-full" aria-hidden="true">Legal &amp; terdaftar resmi</span><span class="ap-why-title-short">Legal<br />resmi</span>
                 </h3>
                 <p style="font-size: 15px; line-height: 1.6; color: #5c6b7e; margin: 10px 0 0">
-                  CV. Anugrahplastik Mandiri terdaftar resmi (AHU-0064626-AHA.01.14 / 2020) — transaksi lebih aman dan
+                  CV. Anugrahplastik Mandiri terdaftar resmi (AHU-0064626-AHA.01.14 / 2020). Transaksi lebih aman dan
                   terpercaya.
                 </p>
               </div>
@@ -1628,6 +1628,7 @@
                 "
               >
                 <div
+                  class="ap-why-icon"
                   style="
                     width: 54px;
                     height: 54px;
@@ -1655,7 +1656,7 @@
                     <circle cx="12" cy="12" r="9" />
                   </svg>
                 </div>
-                <h3
+                <h3 aria-label="Jangkauan luas"
                   style="
                     font-family: &quot;Archivo&quot;, sans-serif;
                     font-weight: 700;
@@ -1664,7 +1665,7 @@
                     color: #0b1b2b;
                   "
                 >
-                  Jangkauan luas
+                  <span class="ap-why-title-full" aria-hidden="true">Jangkauan luas</span><span class="ap-why-title-short">Jangkauan<br />luas</span>
                 </h3>
                 <p style="font-size: 15px; line-height: 1.6; color: #5c6b7e; margin: 10px 0 0">
                   Melayani pemesanan dalam kota, luar kota, hingga luar negeri. Quantity / minimal order bisa
@@ -1672,7 +1673,7 @@
                 </p>
               </div>
               <div
-                class="ap-cta"
+                class="ap-cta ap-why-cta"
                 style="
                   position: relative;
                   overflow: hidden;
@@ -1770,7 +1771,7 @@
                 Empat tahap, dari ide ke barang jadi
               </h2>
             </div>
-            <div data-reveal style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-top: 48px">
+            <div class="ap-process-grid" data-reveal style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-top: 48px">
               <div
                 style="
                   position: relative;
@@ -1813,7 +1814,7 @@
                   Planning &amp; Molding
                 </h3>
                 <p style="font-size: 14.5px; line-height: 1.6; color: #5c6b7e; margin: 9px 0 0">
-                  Perancangan, perhitungan, dan budget. Molding dibuat sesuai gambar/sample — sekitar 1–2 minggu
+                  Perancangan, perhitungan, dan budget. Molding dibuat sesuai gambar atau sample, sekitar 1 sampai 2 minggu
                   tergantung kerumitan.
                 </p>
               </div>
@@ -2039,7 +2040,7 @@
                   >Tanya Rekomendasi Bahan →</a
                 >
               </div>
-              <div data-reveal style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px">
+              <div class="ap-material-grid" data-reveal style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px">
                 <div
                   class="ap-mat"
                   style="
@@ -2052,6 +2053,7 @@
                     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
                   "
                 >
+                  <img class="ap-mat-image" src="/images-webp/materials/hdpe.webp" alt="Butiran dan wadah plastik HD" width="418" height="418" loading="lazy" decoding="async" />
                   <div
                     class="ap-mat-code"
                     style="
@@ -2069,6 +2071,7 @@
                   >
                     High Density
                   </div>
+                  <p class="ap-mat-desc">Kaku untuk wadah dan komponen.</p>
                 </div>
                 <div
                   class="ap-mat"
@@ -2082,6 +2085,7 @@
                     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
                   "
                 >
+                  <img class="ap-mat-image" src="/images-webp/materials/ldpe.webp" alt="Lembaran plastik LD fleksibel" width="418" height="418" loading="lazy" decoding="async" />
                   <div
                     class="ap-mat-code"
                     style="
@@ -2099,6 +2103,7 @@
                   >
                     Low Density
                   </div>
+                  <p class="ap-mat-desc">Lentur untuk kemasan dan pelindung.</p>
                 </div>
                 <div
                   class="ap-mat"
@@ -2112,6 +2117,7 @@
                     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
                   "
                 >
+                  <img class="ap-mat-image" src="/images-webp/materials/pvc.webp" alt="Sambungan pipa PVC biru" width="418" height="418" loading="lazy" decoding="async" />
                   <div
                     class="ap-mat-code"
                     style="
@@ -2129,6 +2135,7 @@
                   >
                     Polyvinyl
                   </div>
+                  <p class="ap-mat-desc">Untuk kebutuhan komponen tertentu.</p>
                 </div>
                 <div
                   class="ap-mat"
@@ -2142,6 +2149,7 @@
                     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
                   "
                 >
+                  <img class="ap-mat-image" src="/images-webp/materials/pp.webp" alt="Wadah plastik polypropylene" width="418" height="418" loading="lazy" decoding="async" />
                   <div
                     class="ap-mat-code"
                     style="
@@ -2159,6 +2167,7 @@
                   >
                     Polypropylene
                   </div>
+                  <p class="ap-mat-desc">Serbaguna untuk kemasan dan part.</p>
                 </div>
                 <div
                   class="ap-mat"
@@ -2172,6 +2181,7 @@
                     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
                   "
                 >
+                  <img class="ap-mat-image" src="/images-webp/materials/nylon.webp" alt="Roda gigi nilon krem" width="418" height="418" loading="lazy" decoding="async" />
                   <div
                     class="ap-mat-code"
                     style="
@@ -2189,6 +2199,7 @@
                   >
                     Tahan gesek
                   </div>
+                  <p class="ap-mat-desc">Pilihan untuk part yang bergesekan.</p>
                 </div>
                 <div
                   class="ap-mat"
@@ -2202,6 +2213,7 @@
                     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
                   "
                 >
+                  <img class="ap-mat-image" src="/images-webp/materials/polystyrene.webp" alt="Wadah pelindung polystyrene putih" width="418" height="418" loading="lazy" decoding="async" />
                   <div
                     class="ap-mat-code"
                     style="
@@ -2219,6 +2231,7 @@
                   >
                     Polystyrene
                   </div>
+                  <p class="ap-mat-desc">Ringan untuk wadah dan pelindung.</p>
                 </div>
                 <div
                   class="ap-mat"
@@ -2232,6 +2245,7 @@
                     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
                   "
                 >
+                  <img class="ap-mat-image" src="/images-webp/materials/acrylic.webp" alt="Lembaran acrylic transparan" width="418" height="418" loading="lazy" decoding="async" />
                   <div
                     class="ap-mat-code"
                     style="
@@ -2249,6 +2263,7 @@
                   >
                     AS / kaca
                   </div>
+                  <p class="ap-mat-desc">Tampilan bening untuk kebutuhan khusus.</p>
                 </div>
                 <div
                   class="ap-mat"
@@ -2262,6 +2277,7 @@
                     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
                   "
                 >
+                  <img class="ap-mat-image" src="/images-webp/materials/foam.webp" alt="Busa kuning sebagai material spon" width="418" height="418" loading="lazy" decoding="async" />
                   <div
                     class="ap-mat-code"
                     style="
@@ -2279,6 +2295,7 @@
                   >
                     Foam
                   </div>
+                  <p class="ap-mat-desc">Empuk untuk pelindung dan bantalan.</p>
                 </div>
                 <div
                   class="ap-mat"
@@ -2292,6 +2309,7 @@
                     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
                   "
                 >
+                  <img class="ap-mat-image" src="/images-webp/materials/rubber-bakelite.webp" alt="Cincin karet dan komponen bakelit hitam" width="418" height="418" loading="lazy" decoding="async" />
                   <div
                     class="ap-mat-code"
                     style="
@@ -2309,6 +2327,7 @@
                   >
                     &amp; bakelit
                   </div>
+                  <p class="ap-mat-desc">Untuk seal serta kebutuhan khusus.</p>
                 </div>
               </div>
             </div>
@@ -2361,7 +2380,7 @@
                   Sebagian hasil produksi kami
                 </h2>
               </div>
-              <div id="ap-filters" style="display: flex; flex-wrap: wrap; gap: 9px">
+              <div id="ap-filters" class="ap-portfolio-filters" style="display: flex; flex-wrap: wrap; gap: 9px">
                 <button
                   class="ap-filter"
                   data-filter="all"
@@ -2457,14 +2476,15 @@
 
             <div
               id="ap-gallery"
+              class="ap-gallery"
               data-reveal
               style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 40px"
             >
               <figure
                 class="ap-pcard"
                 data-cat="produk"
-                data-src="img/new/PRODUK 1 [RESIZE].jpg"
-                data-caption="Rangka grid plastik injection custom — produk dekoratif/struktural"
+                data-src="/images-webp/products/frame-grid-hitam.webp"
+                data-caption="Spacer plastik custom untuk menjaga jarak dan posisi underground conduit agar jalur kabel tetap rapi saat instalasi."
                 style="
                   margin: 0;
                   position: relative;
@@ -2479,16 +2499,22 @@
                   box-shadow: 0 20px 40px -28px rgba(11, 27, 43, 0.34);
                 "
               >
+                <span class="ap-pcard__hot" aria-label="Produk unggulan"
+                  ><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22c4 0 7-2.6 7-6.3 0-2.6-1.7-4.7-4.2-6.8.1 1.8-.5 3.1-1.8 4.1.2-4-1.7-7.2-4.6-9.1.3 4.2-3.4 6.5-3.4 10.6C5 18.6 8 22 12 22Z" />
+                    <path d="M9.5 19.3c0-1.7 1.1-2.7 2.6-3.8.1 1.1.5 1.8 1.4 2.4.8.6 1.1 1.3 1.1 2.1" />
+                  </svg><span>Unggulan</span></span
+                >
                 <div style="aspect-ratio: 1/1; overflow: hidden">
                   <img
-                    src="img/new/PRODUK 1 [RESIZE].jpg"
-                    alt="Rangka grid plastik injection custom warna hitam"
+                    src="/images-webp/products/frame-grid-hitam.webp"
+                    alt="Spacer plastik hitam untuk underground conduit"
                     style="width: 100%; height: 100%; object-fit: cover"
                     loading="lazy"
                   />
                 </div>
                 <figcaption style="padding: 12px 14px; font-size: 13px; font-weight: 600; color: #0b1b2b">
-                  Rangka grid custom
+                  Spacer for Underground Conduit
                   <span style="display: block; font-weight: 500; color: #8a98a8; font-size: 11.5px; margin-top: 1px"
                     >Produk Custom</span
                   >
@@ -2497,8 +2523,8 @@
               <figure
                 class="ap-pcard"
                 data-cat="produk"
-                data-src="img/new/PRODUK 2 [RESIZE].jpg"
-                data-caption="Wadah/cup plastik dengan emboss logo — produksi massal"
+                data-src="/images-webp/products/wadah-cup-abu.webp"
+                data-caption="Wadah plastik dengan emboss logo untuk produksi massal"
                 style="
                   margin: 0;
                   position: relative;
@@ -2515,7 +2541,7 @@
               >
                 <div style="aspect-ratio: 1/1; overflow: hidden">
                   <img
-                    src="img/new/PRODUK 2 [RESIZE].jpg"
+                    src="/images-webp/products/wadah-cup-abu.webp"
                     alt="Wadah cup plastik abu-abu dengan emboss logo hasil cetak plastik"
                     style="width: 100%; height: 100%; object-fit: cover"
                     loading="lazy"
@@ -2531,8 +2557,8 @@
               <figure
                 class="ap-pcard"
                 data-cat="produk"
-                data-src="img/new/PRODUK 5 [RESIZE].jpg"
-                data-caption="Tutup/ring plastik PP warna kuning — produksi massal presisi"
+                data-src="/images-webp/products/tutup-botol-kuning.webp"
+                data-caption="Tutup atau ring plastik PP warna kuning untuk produksi massal presisi"
                 style="
                   margin: 0;
                   position: relative;
@@ -2549,7 +2575,7 @@
               >
                 <div style="aspect-ratio: 1/1; overflow: hidden">
                   <img
-                    src="img/new/PRODUK 5 [RESIZE].jpg"
+                    src="/images-webp/products/tutup-botol-kuning.webp"
                     alt="Tutup botol plastik PP warna kuning produksi massal"
                     style="width: 100%; height: 100%; object-fit: cover"
                     loading="lazy"
@@ -2565,7 +2591,7 @@
               <figure
                 class="ap-pcard"
                 data-cat="produk"
-                data-src="img/new/PRODUK 7 [RESIZE].jpg"
+                data-src="/images-webp/products/tabung-vial.webp"
                 data-caption="Tabung/vial plastik PP transparan"
                 style="
                   margin: 0;
@@ -2583,7 +2609,7 @@
               >
                 <div style="aspect-ratio: 1/1; overflow: hidden">
                   <img
-                    src="img/new/PRODUK 7 [RESIZE].jpg"
+                    src="/images-webp/products/tabung-vial.webp"
                     alt="Tabung vial plastik PP transparan hasil injection"
                     style="width: 100%; height: 100%; object-fit: cover"
                     loading="lazy"
@@ -2599,7 +2625,7 @@
               <figure
                 class="ap-pcard"
                 data-cat="produk"
-                data-src="img/new/PRODUK 19 [RESIZE].jpg"
+                data-src="/images-webp/products/handle-tosca.webp"
                 data-caption="Komponen plastik tosca custom (handle/dudukan)"
                 style="
                   margin: 0;
@@ -2617,7 +2643,7 @@
               >
                 <div style="aspect-ratio: 1/1; overflow: hidden">
                   <img
-                    src="img/new/PRODUK 19 [RESIZE].jpg"
+                    src="/images-webp/products/handle-tosca.webp"
                     alt="Komponen plastik biru tosca custom handle hasil cetak plastik"
                     style="width: 100%; height: 100%; object-fit: cover"
                     loading="lazy"
@@ -2633,7 +2659,7 @@
               <figure
                 class="ap-pcard"
                 data-cat="sparepart"
-                data-src="img/new/PRODUK 16 [RESIZE].jpg"
+                data-src="/images-webp/products/flange-ring-hitam.webp"
                 data-caption="Flange ring plastik hitam untuk komponen mesin"
                 style="
                   margin: 0;
@@ -2651,7 +2677,7 @@
               >
                 <div style="aspect-ratio: 1/1; overflow: hidden">
                   <img
-                    src="img/new/PRODUK 16 [RESIZE].jpg"
+                    src="/images-webp/products/flange-ring-hitam.webp"
                     alt="Flange ring plastik hitam sparepart hasil cetak injection"
                     style="width: 100%; height: 100%; object-fit: cover"
                     loading="lazy"
@@ -2701,7 +2727,7 @@
               <figure
                 class="ap-pcard"
                 data-cat="sparepart"
-                data-src="img/new/PRODUK 3 [RESIZE].jpg"
+                data-src="/images-webp/products/penahan-bening.webp"
                 data-caption="Komponen penahan plastik bening presisi"
                 style="
                   margin: 0;
@@ -2719,7 +2745,7 @@
               >
                 <div style="aspect-ratio: 1/1; overflow: hidden">
                   <img
-                    src="img/new/PRODUK 3 [RESIZE].jpg"
+                    src="/images-webp/products/penahan-bening.webp"
                     alt="Komponen penahan plastik bening presisi hasil injection"
                     style="width: 100%; height: 100%; object-fit: cover"
                     loading="lazy"
@@ -2736,7 +2762,7 @@
                 class="ap-pcard"
                 data-cat="klien"
                 data-src="img/portfolio/surya_pro_1.jpg"
-                data-caption="Produk plastik untuk PT Gudang Garam — Surya Pro"
+                data-caption="Produk plastik untuk PT Gudang Garam, Surya Pro"
                 style="
                   margin: 0;
                   position: relative;
@@ -2770,7 +2796,7 @@
                 class="ap-pcard"
                 data-cat="klien"
                 data-src="img/portfolio/surya_pro_2.jpg"
-                data-caption="Produk plastik untuk PT Gudang Garam — Surya Pro"
+                data-caption="Produk plastik untuk PT Gudang Garam, Surya Pro"
                 style="
                   margin: 0;
                   position: relative;
@@ -2871,6 +2897,7 @@
             </div>
 
             <div
+              class="ap-portfolio-proof"
               data-reveal
               style="
                 margin-top: 34px;
@@ -2885,37 +2912,16 @@
                 gap: 18px;
               "
             >
-              <div style="display: flex; align-items: center; gap: 16px">
-                <div
-                  style="
-                    width: 46px;
-                    height: 46px;
-                    border-radius: 12px;
-                    background: #1457c7;
-                    display: grid;
-                    place-items: center;
-                    color: #fff;
-                    font-family: &quot;Archivo&quot;, sans-serif;
-                    font-weight: 900;
-                    font-size: 13px;
-                  "
-                >
-                  ★
+              <div class="ap-portfolio-proof__identity">
+                <div class="ap-portfolio-proof__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="m7.5 12 3 3 6-7"></path>
+                    <circle cx="12" cy="12" r="9"></circle>
+                  </svg>
                 </div>
-                <div>
-                  <div
-                    style="
-                      font-family: &quot;Archivo&quot;, sans-serif;
-                      font-weight: 800;
-                      font-size: 17px;
-                      color: #0b1b2b;
-                    "
-                  >
-                    Dipercaya PT Gudang Garam (Surya Pro)
-                  </div>
-                  <div style="font-size: 14px; color: #5c6b7e">
-                    Terima kasih atas kepercayaannya — kami siap melayani skala kecil hingga industri.
-                  </div>
+                <div class="ap-portfolio-proof__copy">
+                  <strong>Dipercaya PT Gudang Garam (Surya Pro)</strong>
+                  <p>Terima kasih atas kepercayaannya. Kami siap melayani kebutuhan skala kecil hingga industri.</p>
                 </div>
               </div>
               <a
@@ -2994,7 +3000,7 @@
                 line-height: 1.6;
               "
             >
-              Dari industri tekstil &amp; otomotif sampai UMKM kemasan dan pertanian — komponen cetak plastik kami
+              Dari industri tekstil dan otomotif sampai UMKM kemasan dan pertanian, komponen cetak plastik kami
               dipakai lintas sektor.
             </p>
             <div data-reveal style="margin-top: 40px">
@@ -5088,7 +5094,7 @@
                   letter-spacing: 0.2px;
                 "
               >
-                * Sebagian logo bersifat ilustratif mewakili sektor klien &mdash; dapat diganti dengan logo klien Anda.
+                * Sebagian logo bersifat ilustratif mewakili sektor klien. Dapat diganti dengan logo klien Anda.
               </p>
             </div>
           </div>
@@ -5109,6 +5115,7 @@
             "
           >
             <div
+              class="ap-faq-intro"
               data-reveal
               style="
                 position: sticky;
@@ -5188,7 +5195,7 @@
                 Pertanyaan yang sering diajukan
               </h2>
               <p style="font-size: 16px; line-height: 1.7; color: #c3d3e6; margin: 18px 0 0; position: relative">
-                Belum menemukan jawabannya? Chat kami langsung via WhatsApp — tim kami siap membantu.
+                Belum menemukan jawabannya? Hubungi kami melalui WhatsApp. Tim kami siap membantu.
               </p>
               <a
                 class="ap-btn-wa"
@@ -5210,7 +5217,7 @@
                 >Tanya Sekarang →</a
               >
             </div>
-            <div data-reveal style="display: flex; flex-direction: column; gap: 12px">
+            <div class="ap-faq-list" data-reveal style="display: flex; flex-direction: column; gap: 12px">
               <div
                 class="ap-faq-item"
                 style="
@@ -5347,7 +5354,7 @@
                 </button>
                 <div class="ap-faq-a" style="max-height: 0; overflow: hidden; transition: max-height 0.35s ease">
                   <p style="margin: 0; padding: 0 22px 20px; font-size: 15px; line-height: 1.65; color: #5c6b7e">
-                    Pembuatan molding umumnya sekitar 1–2 minggu, tergantung tingkat kerumitan sample produknya. Setelah
+                    Pembuatan molding umumnya sekitar 1 sampai 2 minggu, tergantung tingkat kerumitan sample produknya. Setelah
                     molding siap, proses produksi bisa langsung berjalan.
                   </p>
                 </div>
@@ -5417,7 +5424,7 @@
                 </button>
                 <div class="ap-faq-a" style="max-height: 0; overflow: hidden; transition: max-height 0.35s ease">
                   <p style="margin: 0; padding: 0 22px 20px; font-size: 15px; line-height: 1.65; color: #5c6b7e">
-                    Quantity / minimal order bisa dinegosiasikan. Kami melayani pesanan partai maupun eceran — silakan
+                    Quantity atau minimal order bisa dinegosiasikan. Kami melayani pesanan partai maupun eceran. Silakan
                     diskusikan kebutuhan Anda dengan tim kami.
                   </p>
                 </div>
@@ -5639,16 +5646,18 @@
                   Kirim permintaan penawaran
                 </h3>
                 <p style="font-size: 14px; color: #5c6b7e; margin: 0 0 22px">
-                  Isi form di bawah — pesan akan diteruskan ke WhatsApp kami.
+                  Isi form di bawah. Pesan akan diteruskan ke WhatsApp kami.
                 </p>
                 <form id="ap-form" style="display: flex; flex-direction: column; gap: 14px">
                   <div>
-                    <label style="display: block; font-size: 13px; font-weight: 700; color: #46566a; margin-bottom: 6px"
+                    <label for="ap-lead-name" style="display: block; font-size: 13px; font-weight: 700; color: #46566a; margin-bottom: 6px"
                       >Nama</label
                     >
                     <input
                       name="nama"
+                      id="ap-lead-name"
                       required
+                      autocomplete="name"
                       placeholder="Nama Anda / perusahaan"
                       style="
                         width: 100%;
@@ -5662,13 +5671,17 @@
                     />
                   </div>
                   <div>
-                    <label style="display: block; font-size: 13px; font-weight: 700; color: #46566a; margin-bottom: 6px"
-                      >No. WhatsApp / Email</label
+                    <label for="ap-lead-phone" style="display: block; font-size: 13px; font-weight: 700; color: #46566a; margin-bottom: 6px"
+                      >No. WhatsApp</label
                     >
                     <input
                       name="kontak"
+                      id="ap-lead-phone"
+                      type="tel"
+                      inputmode="tel"
                       required
-                      placeholder="08xx / email@domain.com"
+                      autocomplete="tel"
+                      placeholder="08xx xxxx xxxx"
                       style="
                         width: 100%;
                         padding: 13px 15px;
@@ -5681,11 +5694,12 @@
                     />
                   </div>
                   <div>
-                    <label style="display: block; font-size: 13px; font-weight: 700; color: #46566a; margin-bottom: 6px"
+                    <label for="ap-lead-need" style="display: block; font-size: 13px; font-weight: 700; color: #46566a; margin-bottom: 6px"
                       >Kebutuhan</label
                     >
                     <select
                       name="kebutuhan"
+                      id="ap-lead-need"
                       style="
                         width: 100%;
                         padding: 13px 15px;
@@ -5706,12 +5720,14 @@
                     </select>
                   </div>
                   <div>
-                    <label style="display: block; font-size: 13px; font-weight: 700; color: #46566a; margin-bottom: 6px"
+                    <label for="ap-lead-message" style="display: block; font-size: 13px; font-weight: 700; color: #46566a; margin-bottom: 6px"
                       >Pesan</label
                     >
                     <textarea
                       name="pesan"
+                      id="ap-lead-message"
                       rows="3"
+                      required
                       placeholder="Jelaskan kebutuhan Anda (bahan, jumlah, dimensi, dll)"
                       style="
                         width: 100%;
@@ -5753,17 +5769,24 @@
                     </svg>
                     Kirim via WhatsApp
                   </button>
+                  <p
+                    data-form-status
+                    hidden
+                    aria-live="polite"
+                    style="margin: 0; font-size: 13px; line-height: 1.5; color: #46566a"
+                  ></p>
                 </form>
               </div>
               <!-- info + map -->
               <div data-reveal style="display: flex; flex-direction: column; gap: 16px">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px">
+                <div class="ap-contact-channels" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px">
                   <a
                     data-wa
                     href="https://wa.me/628122339587"
+                    class="ap-contact-channel"
                     style="background: #0d2c50; border: 1px solid #163a66; border-radius: 14px; padding: 18px"
                   >
-                    <div
+                    <div class="ap-contact-channel__label"
                       style="
                         font-family: &quot;Space Mono&quot;, monospace;
                         font-size: 11px;
@@ -5773,7 +5796,7 @@
                     >
                       WHATSAPP 1
                     </div>
-                    <div
+                    <div class="ap-contact-channel__number"
                       style="
                         font-family: &quot;Archivo&quot;, sans-serif;
                         font-weight: 700;
@@ -5787,9 +5810,10 @@
                   <a
                     data-wa2
                     href="https://wa.me/6285721083242"
+                    class="ap-contact-channel"
                     style="background: #0d2c50; border: 1px solid #163a66; border-radius: 14px; padding: 18px"
                   >
-                    <div
+                    <div class="ap-contact-channel__label"
                       style="
                         font-family: &quot;Space Mono&quot;, monospace;
                         font-size: 11px;
@@ -5799,7 +5823,7 @@
                     >
                       WHATSAPP 2
                     </div>
-                    <div
+                    <div class="ap-contact-channel__number"
                       style="
                         font-family: &quot;Archivo&quot;, sans-serif;
                         font-weight: 700;
@@ -5904,7 +5928,7 @@
                   >
                 </div>
                 <p style="font-size: 14px; line-height: 1.65; margin: 16px 0 0; max-width: 340px">
-                  CV. Anugrahplastik Mandiri Bandung — jasa cetak plastik manual &amp; injection custom. Bahan
+                  CV. Anugrahplastik Mandiri Bandung melayani cetak plastik manual dan injection custom. Bahan
                   berkualitas, terdaftar resmi, melayani partai &amp; eceran.
                 </p>
               </div>

@@ -86,7 +86,7 @@ function EmailAccount({
         </div>
         <div>
           <dt>{isLocalRuntime ? "Pembaruan otomatis" : "Scheduler VPS"}</dt>
-          <dd>{isLocalRuntime ? "Mode lokal — manual" : schedulerLabel}</dd>
+          <dd>{isLocalRuntime ? "Mode lokal, dijalankan manual" : schedulerLabel}</dd>
         </div>
         {!isLocalRuntime ? (
           <div>
@@ -435,7 +435,7 @@ export default async function EmailPage({
                           day: "numeric",
                           month: "short",
                         })
-                      : "—"}
+                      : "Belum tersedia"}
                   </time>
                 </span>
                 <span>{item.subject}</span>
@@ -535,9 +535,9 @@ export default async function EmailPage({
                   ) : null}
                   <div className="email-meta">
                     <span>Dari</span>
-                    <strong>{sender || "—"}</strong>
+                    <strong>{sender || "Belum tersedia"}</strong>
                     <span>Kepada</span>
-                    <strong>{recipient || "—"}</strong>
+                    <strong>{recipient || "Belum tersedia"}</strong>
                     <span>Waktu</span>
                     <strong>
                       {emailRow?.receivedAt
@@ -546,7 +546,7 @@ export default async function EmailPage({
                           ? new Date(picked.startedAt ?? picked.sentAt).toLocaleString("id-ID", {
                               timeZone: "Asia/Jakarta",
                             })
-                          : "—"}
+                          : "Belum tersedia"}
                     </strong>
                   </div>
                   <Suspense fallback={<EmailDetailShimmer label="Memuat isi email" />}>

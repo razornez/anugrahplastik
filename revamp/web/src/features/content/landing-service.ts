@@ -6,13 +6,14 @@ import {
   defaultLandingContent,
   LANDING_CONTENT_KEY,
   landingContentSchema,
+  normalizeLandingContentCopy,
+  upgradeLandingContent,
   type LandingContent,
 } from "./landing-content";
 
 function parseLandingContent(value: unknown): LandingContent {
-  const candidate = value && typeof value === "object" ? value : {};
-  const parsed = landingContentSchema.safeParse({ ...defaultLandingContent, ...candidate });
-  return parsed.success ? parsed.data : defaultLandingContent;
+  const parsed = landingContentSchema.safeParse(upgradeLandingContent(value));
+  return parsed.success ? normalizeLandingContentCopy(parsed.data) : defaultLandingContent;
 }
 
 export async function getPublishedLandingContent(): Promise<LandingContent> {

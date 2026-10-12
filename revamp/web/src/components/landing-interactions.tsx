@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect } from "react";
+import { campaignAttributionKeys } from "@/features/leads/attribution";
 
 const whatsappNumber = "628122339587";
 
@@ -67,13 +68,22 @@ export function LandingInteractions() {
 
     const burger = document.getElementById("ap-burger");
     const mobile = document.getElementById("ap-mobile");
+    const setMenuOpen = (open: boolean) => {
+      if (mobile) mobile.hidden = !open;
+      burger?.setAttribute("aria-expanded", String(open));
+    };
     const updateBurger = () => {
-      if (burger) burger.style.display = window.innerWidth <= 900 ? "flex" : "none";
+      const compact = window.innerWidth <= 900;
+      if (burger) burger.style.display = compact ? "flex" : "none";
+      if (!compact) setMenuOpen(false);
     };
     const toggleMenu = () => {
-      if (mobile) mobile.style.display = mobile.style.display === "block" ? "none" : "block";
+      setMenuOpen(burger?.getAttribute("aria-expanded") !== "true");
     };
+    const mobileLinks = Array.from(root.querySelectorAll<HTMLAnchorElement>("#ap-mobile .ap-mlink"));
+    const closeMenu = () => setMenuOpen(false);
     burger?.addEventListener("click", toggleMenu);
+    mobileLinks.forEach((link) => link.addEventListener("click", closeMenu));
     window.addEventListener("resize", updateBurger);
     updateBurger();
 
@@ -117,26 +127,45 @@ export function LandingInteractions() {
     };
     lightbox?.addEventListener("click", closeLightbox);
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeLightbox();
+      if (event.key !== "Escape") return;
+      closeLightbox();
+      if (burger?.getAttribute("aria-expanded") === "true") {
+        closeMenu();
+        burger.focus();
+      }
     };
     window.addEventListener("keydown", closeOnEscape);
 
-    const faqHandlers = Array.from(root.querySelectorAll<HTMLElement>(".ap-faq-item")).flatMap((item) => {
+    const faqItems = Array.from(root.querySelectorAll<HTMLElement>(".ap-faq-item"));
+    const closeFaqItem = (item: HTMLElement) => {
+      const question = item.querySelector<HTMLElement>(".ap-faq-q");
+      const answer = item.querySelector<HTMLElement>(".ap-faq-a");
+      const icon = item.querySelector<HTMLElement>(".ap-faq-ic");
+      if (!question || !answer || !icon) return;
+      question.setAttribute("aria-expanded", "false");
+      answer.setAttribute("aria-hidden", "true");
+      answer.style.maxHeight = "0px";
+      icon.style.transform = "none";
+      icon.style.background = "#EAF1FD";
+      icon.style.color = "#1457C7";
+      icon.textContent = "+";
+    };
+    const faqHandlers = faqItems.flatMap((item, index) => {
       const question = item.querySelector<HTMLElement>(".ap-faq-q");
       const answer = item.querySelector<HTMLElement>(".ap-faq-a");
       const icon = item.querySelector<HTMLElement>(".ap-faq-ic");
       if (!question || !answer || !icon) return [];
+      const answerId = `ap-faq-answer-${index + 1}`;
+      answer.id = answerId;
+      question.setAttribute("aria-controls", answerId);
+      closeFaqItem(item);
       const handler = () => {
-        const opening = !answer.style.maxHeight || answer.style.maxHeight === "0px";
-        root.querySelectorAll<HTMLElement>(".ap-faq-a").forEach((element) => (element.style.maxHeight = "0px"));
-        root.querySelectorAll<HTMLElement>(".ap-faq-ic").forEach((element) => {
-          element.style.transform = "none";
-          element.style.background = "#EAF1FD";
-          element.style.color = "#1457C7";
-          element.textContent = "+";
-        });
+        const opening = question.getAttribute("aria-expanded") !== "true";
+        faqItems.forEach(closeFaqItem);
         if (opening) {
           answer.style.maxHeight = `${answer.scrollHeight + 40}px`;
+          answer.setAttribute("aria-hidden", "false");
+          question.setAttribute("aria-expanded", "true");
           icon.style.transform = "rotate(45deg)";
           icon.style.background = "#1457C7";
           icon.style.color = "#fff";
@@ -159,11 +188,21 @@ export function LandingInteractions() {
         form.reportValidity();
         return;
       }
+      const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      const status = form.querySelector<HTMLElement>("[data-form-status]");
+      const originalLabel = submit?.textContent;
+      if (submit) {
+        submit.disabled = true;
+        submit.textContent = "Menyimpan permintaan…";
+      }
+      if (status) {
+        status.hidden = false;
+        status.dataset.state = "pending";
+        status.textContent = "Menyimpan permintaan Anda terlebih dahulu.";
+      }
       const query = new URLSearchParams(window.location.search);
       const attribution = Object.fromEntries(
-        ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"]
-          .map((key) => [key, query.get(key)])
-          .filter(([, value]) => Boolean(value)),
+        campaignAttributionKeys.map((key) => [key, query.get(key)]).filter(([, value]) => Boolean(value)),
       );
       try {
         const response = await fetch("/api/leads", {
@@ -191,11 +230,30 @@ export function LandingInteractions() {
             },
           }),
         );
+        window.dispatchEvent(new CustomEvent("ap:google-ads-lead", { detail: { conversionId: payload.conversionId } }));
       } catch {
         form.dataset.submitError = "true";
+        if (status) {
+          status.hidden = false;
+          status.dataset.state = "error";
+          status.textContent = "Permintaan belum tersimpan. Periksa koneksi lalu coba lagi.";
+        }
+        if (submit) {
+          submit.disabled = false;
+          submit.textContent = originalLabel ?? "Kirim permintaan";
+        }
         return;
       }
       form.dataset.submitError = "false";
+      if (status) {
+        status.hidden = false;
+        status.dataset.state = "success";
+        status.textContent = "Permintaan tersimpan. WhatsApp akan terbuka untuk melanjutkan percakapan.";
+      }
+      if (submit) {
+        submit.disabled = false;
+        submit.textContent = originalLabel ?? "Kirim permintaan";
+      }
       const message = [
         "Halo Anugrah Plastik, saya ingin minta penawaran.",
         "",
@@ -212,6 +270,7 @@ export function LandingInteractions() {
       window.removeEventListener("scroll", updateHeader);
       window.removeEventListener("resize", updateBurger);
       burger?.removeEventListener("click", toggleMenu);
+      mobileLinks.forEach((link) => link.removeEventListener("click", closeMenu));
       filterHandlers.forEach(({ button, handler }) => button.removeEventListener("click", handler));
       cardHandlers.forEach(({ card, handler }) => card.removeEventListener("click", handler));
       lightbox?.removeEventListener("click", closeLightbox);

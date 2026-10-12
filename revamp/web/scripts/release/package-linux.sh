@@ -59,7 +59,10 @@ find "$release_root" -type f \( -name '.env' -o -name '.env.*' \) -print -quit |
 
 (
   cd "$release_root"
-  find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS
+  # The manifest cannot include itself: its checksum would necessarily change
+  # when the manifest is written, making every extracted release fail integrity
+  # verification before the canary can run.
+  find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS
 )
 mkdir -p "$(dirname "$output_path")"
 tar -C "$stage_root" --sort=name --owner=0 --group=0 --numeric-owner -czf "$output_path" anugrahplastik-release

@@ -198,11 +198,19 @@ button {
   color: #fff;
 }
 
-/* The material section has a navy background. Keep the heading legible even
-   when its template styles are loaded after the landing stylesheet. */
-#ap-material .ap-material-layout h2,
-#ap-material .ap-material-layout h2 * {
-  color: #fff;
+/* The original section uses ap-split and inline template styles, while the
+   rest of the landing can use the shared heading rule. Scope the contrast
+   correction tightly to Material so it survives the template cascade. */
+#ap-material .ap-split h2,
+#ap-material .ap-split h2 *,
+#ap-material .ap-mat-code {
+  color: #fff !important;
+}
+#ap-material .ap-mat-sub {
+  color: #b9d4f4 !important;
+}
+#ap-material .ap-mat-desc {
+  color: #d9e8fb !important;
 }
 .ap-material-layout .ap-kicker {
   color: #68b5ff;

@@ -8,6 +8,7 @@ export function proxy(request: NextRequest) {
   const response = NextResponse.next();
   if (
     request.nextUrl.pathname.startsWith("/admin") ||
+    request.nextUrl.pathname.startsWith("/preview") ||
     request.nextUrl.pathname.startsWith("/api/admin") ||
     request.nextUrl.pathname.startsWith("/api/integrations")
   ) {
@@ -17,4 +18,6 @@ export function proxy(request: NextRequest) {
   return response;
 }
 
-export const config = { matcher: ["/admin/:path*", "/api/admin/:path*", "/api/integrations/:path*"] };
+export const config = {
+  matcher: ["/admin/:path*", "/preview/:path*", "/api/admin/:path*", "/api/integrations/:path*"],
+};

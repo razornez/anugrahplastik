@@ -2,6 +2,7 @@ import { getSession } from "@/lib/auth/session";
 import { logout } from "@/features/content/admin-actions";
 import { AdminSidebar } from "@/components/admin-sidebar";
 import { AdminToastProvider } from "@/components/admin-ui";
+import { AdminInstallProvider } from "@/components/admin-install-provider";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { DM_Sans, Poppins } from "next/font/google";
@@ -39,13 +40,15 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
   }
 
   return (
-    <main className={`${adminFonts} admin-shell`} data-theme={theme}>
-      <AdminSidebar name={session.name} role={session.role} onLogout={logout} initialTheme={theme} />
-      <AdminToastProvider>
-        <div className="admin-main" data-ui-surface="page" id="admin-main" tabIndex={-1}>
-          {children}
-        </div>
-      </AdminToastProvider>
-    </main>
+    <AdminInstallProvider>
+      <main className={`${adminFonts} admin-shell`} data-theme={theme}>
+        <AdminSidebar name={session.name} role={session.role} onLogout={logout} initialTheme={theme} />
+        <AdminToastProvider>
+          <div className="admin-main" data-ui-surface="page" id="admin-main" tabIndex={-1}>
+            {children}
+          </div>
+        </AdminToastProvider>
+      </main>
+    </AdminInstallProvider>
   );
 }

@@ -1,31 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-type InstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
+import { useAdminInstall } from "@/components/admin-install-provider";
 
 export function InstallAppButton() {
-  const [prompt, setPrompt] = useState<InstallPromptEvent | null>(null);
-  const [isInstalled] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      (window.matchMedia("(display-mode: standalone)").matches ||
-        ("standalone" in navigator && Boolean((navigator as Navigator & { standalone?: boolean }).standalone))),
-  );
+  const { installed, prompt, clearPrompt } = useAdminInstall();
 
-  useEffect(() => {
-    const onPrompt = (event: Event) => {
-      event.preventDefault();
-      setPrompt(event as InstallPromptEvent);
-    };
-    window.addEventListener("beforeinstallprompt", onPrompt);
-    return () => window.removeEventListener("beforeinstallprompt", onPrompt);
-  }, []);
-
-  if (isInstalled) return <p className="install-status">Aplikasi sudah terpasang di perangkat ini.</p>;
+  if (installed) return <p className="install-status">Aplikasi sudah terpasang di perangkat ini.</p>;
 
   async function install() {
     if (!prompt) {
@@ -34,7 +14,7 @@ export function InstallAppButton() {
     }
     await prompt.prompt();
     const choice = await prompt.userChoice;
-    if (choice.outcome === "accepted") setPrompt(null);
+    if (choice.outcome === "accepted") clearPrompt();
   }
 
   return (

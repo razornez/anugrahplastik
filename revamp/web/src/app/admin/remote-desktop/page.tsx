@@ -85,7 +85,7 @@ export default async function RemoteDesktopPage() {
       <section className={styles.tutorial} aria-labelledby="remote-tutorial-title">
         <div className={styles.tutorialHeading}>
           <p className={styles.eyebrow}>PANDUAN PERTAMA KALI</p>
-          <h2 id="remote-tutorial-title">Siapkan sekali, lalu akses dari mana saja</h2>
+          <h2 id="remote-tutorial-title">Akses dari mana saja</h2>
           <p>Ikuti urutan ini. Tidak perlu mengubah router, membuka port, atau menyentuh VPS.</p>
         </div>
 
@@ -130,7 +130,7 @@ export default async function RemoteDesktopPage() {
               <span className={styles.step}>B</span>
               <div>
                 <p className={styles.eyebrow}>KERJAKAN DI LAPTOP</p>
-                <h3 id="laptop-setup-title">Laptop yang dipakai mengakses</h3>
+                <h3 id="laptop-setup-title">Laptop akses</h3>
               </div>
             </div>
             <ol className={styles.stepList}>

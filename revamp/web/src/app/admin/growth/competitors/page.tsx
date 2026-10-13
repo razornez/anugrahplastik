@@ -75,29 +75,39 @@ export default async function CompetitorAuditPage() {
                 </p>
                 <ol className="seo-ranking-list">
                   {rankSeoSnapshot(automaticAudit, category.key).map((site) => (
-                    <li key={site.domain}>
+                    <li className="seo-ranking-list__item" key={site.domain}>
                       <span className="seo-ranking-list__place">{site.rank ? `#${site.rank}` : ""}</span>
                       <span className="seo-ranking-list__identity">
-                        <a href={`https://${site.domain}/`} target="_blank" rel="noopener noreferrer">
+                        <a
+                          className="seo-ranking-list__link"
+                          href={`https://${site.domain}/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
                           <strong>{site.name}</strong>
                           <small>{site.domain} ↗</small>
                         </a>
                         {!site.rank ? <em>Tidak ditemukan di 10 besar</em> : null}
                       </span>
-                      <b>{site.points} poin</b>
+                      <b className="seo-ranking-list__points">{site.points} poin</b>
                       <details className="seo-ranking-list__details">
                         <summary>Lihat rincian nilai</summary>
                         <ul>
                           {site.contributions.map((item) => (
-                            <li key={item.keyword}>
-                              <strong>{item.keyword}</strong>
-                              <span>
+                            <li className="seo-score-row" key={item.keyword}>
+                              <strong className="seo-score-row__keyword">{item.keyword}</strong>
+                              <span className="seo-score-row__meta">
                                 {item.position
                                   ? `Posisi #${item.position}, ${item.points} poin`
                                   : "Tidak ditemukan di 10 besar, 0 poin"}
                               </span>
                               {item.link ? (
-                                <a href={item.link} target="_blank" rel="noopener noreferrer">
+                                <a
+                                  className="seo-score-row__evidence"
+                                  href={item.link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
                                   Bukti hasil Google ↗
                                 </a>
                               ) : null}

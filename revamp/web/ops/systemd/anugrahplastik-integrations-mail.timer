@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Anugrah Plastik Email CS sync every five minutes
+
+[Timer]
+OnCalendar=*:0/5
+Persistent=true
+Unit=anugrahplastik-integrations-mail.service
+
+[Install]
+WantedBy=timers.target

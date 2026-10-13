@@ -41,6 +41,7 @@ const RUN_STATUS_LABEL: Record<string, string> = {
   busy: "Sedang berjalan di proses lain",
   "not-due": "Belum dijadwalkan",
   "retry-exhausted": "Retry hari ini habis",
+  running: "Sedang berjalan",
 };
 
 function formatWib(value: Date | string | null | undefined) {
@@ -81,17 +82,20 @@ export default async function IntegrationsPage({
   const callbackHost = new URL(googleAdsRedirectUri()).hostname;
   const localCallbackReady = process.env.NODE_ENV === "production" || ["localhost", "127.0.0.1"].includes(callbackHost);
   const googleReady = googleConfigured && googleOAuthIssues.length === 0 && localCallbackReady;
-  const [recentRuns, lastScheduledRunAt, activeRun] = await Promise.all([
+  const [recentRuns, lastMailScheduledRunAt, lastAdsScheduledRunAt, activeMailRun, activeAdsRun] = await Promise.all([
     getRecentIntegrationSyncRuns(),
-    getLastScheduledIntegrationRun(),
-    getActiveIntegrationSyncRun(),
+    getLastScheduledIntegrationRun("mail"),
+    getLastScheduledIntegrationRun("ads"),
+    getActiveIntegrationSyncRun("mail"),
+    getActiveIntegrationSyncRun("ads"),
   ]);
   const latestMailRun = lastRunFor(recentRuns, "mail");
   const latestAdsRun = lastRunFor(recentRuns, "ads");
   const localLastSuccessfulSync = [mail?.lastSyncAt, ads?.lastSyncAt]
     .filter((value): value is Date => value instanceof Date)
     .sort((left, right) => right.getTime() - left.getTime())[0];
-  const schedulerHealth = getSchedulerHealth(lastScheduledRunAt);
+  const mailSchedulerHealth = getSchedulerHealth(lastMailScheduledRunAt);
+  const adsSchedulerHealth = getSchedulerHealth(lastAdsScheduledRunAt, new Date(), 45);
   const schedulerConfiguration = getSchedulerConfiguration();
   const adsMetadata = (ads?.metadata ?? {}) as Record<string, unknown>;
   const mailMetadata = (mail?.metadata ?? {}) as Record<string, unknown>;
@@ -117,13 +121,13 @@ export default async function IntegrationsPage({
   });
   const mailboxHealth = getMailboxOperationalHealth({
     connection: mailHealth,
-    scheduler: schedulerHealth,
-    schedulerLastRunAt: lastScheduledRunAt,
+    scheduler: mailSchedulerHealth,
+    schedulerLastRunAt: lastMailScheduledRunAt,
     lastSyncAt: mail?.lastSyncAt ?? null,
     lastErrorCode: typeof mailMetadata.mailLastErrorCode === "string" ? mailMetadata.mailLastErrorCode : null,
     isLocalRuntime,
     schedulerConfigured: schedulerConfiguration.configured,
-    isRunning: activeRun?.trigger === "scheduled",
+    isRunning: activeMailRun?.trigger === "scheduled",
   });
   const mailConnectionStatus = !mailConfigured
     ? "Belum disambungkan"
@@ -171,7 +175,7 @@ export default async function IntegrationsPage({
         </p>
       ) : null}
       <section
-        className={`integration-runner-health is-${isLocalRuntime || !schedulerConfiguration.configured ? "needs-test" : schedulerHealth.level}`}
+        className={`integration-runner-health is-${isLocalRuntime || !schedulerConfiguration.configured ? "needs-test" : mailSchedulerHealth.level === "attention" || adsSchedulerHealth.level === "attention" ? "attention" : mailSchedulerHealth.level === "healthy" && adsSchedulerHealth.level === "healthy" ? "healthy" : "needs-test"}`}
         aria-label={isLocalRuntime ? "Mode sinkronisasi lokal" : "Status scheduler VPS"}
       >
         <div>
@@ -181,23 +185,29 @@ export default async function IntegrationsPage({
               ? "Pembaruan manual"
               : !schedulerConfiguration.configured
                 ? "Scheduler belum siap"
-                : schedulerHealth.label}
+                : mailSchedulerHealth.level === "healthy" && adsSchedulerHealth.level === "healthy"
+                  ? "Scheduler aktif"
+                  : "Scheduler perlu perhatian"}
           </h2>
           <p>
             {isLocalRuntime
               ? "Tidak ada scheduler atau koneksi mailbox permanen di komputer ini. Gunakan tindakan perbarui untuk menguji dan mengambil data terbaru."
               : !schedulerConfiguration.configured
                 ? schedulerConfiguration.issues.join(" · ")
-                : schedulerHealth.summary}
+                : `Email: ${mailSchedulerHealth.summary} Google Ads: ${adsSchedulerHealth.summary}`}
           </p>
         </div>
         <div>
-          <span>{isLocalRuntime ? "Sync berhasil terakhir" : "Eksekusi terjadwal terakhir"}</span>
-          <strong>{formatWib(isLocalRuntime ? localLastSuccessfulSync : lastScheduledRunAt)}</strong>
+          <span>{isLocalRuntime ? "Sync berhasil terakhir" : "Heartbeat provider"}</span>
+          <strong>
+            {isLocalRuntime
+              ? formatWib(localLastSuccessfulSync)
+              : `Email ${formatWib(lastMailScheduledRunAt)} · Ads ${formatWib(lastAdsScheduledRunAt)}`}
+          </strong>
           <small>
             {isLocalRuntime
               ? "Status provider berubah hanya setelah pemeriksaan manual."
-              : "Jadwal yang diharapkan: setiap 5 menit"}
+              : "Email setiap 5 menit · Google Ads diperiksa setiap 15 menit"}
           </small>
         </div>
       </section>
@@ -236,6 +246,12 @@ export default async function IntegrationsPage({
             ) : null}
             <span>Hasil terakhir</span>
             <strong>{adsHealth.summary}</strong>
+            {!isLocalRuntime ? (
+              <>
+                <span>Scheduler Google Ads</span>
+                <strong>{activeAdsRun ? "Sedang berjalan" : adsSchedulerHealth.label}</strong>
+              </>
+            ) : null}
             {adsRetryCount ? (
               <>
                 <span>Retry laporan hari ini</span>

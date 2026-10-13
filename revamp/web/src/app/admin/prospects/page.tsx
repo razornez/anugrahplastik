@@ -55,7 +55,7 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Pr
     <div className="prospects-page">
       <AdminPageHeader
         className="prospects-header"
-        title="Prospek dan permintaan"
+        title="Prospek"
         description="Tinjau permintaan masuk, calon pelanggan, dan tindak lanjut tim."
       />
       <MarketingWorkspaceNav current="/admin/prospects" role={user.role} />

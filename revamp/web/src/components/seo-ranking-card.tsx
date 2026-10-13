@@ -8,29 +8,34 @@ function RankingList({ items }: { items: RankedSite[] }) {
   return (
     <ol className="seo-ranking-list">
       {items.map((site) => (
-        <li key={site.domain}>
+        <li className="seo-ranking-list__item" key={site.domain}>
           <span className="seo-ranking-list__place">{site.rank ? `#${site.rank}` : ""}</span>
           <span className="seo-ranking-list__identity">
-            <a href={`https://${site.domain}/`} rel="noopener noreferrer" target="_blank">
+            <a
+              className="seo-ranking-list__link"
+              href={`https://${site.domain}/`}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
               <strong>{site.name}</strong>
               <small>{site.domain} ↗</small>
             </a>
             {!site.rank ? <em>Tidak ditemukan di 10 besar</em> : null}
           </span>
-          <b>{site.points} poin</b>
+          <b className="seo-ranking-list__points">{site.points} poin</b>
           <details className="seo-ranking-list__details">
             <summary>Rincian nilai</summary>
             <ul>
               {site.contributions.map((item) => (
-                <li key={item.keyword}>
-                  <strong>{item.keyword}</strong>
-                  <span>
+                <li className="seo-score-row" key={item.keyword}>
+                  <strong className="seo-score-row__keyword">{item.keyword}</strong>
+                  <span className="seo-score-row__meta">
                     {item.position
                       ? `Posisi #${item.position}, ${item.points} poin`
                       : "Tidak ditemukan di 10 besar, 0 poin"}
                   </span>
                   {item.link ? (
-                    <a href={item.link} rel="noopener noreferrer" target="_blank">
+                    <a className="seo-score-row__evidence" href={item.link} rel="noopener noreferrer" target="_blank">
                       Bukti hasil Google ↗
                     </a>
                   ) : null}
@@ -64,7 +69,7 @@ export function SeoRankingCard({
     <aside className="growth-competitors" aria-label="Perbandingan visibilitas pencarian">
       <div className="growth-competitors__head">
         <span>VISIBILITAS PENCARIAN · ORGANIK</span>
-        <h2>Siapa yang paling terlihat di pencarian?</h2>
+        <h2>Visibilitas pencarian</h2>
         <p>
           Urutan hanya untuk empat website dan kata kunci yang dipantau, bukan peringkat perusahaan plastik terbaik,
           jumlah pengunjung, atau penjualan.
@@ -79,18 +84,20 @@ export function SeoRankingCard({
             {stale ? "Data lebih dari 7 hari · " : "Diperiksa "}
             {audit.checkedAt.toLocaleString("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium" })} WIB
           </p>
-          <details className="growth-competitors__method-help">
-            <summary aria-label="Cara nilai ini dihitung">?</summary>
-            <p>
-              Nilai adalah jumlah 11 dikurangi posisi Google untuk setiap kata kunci yang masuk 10 besar. Ini hanya
-              membandingkan situs dan kata kunci pada audit ini, bukan nilai kualitas website, bisnis, penjualan, atau
-              reputasi perusahaan.
-            </p>
-          </details>
           {error ? (
             <p className="admin-notice">Pemeriksaan terbaru gagal: {error}. Hasil terakhir tetap ditampilkan.</p>
           ) : null}
-          <h3 className="growth-competitors__category">Jasa cetak plastik · 4 kata kunci</h3>
+          <div className="growth-competitors__category-row">
+            <h3 className="growth-competitors__category">Jasa cetak plastik · 4 kata kunci</h3>
+            <details className="growth-competitors__method-help">
+              <summary aria-label="Cara nilai ini dihitung">?</summary>
+              <p>
+                Nilai adalah jumlah 11 dikurangi posisi Google untuk setiap kata kunci yang masuk 10 besar. Ini hanya
+                membandingkan situs dan kata kunci pada audit ini, bukan nilai kualitas website, bisnis, penjualan, atau
+                reputasi perusahaan.
+              </p>
+            </details>
+          </div>
           {service ? <RankingList items={service} /> : null}
           <h3 className="growth-competitors__category">Spacer conduit · 2 kata kunci</h3>
           <p className="growth-competitors__date">Tidak semua kandidat dipastikan menjual spacer.</p>

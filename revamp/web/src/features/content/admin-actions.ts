@@ -57,7 +57,7 @@ export async function login(formData: FormData) {
   if (!user || !user.isActive || !authenticated) redirect("/admin/login?error=credentials");
 
   await createSession({ id: user.id, name: user.name, email: user.email, role: user.role as SessionUser["role"] });
-  redirect("/admin/content");
+  redirect("/admin");
 }
 
 export async function logout() {

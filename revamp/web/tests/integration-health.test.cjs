@@ -153,15 +153,37 @@ test("failed mailbox state makes retry the primary action and moves destructive 
 test("scheduled endpoint delegates to the safe sync orchestrator and stores only safe run metadata", () => {
   const route = readFileSync(join(__dirname, "../src/app/api/integrations/sync/route.ts"), "utf8");
   const runner = readFileSync(join(__dirname, "../src/features/integrations/sync-runner.ts"), "utf8");
-  assert.match(route, /runIntegrationSync\(\{ trigger: "scheduled" \}\)/);
+  const cli = readFileSync(join(__dirname, "../scripts/run-integrations-sync.mjs"), "utf8");
+  assert.match(route, /runIntegrationSync\(\{ trigger: "scheduled", services \}\)/);
+  assert.match(route, /service === "mail" \|\| service === "ads"/);
   assert.match(route, /mail: \{ status: result\.mail\.status/);
   assert.match(route, /ads: \{ status: result\.ads\.status/);
   assert.doesNotMatch(route, /syncMailbox\(/);
+  assert.match(cli, /--service=/);
+  assert.match(cli, /JSON\.stringify\(service \? \{ services: \[service\] \} : \{\}\)/);
   assert.match(runner, /integrationSyncRuns/);
+  assert.match(runner, /mailStatus: services\.includes\("mail"\) \? "running" : "skipped"/);
+  assert.match(runner, /adsStatus: services\.includes\("ads"\) \? "running" : "skipped"/);
+  assert.match(runner, /getLastScheduledIntegrationRun\(service\?: SyncService\)/);
   assert.match(runner, /30 \* 86_400_000/);
   assert.match(runner, /secretCiphertext/);
   assert.match(runner, /getSchedulerConfiguration/);
   assert.doesNotMatch(runner, /bodyCiphertext/);
+});
+
+test("production scheduler isolates Email CS and Google Ads timers", () => {
+  const mailService = readFileSync(join(__dirname, "../ops/systemd/anugrahplastik-integrations-mail.service"), "utf8");
+  const mailTimer = readFileSync(join(__dirname, "../ops/systemd/anugrahplastik-integrations-mail.timer"), "utf8");
+  const adsService = readFileSync(join(__dirname, "../ops/systemd/anugrahplastik-integrations-ads.service"), "utf8");
+  const adsTimer = readFileSync(join(__dirname, "../ops/systemd/anugrahplastik-integrations-ads.timer"), "utf8");
+  for (const service of [mailService, adsService]) {
+    assert.match(service, /EnvironmentFile=\/etc\/anugrahplastik\/integrations-runner\.env/);
+    assert.doesNotMatch(service, /web\.env/);
+  }
+  assert.match(mailService, /--service=mail/);
+  assert.match(mailTimer, /OnCalendar=\*:0\/5/);
+  assert.match(adsService, /--service=ads/);
+  assert.match(adsTimer, /OnCalendar=\*:0\/15/);
 });
 
 test("mailbox failures are categorized without retaining provider diagnostics", () => {
@@ -204,6 +226,9 @@ test("Google Ads reports require explicit OAuth, Developer Token, MCC, and custo
   const config = readFileSync(join(__dirname, "../src/features/integrations/google-ads-config.ts"), "utf8");
   assert.match(service, /"login-customer-id": managerId/);
   assert.match(service, /probeGoogleAdsReporting/);
+  assert.match(service, /hasVerifiedGoogleAdsAccount/);
+  assert.match(service, /await probeGoogleAdsReporting\(\)/);
+  assert.match(service, /customer\.id\.replaceAll\("-", ""\) !== expectedCustomerId/);
   assert.match(service, /"developer-token": developerToken/);
   assert.match(config, /GOOGLE_ADS_DEVELOPER_TOKEN/);
   assert.doesNotMatch(service, /GOOGLE_ADS_CUSTOMER_ID \|\| "6738895829"/);

@@ -12,7 +12,7 @@
 }
 .navigation a {
   flex: 0 0 auto;
-  min-height: 40px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   padding: 0 12px;
@@ -219,6 +219,9 @@
   max-width: 70ch;
 }
 .sectionHead > a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
   color: var(--admin-blue);
   font-weight: 700;
   text-decoration: none;
@@ -459,7 +462,7 @@
   margin: 0;
 }
 .actions button {
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 10px;
   font-size: 12px;
 }
@@ -486,10 +489,10 @@
   text-align: right;
 }
 .empty {
-  padding: 22px;
-  border: 1px dashed var(--admin-line);
-  border-radius: 14px;
-  background: var(--admin-surface-soft);
+  padding: 22px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 .empty h2,
 .empty h3 {

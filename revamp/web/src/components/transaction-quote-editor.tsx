@@ -83,8 +83,8 @@ export function TransactionQuoteEditor({
       <div className="transaction-quote-editor__heading">
         <div>
           <p className="eyebrow">Isi penawaran</p>
-          <h3>Barang atau jasa yang ditawarkan</h3>
-          <p>Tulis kebutuhan pelanggan langsung di sini. Harga yang dimasukkan belum termasuk pajak.</p>
+          <h3>Barang atau jasa</h3>
+          <p>Tulis kebutuhan pelanggan. Harga belum termasuk pajak.</p>
         </div>
       </div>
       <div className="transaction-quote-editor__lines">
@@ -96,26 +96,26 @@ export function TransactionQuoteEditor({
               <input
                 maxLength={500}
                 onChange={(event) => editLine(index, "description", event.target.value)}
-                placeholder="Contoh: Spacer conduit sesuai contoh"
+                placeholder="mis. Spacer conduit"
                 required
                 value={line.description}
               />
             </label>
             <label>
-              Material (jika relevan)
+              Material
               <input
                 maxLength={160}
                 onChange={(event) => editLine(index, "materialLabel", event.target.value)}
-                placeholder="Contoh: Polypropylene hitam"
+                placeholder="mis. PP hitam"
                 value={line.materialLabel ?? ""}
               />
             </label>
             <label>
-              Moulding (jika relevan)
+              Moulding
               <input
                 maxLength={160}
                 onChange={(event) => editLine(index, "mouldingLabel", event.target.value)}
-                placeholder="Contoh: Sudah tersedia"
+                placeholder="mis. Tersedia"
                 value={line.mouldingLabel ?? ""}
               />
             </label>
@@ -144,7 +144,7 @@ export function TransactionQuoteEditor({
                 inputMode="decimal"
                 onChange={(event) => editLine(index, "unitPrice", event.target.value)}
                 pattern="[0-9]+([.][0-9]{1,2})?"
-                placeholder="Contoh: 15000"
+                placeholder="mis. 15000"
                 required
                 value={line.unitPrice}
               />
@@ -229,8 +229,8 @@ export function TransactionQuoteEditor({
         + Tambah barang / jasa
       </button>
       <fieldset className="transaction-quote-editor__letter">
-        <legend>Isi surat dan syarat penawaran</legend>
-        <p>Syarat contoh dapat disesuaikan untuk pelanggan ini. Perubahan akan masuk ke versi PDF berikutnya.</p>
+        <legend>Surat dan syarat</legend>
+        <p>Sesuaikan syarat untuk pelanggan. Perubahan masuk ke PDF berikutnya.</p>
         <label>
           Perihal surat
           <input
@@ -242,7 +242,7 @@ export function TransactionQuoteEditor({
         </label>
         <div className="transaction-quote-editor__letter-grid">
           <label>
-            Nama PIC pelanggan (jika diketahui)
+            PIC pelanggan
             <input
               maxLength={120}
               onChange={(event) => setLetter((current) => ({ ...current, recipientPic: event.target.value }))}
@@ -250,7 +250,7 @@ export function TransactionQuoteEditor({
             />
           </label>
           <label>
-            Berlaku sampai (jika ditentukan)
+            Berlaku sampai
             <input
               onChange={(event) => setLetter((current) => ({ ...current, validUntil: event.target.value }))}
               type="date"
@@ -280,7 +280,7 @@ export function TransactionQuoteEditor({
             <textarea
               maxLength={key === "notes" ? 2500 : 700}
               onChange={(event) => setLetter((current) => ({ ...current, [key]: event.target.value }))}
-              rows={key === "notes" ? 4 : 2}
+              rows={2}
               value={letter[key]}
             />
           </label>
@@ -312,7 +312,7 @@ export function TransactionQuoteEditor({
       </fieldset>
       <div className="transaction-quote-editor__bottom">
         <label>
-          Target pekerjaan (jika sudah disepakati)
+          Target pekerjaan
           <input defaultValue={initialTargetDate} name="targetDate" type="date" />
         </label>
         <dl className="transaction-quote-editor__totals" aria-live="polite">

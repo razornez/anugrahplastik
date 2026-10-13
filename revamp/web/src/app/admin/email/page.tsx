@@ -148,8 +148,8 @@ export default async function EmailPage({
   const params = await searchParams;
   const [recentSyncRuns, lastScheduledRunAt, activeRun] = await Promise.all([
     getRecentIntegrationSyncRuns(),
-    getLastScheduledIntegrationRun(),
-    getActiveIntegrationSyncRun(),
+    getLastScheduledIntegrationRun("mail"),
+    getActiveIntegrationSyncRun("mail"),
   ]);
   const latestMailRun = recentSyncRuns.find((run) => run.mailStatus !== "skipped") ?? null;
   const isLocalRuntime = process.env.NODE_ENV !== "production";

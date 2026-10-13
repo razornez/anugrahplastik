@@ -18,7 +18,7 @@ type AdminPageHeaderProps = {
 /** A restrained, shared header for every operational page in the admin workspace. */
 export function AdminPageHeader({ title, description, back, actions, className, titleId }: AdminPageHeaderProps) {
   return (
-    <header className={["admin-page-header", className].filter(Boolean).join(" ")}>
+    <header className={["admin-page-header", className].filter(Boolean).join(" ")} data-ui-surface="header">
       {back ? (
         <Link className="admin-page-header__back" href={back.href}>
           {back.label}

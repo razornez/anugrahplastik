@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, isNotNull, lt } from "drizzle-orm";
+import { and, desc, eq, isNotNull, lt, ne } from "drizzle-orm";
 import { getDatabase } from "@/lib/database/client";
 import { integrationSyncRuns, integrations } from "@/lib/database/schema";
 import { syncGoogleAdsOncePerJakartaDay } from "./google-ads-service";
@@ -61,7 +61,12 @@ export async function runIntegrationSync({
   const hasAds = configured.some((item) => item.key === "google-ads");
   const [run] = await database
     .insert(integrationSyncRuns)
-    .values({ trigger, status: "running" })
+    .values({
+      trigger,
+      status: "running",
+      mailStatus: services.includes("mail") ? "running" : "skipped",
+      adsStatus: services.includes("ads") ? "running" : "skipped",
+    })
     .returning({ id: integrationSyncRuns.id });
   if (!run) throw new Error("Riwayat sinkronisasi belum dapat dibuat.");
 
@@ -129,21 +134,33 @@ export async function getRecentIntegrationSyncRuns(limit = 6) {
   return database.select().from(integrationSyncRuns).orderBy(desc(integrationSyncRuns.startedAt)).limit(limit);
 }
 
-export async function getLastScheduledIntegrationRun() {
+export async function getLastScheduledIntegrationRun(service?: SyncService) {
   const database = getDatabase();
   if (!database) return null;
+  const serviceFilter =
+    service === "mail"
+      ? ne(integrationSyncRuns.mailStatus, "skipped")
+      : service === "ads"
+        ? ne(integrationSyncRuns.adsStatus, "skipped")
+        : undefined;
   const [run] = await database
     .select({ startedAt: integrationSyncRuns.startedAt })
     .from(integrationSyncRuns)
-    .where(and(eq(integrationSyncRuns.trigger, "scheduled"), isNotNull(integrationSyncRuns.finishedAt)))
+    .where(and(eq(integrationSyncRuns.trigger, "scheduled"), isNotNull(integrationSyncRuns.finishedAt), serviceFilter))
     .orderBy(desc(integrationSyncRuns.startedAt))
     .limit(1);
   return run?.startedAt ?? null;
 }
 
-export async function getActiveIntegrationSyncRun() {
+export async function getActiveIntegrationSyncRun(service?: SyncService) {
   const database = getDatabase();
   if (!database) return null;
+  const serviceFilter =
+    service === "mail"
+      ? eq(integrationSyncRuns.mailStatus, "running")
+      : service === "ads"
+        ? eq(integrationSyncRuns.adsStatus, "running")
+        : undefined;
   const [run] = await database
     .select({
       id: integrationSyncRuns.id,
@@ -151,7 +168,7 @@ export async function getActiveIntegrationSyncRun() {
       startedAt: integrationSyncRuns.startedAt,
     })
     .from(integrationSyncRuns)
-    .where(eq(integrationSyncRuns.status, "running"))
+    .where(and(eq(integrationSyncRuns.status, "running"), serviceFilter))
     .orderBy(desc(integrationSyncRuns.startedAt))
     .limit(1);
   return run ?? null;

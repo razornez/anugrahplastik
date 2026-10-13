@@ -1,0 +1,18 @@
+[Unit]
+Description=Anugrah Plastik Email CS sync
+After=network-online.target anugrahplastik-web.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=anugrahplastik
+Group=anugrahplastik
+WorkingDirectory=/srv/anugrahplastik/current/app
+EnvironmentFile=/etc/anugrahplastik/integrations-runner.env
+Environment=NODE_ENV=production
+ExecStart=/opt/anugrahplastik/node/bin/node scripts/run-integrations-sync.mjs --service=mail
+TimeoutStartSec=60
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+UMask=0077

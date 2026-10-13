@@ -1,182 +1,18 @@
-import Busboy from "busboy";
-import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
-import { eq, sql } from "drizzle-orm";
 import { getSession } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/database/client";
+import { auditLogs, productDesignFiles } from "@/lib/database/schema";
 import {
-  auditLogs,
-  businessTransactions,
-  customers,
-  materials,
-  moulds,
-  productDesignFiles,
-  products,
-} from "@/lib/database/schema";
-import {
-  createFileDigest,
-  designFormat,
-  isPreviewable,
-  preparePrivateDestination,
-  previewFileLimit,
-  removePrivateFile,
-  safeOriginalName,
-  sourceFileLimit,
-  storageBlockAt,
-  storageName,
-  storageWarningAt,
-  writePrivateFile,
-} from "@/features/operations/private-storage";
-
-type UploadedDesign = {
-  originalName: string;
-  format: NonNullable<ReturnType<typeof designFormat>>;
-  mimeType: string;
-  byteSize: number;
-  checksum: string;
-  storagePath: string;
-};
+  designStorageUsage,
+  normalizedDesignFields,
+  readDesignMultipart,
+  validateDesignLinks,
+  type UploadedDesign,
+} from "@/features/operations/design-file-input";
+import { removePrivateFile, storageBlockAt, storageWarningAt } from "@/features/operations/private-storage";
 
 function operationsUser(role: string) {
   return role === "admin" || role === "sales";
-}
-
-function allowedMime(format: UploadedDesign["format"], mimeType: string) {
-  if (mimeType === "application/octet-stream" || mimeType === "binary/octet-stream") return true;
-  const expected: Partial<Record<UploadedDesign["format"], string[]>> = {
-    stl: ["model/stl", "application/sla"],
-    obj: ["text/plain", "model/obj"],
-    glb: ["model/gltf-binary"],
-    dxf: ["image/vnd.dxf", "application/dxf"],
-    dwg: ["image/vnd.dwg", "application/acad"],
-  };
-  return (expected[format] ?? []).includes(mimeType);
-}
-
-async function usedStorageBytes() {
-  const database = getDatabase();
-  if (!database) return 0;
-  const [row] = await database
-    .select({ total: sql<string>`coalesce(sum(${productDesignFiles.byteSize}), 0)` })
-    .from(productDesignFiles);
-  return Number(row?.total ?? 0);
-}
-
-async function validateLinks(database: NonNullable<ReturnType<typeof getDatabase>>, fields: Record<string, string>) {
-  const checks = await Promise.all([
-    fields.productId
-      ? database.select({ id: products.id }).from(products).where(eq(products.id, fields.productId)).limit(1)
-      : Promise.resolve([]),
-    fields.mouldId
-      ? database.select({ id: moulds.id }).from(moulds).where(eq(moulds.id, fields.mouldId)).limit(1)
-      : Promise.resolve([]),
-    fields.customerId
-      ? database.select({ id: customers.id }).from(customers).where(eq(customers.id, fields.customerId)).limit(1)
-      : Promise.resolve([]),
-    fields.transactionId
-      ? database
-          .select({ id: businessTransactions.id })
-          .from(businessTransactions)
-          .where(eq(businessTransactions.id, fields.transactionId))
-          .limit(1)
-      : Promise.resolve([]),
-    fields.materialId
-      ? database.select({ id: materials.id }).from(materials).where(eq(materials.id, fields.materialId)).limit(1)
-      : Promise.resolve([]),
-  ]);
-  if (
-    checks.some(
-      (rows, index) =>
-        [fields.productId, fields.mouldId, fields.customerId, fields.transactionId, fields.materialId][index] &&
-        !rows.length,
-    )
-  ) {
-    throw new Error("Data yang dipilih sudah tidak tersedia. Muat ulang halaman lalu pilih kembali.");
-  }
-}
-
-async function readDesign(request: Request): Promise<{ fields: Record<string, string>; file: UploadedDesign }> {
-  const contentType = request.headers.get("content-type") ?? "";
-  if (!contentType.startsWith("multipart/form-data")) throw new Error("Gunakan formulir upload.");
-  const busboy = Busboy({
-    headers: { "content-type": contentType },
-    limits: { files: 1, fields: 12, fileSize: sourceFileLimit },
-  });
-  const fields: Record<string, string> = {};
-  let written: UploadedDesign | null = null;
-  let writeError: Error | null = null;
-  const fileWrites: Promise<void>[] = [];
-  const completion = new Promise<void>((resolve, reject) => {
-    busboy.on("field", (name, value) => {
-      fields[name] = value.slice(0, name === "description" ? 1000 : 500);
-    });
-    busboy.on("file", (_name, stream, info) => {
-      if (written || writeError) {
-        stream.resume();
-        writeError = new Error("Hanya satu file dapat diunggah sekali.");
-        return;
-      }
-      const originalName = safeOriginalName(info.filename);
-      const format = designFormat(originalName);
-      if (!format || !allowedMime(format, info.mimeType)) {
-        stream.resume();
-        writeError = new Error("Format file tidak diizinkan.");
-        return;
-      }
-      const relativePath = storageName(format);
-      let byteSize = 0;
-      const digest = createFileDigest();
-      const saveFile = preparePrivateDestination(relativePath)
-        .then((absolutePath) => {
-          const output = writePrivateFile(absolutePath);
-          stream.on("data", (chunk: Buffer) => {
-            byteSize += chunk.length;
-            digest.update(chunk);
-          });
-          stream.on("limit", () => {
-            writeError = new Error("Ukuran file sumber maksimal 100 MB.");
-            output.destroy(writeError);
-          });
-          return new Promise<void>((resolve, reject) => {
-            output.on("error", reject);
-            output.on("finish", () => {
-              if (writeError) {
-                reject(writeError);
-                return;
-              }
-              if (isPreviewable(format) && byteSize > previewFileLimit) {
-                reject(new Error("File preview STL, OBJ, atau GLB maksimal 25 MB."));
-                return;
-              }
-              written = {
-                originalName,
-                format,
-                mimeType: info.mimeType,
-                byteSize,
-                checksum: digest.digest("hex"),
-                storagePath: relativePath,
-              };
-              resolve();
-            });
-            stream.pipe(output);
-          });
-        })
-        .catch((error: unknown) => {
-          writeError = error instanceof Error ? error : new Error("File tidak dapat disimpan.");
-          throw writeError;
-        });
-      fileWrites.push(saveFile);
-    });
-    busboy.on("error", reject);
-    busboy.on("finish", () => resolve());
-  });
-  if (!request.body) throw new Error("File belum dipilih.");
-  Readable.fromWeb(request.body as never).pipe(busboy);
-  await completion;
-  await Promise.all(fileWrites);
-  if (writeError) throw writeError;
-  if (!written) throw new Error("File belum diterima.");
-  return { fields, file: written };
 }
 
 export async function POST(request: Request) {
@@ -186,32 +22,22 @@ export async function POST(request: Request) {
   if (!database) return NextResponse.json({ message: "Database belum terhubung." }, { status: 503 });
   let uploaded: UploadedDesign | null = null;
   try {
-    const currentUsage = await usedStorageBytes();
+    const currentUsage = await designStorageUsage(database);
     if (currentUsage >= storageBlockAt)
       return NextResponse.json({ message: "Kapasitas file hampir penuh. Hubungi administrator." }, { status: 507 });
-    const { fields, file } = await readDesign(request);
+    const { fields, file } = await readDesignMultipart(request, { requireFile: true });
+    if (!file) throw new Error("File belum diterima.");
     uploaded = file;
     if (currentUsage + file.byteSize > storageBlockAt) {
       await removePrivateFile(file.storagePath);
       return NextResponse.json({ message: "Upload dibatalkan agar kapasitas file tetap aman." }, { status: 507 });
     }
-    const origin = fields.origin === "customer" ? "customer" : "internal";
-    const fileKind =
-      fields.fileKind === "preview" ? "preview" : fields.fileKind === "reference" ? "reference" : "source";
-    const links = [fields.productId, fields.mouldId, fields.customerId, fields.transactionId].filter(Boolean);
-    if (!links.length) throw new Error("Tautkan file ke barang, mould, customer, atau transaksi.");
-    await validateLinks(database, fields);
+    const normalized = normalizedDesignFields(fields);
+    await validateDesignLinks(database, fields);
     const [record] = await database
       .insert(productDesignFiles)
       .values({
-        productId: fields.productId || null,
-        mouldId: fields.mouldId || null,
-        customerId: fields.customerId || null,
-        transactionId: fields.transactionId || null,
-        materialId: fields.materialId || null,
-        description: fields.description?.trim().slice(0, 1000) || null,
-        origin,
-        fileKind,
+        ...normalized,
         format: file.format,
         storagePath: file.storagePath,
         originalName: file.originalName,
@@ -229,7 +55,7 @@ export async function POST(request: Request) {
       metadata: {
         format: file.format,
         byteSize: file.byteSize,
-        origin,
+        origin: normalized.origin,
         materialId: fields.materialId || null,
         hasDescription: Boolean(fields.description?.trim()),
         capacityWarning: currentUsage + file.byteSize >= storageWarningAt,

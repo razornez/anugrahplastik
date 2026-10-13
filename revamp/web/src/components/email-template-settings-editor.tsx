@@ -149,7 +149,7 @@ export function EmailTemplateSettingsEditor({
         <div className="email-template-edit-form__head">
           <div>
             <p className="eyebrow">Editor template</p>
-            <h2>{keyName === "layout" ? "Tata letak bersama" : "Pesan email"}</h2>
+            <h2>{keyName === "layout" ? "Tata letak" : "Pesan email"}</h2>
           </div>
           <span data-state={previewState} role="status">
             {previewState === "pending"

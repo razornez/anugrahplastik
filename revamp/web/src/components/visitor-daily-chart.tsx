@@ -39,7 +39,7 @@ export function VisitorDailyChart({ points }: { points: Point[] }) {
       <header className="visitor-panel-heading">
         <div>
           <p className="eyebrow">Perubahan harian · WIB</p>
-          <h2 id="visitor-daily-title">Kunjungan dan permintaan yang tercatat</h2>
+          <h2 id="visitor-daily-title">Kunjungan dan permintaan</h2>
         </div>
         <div className="visitor-chart-legend">
           <span>

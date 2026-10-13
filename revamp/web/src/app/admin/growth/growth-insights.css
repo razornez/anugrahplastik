@@ -599,32 +599,32 @@
 
 .admin-shell .seo-ranking-list {
   display: grid;
-  gap: 7px;
-  margin: 10px 0 18px;
+  gap: 10px;
+  margin: 8px 0 20px;
   padding: 0;
   list-style: none;
 }
-.admin-shell .seo-ranking-list li {
+.admin-shell .seo-ranking-list > .seo-ranking-list__item {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  border-radius: 13px;
+  gap: 8px 10px;
+  border-radius: 14px;
   background: var(--admin-surface-soft);
-  padding: 10px;
-}
-.admin-shell .seo-ranking-list li {
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  gap: 8px;
+  padding: 14px;
 }
 .admin-shell .seo-ranking-list__identity {
+  grid-column: 2;
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: 6px;
 }
-.admin-shell .seo-ranking-list__identity a {
+.admin-shell .seo-ranking-list__identity > .seo-ranking-list__link {
   min-width: 0;
   display: grid;
+  align-content: center;
+  gap: 2px;
+  min-height: 44px;
   color: inherit;
   text-decoration: none;
 }
@@ -644,7 +644,8 @@
   font-weight: 650;
   line-height: 1.25;
 }
-.admin-shell .seo-ranking-list li > b {
+.admin-shell .seo-ranking-list > .seo-ranking-list__item > .seo-ranking-list__points {
+  grid-column: 3;
   align-self: center;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -678,28 +679,64 @@
   color: var(--admin-blue);
   font-weight: 700;
 }
+.admin-shell .growth-competitors__category-row {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  margin: 14px 0 4px;
+}
 .admin-shell .growth-competitors__method-help {
-  margin-top: 10px;
+  position: relative;
+  flex: 0 0 auto;
+  margin: 0;
 }
 .admin-shell .growth-competitors__method-help summary {
   display: grid;
-  width: 28px;
-  height: 28px;
+  position: relative;
+  width: 44px;
+  height: 44px;
   place-items: center;
-  border: 1px solid var(--admin-line);
-  border-radius: 50%;
+  border: 0;
+  border-radius: 12px;
   color: var(--admin-blue);
   cursor: pointer;
   font-weight: 800;
+  list-style: none;
+}
+.admin-shell .growth-competitors__method-help summary::before {
+  position: absolute;
+  inset: 8px;
+  border: 1px solid var(--admin-line);
+  border-radius: 50%;
+  content: "";
+}
+.admin-shell .growth-competitors__method-help summary::-webkit-details-marker {
+  display: none;
+}
+.admin-shell .growth-competitors__method-help summary:focus-visible {
+  outline: 2px solid var(--admin-blue);
+  outline-offset: 2px;
 }
 .admin-shell .growth-competitors__method-help p {
-  margin: 8px 0 0;
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  right: 0;
+  width: min(280px, calc(100vw - 64px));
+  margin: 0;
+  border: 1px solid var(--admin-line);
+  border-radius: 12px;
+  background: var(--admin-surface);
+  padding: 12px;
+  box-shadow: var(--admin-shadow);
   color: var(--admin-muted);
   font-size: 12px;
   line-height: 1.5;
 }
 @media (max-width: 560px) {
-  .admin-shell .seo-ranking-list li {
+  .admin-shell .seo-ranking-list > .seo-ranking-list__item {
     grid-template-columns: 30px minmax(0, 1fr) auto;
     padding: 12px;
   }
@@ -741,7 +778,8 @@
   font-size: 12px;
 }
 .admin-shell .growth-competitors__category {
-  margin: 18px 0 4px;
+  min-width: 0;
+  margin: 0;
   font-size: 14px;
 }
 .admin-shell .growth-competitors__empty a {

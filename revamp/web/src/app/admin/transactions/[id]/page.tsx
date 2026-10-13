@@ -74,8 +74,8 @@ const steps: Array<{ id: Step; label: string; short: string; help: string }> = [
   { id: "order", label: "PO pelanggan", short: "PO", help: "Catat pesanan resmi dari pelanggan" },
   { id: "payment", label: "Invoice & pembayaran", short: "Invoice", help: "Tagihan, uang muka, dan pelunasan" },
   { id: "production", label: "Produksi", short: "Produksi", help: "Pelepasan, sampel, dan batch" },
-  { id: "delivery", label: "Surat jalan", short: "Kirim", help: "Jumlah yang dikirim dan surat jalan" },
-  { id: "handover", label: "STB bertanda tangan", short: "Terima", help: "Bukti penerimaan dan penutupan" },
+  { id: "delivery", label: "Surat jalan", short: "Surat jalan", help: "Jumlah yang dikirim dan surat jalan" },
+  { id: "handover", label: "STB bertanda tangan", short: "STB", help: "Bukti penerimaan dan penutupan" },
 ];
 
 const money = (value: string | number | null) =>
@@ -160,7 +160,7 @@ function nextAction(step: Step, transaction: Transaction) {
     case "quote":
       if (transaction.workspace.issuedCount)
         return "Rincian penawaran terkunci setelah invoice diterbitkan. Tinjau rincian dan dokumen yang sudah tersimpan.";
-      if (!transaction.lines.length) return "Isi barang atau jasa dan harga penawaran.";
+      if (!transaction.lines.length) return "Isi barang, jasa, dan harga.";
       if (!transaction.header.quoteLetter) return "Isi surat dan syarat penawaran, lalu simpan sebelum membuat PDF.";
       if (!latestQuoteMatches(transaction)) return "Periksa rincian, lalu buat PDF penawaran.";
       return transaction.documents.some((document) => document.type === "quotation" && document.sentMessageId)
@@ -1418,12 +1418,19 @@ export default async function TransactionDetailPage({
                 <span aria-hidden="true">
                   {stepStates[step.id].kind === "complete" ? "✓" : String(index + 1).padStart(2, "0")}
                 </span>
-                <strong>{step.label}</strong>
+                <strong>
+                  <span aria-hidden="true">{step.short}</span>
+                  <span className="admin-sr-only">{step.label}</span>
+                </strong>
                 <small>{stepStates[step.id].label}</small>
               </Link>
             ))}
           </nav>
-          <section className="transaction-flow-focus" aria-labelledby="transaction-step-title">
+          <section
+            className="transaction-flow-focus"
+            aria-labelledby="transaction-step-title"
+            data-ui-surface="workspace"
+          >
             <div className="transaction-flow-focus__intro">
               <div>
                 <p className="eyebrow">Langkah {steps.findIndex((step) => step.id === active) + 1} dari 6</p>

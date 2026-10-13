@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 
 const templateKinds = [
-  ["layout", "Tata letak bersama"],
+  ["layout", "Tata letak"],
   ["new", "Pesan baru"],
   ["reply", "Balasan"],
   ["quotation", "Surat penawaran"],

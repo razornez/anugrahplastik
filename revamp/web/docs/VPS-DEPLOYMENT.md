@@ -58,12 +58,14 @@ dan perubahan DNS tetap merupakan gate terpisah.
 
 ## Scheduler integrasi
 
-- Timer integrasi sengaja hanya disediakan sebagai template dan **tidak
-  di-enable** saat rilis pertama.
+- Timer Email dan Google Ads dipisahkan agar kegagalan satu provider tidak
+  menghalangi provider lain. Timer gabungan lama harus tetap nonaktif.
 - Enable timer Email CS hanya setelah IMAP 993 dan SMTP 465 berhasil diuji dari
   VPS serta koneksi tersimpan dapat disinkronkan.
 - Google Ads scheduler tetap nonaktif sampai OAuth Production, Developer Token,
-  probe akses, dan rekonsiliasi laporan tujuh hari dinyatakan lulus.
+  probe akses, dan rekonsiliasi laporan tujuh hari dinyatakan lulus. Setelah
+  itu timer Ads berjalan setiap 15 menit, sedangkan klaim database membatasi
+  pembaruan laporan menjadi sekali per hari dengan maksimal tiga retry.
 
 ## Rollback
 

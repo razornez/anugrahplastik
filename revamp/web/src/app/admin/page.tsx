@@ -2,13 +2,17 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AnalyticsTrendChart } from "@/components/analytics-trend-chart";
+import { AdminSectionHeader } from "@/components/admin-ui";
 import { HomePhotoDialog } from "@/components/home-photo-dialog";
+import { formatAdminCount, formatAdminDuration } from "@/features/analytics/display-duration";
 import { getAnalyticsHealth } from "@/features/analytics/health-service";
 import { getAnalyticsInsight } from "@/features/analytics/insight-service";
 import { sectionLabel } from "@/features/analytics/display-labels";
 import { getAnalyticsReport, type ReportPeriod } from "@/features/analytics/report-service";
 import { getWorkspaceOverview, type WorkspacePeriod } from "@/features/workspace/service";
 import { getSession } from "@/lib/auth/session";
+import { getSchedulerHealth } from "@/features/integrations/integration-health";
+import { getLastScheduledIntegrationRun } from "@/features/integrations/sync-runner";
 
 export const instant = false;
 
@@ -191,17 +195,36 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   const period: WorkspacePeriod = query.period === "today" || query.period === "month" ? query.period : "week";
   const days: ReportPeriod = period === "today" ? 1 : period === "month" ? 30 : 7;
   const reportFilters = { days, device: "all" as const, city: "", source: "", outcome: "" };
-  const [overview, report, insight, analyticsHealth] = await Promise.all([
+  const [overview, report, insight, analyticsHealth, integrationHeartbeats] = await Promise.all([
     getWorkspaceOverview(period),
     getAnalyticsReport(reportFilters, {}, "public"),
     getAnalyticsInsight(days, "public"),
     user.role === "admin" ? getAnalyticsHealth() : Promise.resolve(null),
+    user.role === "admin" && process.env.NODE_ENV === "production"
+      ? Promise.all([getLastScheduledIntegrationRun("mail"), getLastScheduledIntegrationRun("ads")])
+      : Promise.resolve([null, null] as const),
   ]);
   const label = period === "today" ? "Hari ini" : period === "month" ? "30 hari terakhir" : "7 hari terakhir";
   const journeyIcons: IconName[] = ["visit", "section", "tap", "write", "send", "check"];
+  const mailSchedulerHealth = getSchedulerHealth(integrationHeartbeats[0]);
+  const adsSchedulerHealth = getSchedulerHealth(integrationHeartbeats[1], new Date(), 45);
+  const integrationsNeedAttention =
+    process.env.NODE_ENV === "production" &&
+    user.role === "admin" &&
+    (mailSchedulerHealth.level !== "healthy" || adsSchedulerHealth.level !== "healthy");
 
   return (
     <div className="home-dashboard">
+      {integrationsNeedAttention ? (
+        <aside className="home-data-warning" role="alert">
+          <strong>Sinkronisasi layanan perlu diperiksa</strong>
+          <p>
+            Email CS: {mailSchedulerHealth.label}. Google Ads: {adsSchedulerHealth.label}. Data tersimpan tetap
+            tersedia.
+          </p>
+          <Link href="/admin/settings/integrations">Buka koneksi layanan →</Link>
+        </aside>
+      ) : null}
       <div className="home-above-fold">
         <section className="home-center" aria-label="Ruang kerja utama">
           <header className="home-hero">
@@ -236,12 +259,11 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
             </div>
           </header>
 
-          <div className="home-section-heading">
-            <div>
-              <p className="home-kicker">YANG PERLU DITINDAKLANJUTI</p>
-              <h2>Pekerjaan yang perlu ditangani</h2>
-            </div>
-          </div>
+          <AdminSectionHeader
+            className="home-section-heading"
+            eyebrow="YANG PERLU DITINDAKLANJUTI"
+            title="Pekerjaan yang perlu ditangani"
+          />
           <div className="home-action-stack">
             <ActionCard
               href="/admin/prospects"
@@ -272,15 +294,17 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
           </div>
 
           <section className="home-leads" aria-labelledby="home-leads-title">
-            <div className="home-section-heading">
-              <div>
-                <p className="home-kicker">PESAN PELANGGAN</p>
-                <h2 id="home-leads-title">Permintaan pelanggan terbaru</h2>
-              </div>
-              <Link href="/admin/prospects">
-                Lihat semua <span aria-hidden="true">→</span>
-              </Link>
-            </div>
+            <AdminSectionHeader
+              action={
+                <Link href="/admin/prospects">
+                  Lihat semua <span aria-hidden="true">→</span>
+                </Link>
+              }
+              className="home-section-heading"
+              eyebrow="PESAN PELANGGAN"
+              title="Permintaan pelanggan terbaru"
+              titleId="home-leads-title"
+            />
             {overview?.recentLeads.length ? (
               overview.recentLeads.map((lead) => {
                 const content = (
@@ -400,18 +424,22 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
                 <dl>
                   <div>
                     <dt>Antrean data</dt>
-                    <dd>{analyticsHealth.pendingBatches}</dd>
+                    <dd>{formatAdminCount(analyticsHealth.pendingBatches)} batch</dd>
                   </div>
                   <div>
                     <dt>Data tertua menunggu</dt>
-                    <dd>{analyticsHealth.oldestSeconds} detik</dd>
+                    <dd>
+                      {analyticsHealth.pendingBatches === 0
+                        ? "Tidak ada antrean"
+                        : formatAdminDuration(analyticsHealth.oldestSeconds)}
+                    </dd>
                   </div>
                   <div>
                     <dt>Pemroses terakhir aktif</dt>
                     <dd>
                       {analyticsHealth.workerSecondsAgo === null
-                        ? "Belum terbaca"
-                        : `${analyticsHealth.workerSecondsAgo} detik lalu`}
+                        ? "Belum pernah terdeteksi"
+                        : `${formatAdminDuration(analyticsHealth.workerSecondsAgo)} lalu`}
                     </dd>
                   </div>
                 </dl>
@@ -433,17 +461,19 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
       ) : null}
 
       <section className="home-analytics" aria-labelledby="home-analytics-title">
-        <div className="home-section-heading">
-          <div>
-            <p className="home-kicker">LAPORAN WEBSITE · {label.toUpperCase()}</p>
-            <h2 id="home-analytics-title">Kunjungan menurut waktu</h2>
-          </div>
-          {user.role !== "content" ? (
-            <Link href="/admin/insights">
-              Laporan lengkap <span aria-hidden="true">→</span>
-            </Link>
-          ) : null}
-        </div>
+        <AdminSectionHeader
+          action={
+            user.role !== "content" ? (
+              <Link href="/admin/insights">
+                Laporan lengkap <span aria-hidden="true">→</span>
+              </Link>
+            ) : null
+          }
+          className="home-section-heading"
+          eyebrow={`LAPORAN ${label.toUpperCase()}`}
+          title="Kunjungan menurut waktu"
+          titleId="home-analytics-title"
+        />
         <div className="home-analytics__grid">
           <AnalyticsTrendChart points={report.trend} />
           <section className="analytics-summary-card">
@@ -568,12 +598,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
       </section>
 
       <section className="home-activity">
-        <div className="home-section-heading">
-          <div>
-            <p className="home-kicker">RIWAYAT</p>
-            <h2>Aktivitas terbaru</h2>
-          </div>
-        </div>
+        <AdminSectionHeader className="home-section-heading" eyebrow="RIWAYAT" title="Aktivitas terbaru" />
         {overview?.activity.length ? (
           overview.activity.map((event, index) => (
             <div className="home-activity__row" key={`${event.action}-${index}`}>

@@ -92,7 +92,7 @@ export function BusinessDiscoveryPanel({ data, isAdmin }: { data: BusinessBoardD
           </span>
           <div>
             <p className="eyebrow">Riset perusahaan · bukan permintaan masuk</p>
-            <h3>Siapa yang bisa kita dekati?</h3>
+            <h3>Peluang prospek</h3>
             <p>Mulai dari perusahaan manufaktur. Periksa kecocokannya dengan produk dan kemampuan kita.</p>
           </div>
         </div>

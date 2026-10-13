@@ -38,7 +38,7 @@ export function VisitorGeographyMap({ buckets, extent, indonesiaHref, worldHref,
       <header className="visitor-panel-heading">
         <div>
           <p className="eyebrow">Sebaran kunjungan</p>
-          <h2 id="visitor-map-title">Dari mana mereka membuka website?</h2>
+          <h2 id="visitor-map-title">Perangkat pengunjung</h2>
         </div>
         <nav className="period-switch" aria-label="Cakupan peta">
           <Link href={indonesiaHref} aria-current={extent === "indonesia" ? "page" : undefined}>

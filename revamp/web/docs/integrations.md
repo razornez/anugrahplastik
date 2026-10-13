@@ -9,41 +9,41 @@ Koneksi eksternal dijalankan dari server. Kata sandi mailbox dan refresh token G
 3. Masuk sebagai administrator, buka **Lainnya → Koneksi layanan**, lalu masukkan kata sandi `cs@anugrahplastik.com` langsung pada form dan pilih **Uji dan simpan koneksi**.
 4. Isi `CS_MAIL_HOST`, `CS_MAIL_IMAP_PORT`, dan `CS_MAIL_SMTP_PORT` pada environment server dari halaman cPanel **Set Up Mail Client**. Untuk cPanel yang saat ini digunakan, host yang perlu diverifikasi adalah `srv145.niagahoster.com`; jangan memakai hostname web VPS apabila mailbox masih berada di cPanel.
 5. Form akan memeriksa IMAP TLS dan SMTP TLS dari konfigurasi server tersebut sebelum menyimpan rahasia. Kata sandi tidak dicatat ke audit atau log.
-6. Jadwalkan `POST https://anugrahplastik.com/api/integrations/sync` setiap lima menit dengan header `Authorization: Bearer <INTEGRATIONS_CRON_TOKEN>`. Endpoint mengimpor metadata email 90 hari pertama dan sesudahnya hanya UID baru. Isi email diambil saat dibuka; lampiran hanya ditawarkan untuk diunduh setelah membuka email dan tidak disimpan otomatis.
+6. Jadwalkan `POST https://anugrahplastik.com/api/integrations/sync` untuk Email setiap lima menit dan Google Ads setiap lima belas menit dengan header `Authorization: Bearer <INTEGRATIONS_CRON_TOKEN>`. Runner mengirim pilihan provider dalam body JSON agar gangguan satu provider tidak menghambat provider lain. Endpoint Email mengimpor metadata 90 hari pertama dan sesudahnya hanya UID baru. Isi email diambil saat dibuka; lampiran hanya ditawarkan untuk diunduh setelah membuka email dan tidak disimpan otomatis.
 
 ### Scheduler VPS
 
-Jangan mempertahankan socket IMAP terus-menerus. Gunakan runner `scripts/run-integrations-sync.mjs` dari scheduler VPS setiap lima menit; runner membuka koneksi hanya saat diperlukan dan mengembalikan exit code nonzero bila layanan yang tersambung gagal. Simpan `INTEGRATIONS_CRON_TOKEN` serta `INTEGRATIONS_SYNC_URL` hanya pada environment service VPS.
+Jangan mempertahankan socket IMAP terus-menerus. Gunakan runner `scripts/run-integrations-sync.mjs --service=mail` setiap lima menit dan `--service=ads` setiap lima belas menit. Runner membuka koneksi hanya saat diperlukan dan mengembalikan exit code nonzero bila provider tersebut gagal. Simpan `INTEGRATIONS_CRON_TOKEN` serta `INTEGRATIONS_SYNC_URL` pada `web.env` untuk route server dan pada `integrations-runner.env` root-only untuk unit runner. File runner tidak memuat password mailbox, OAuth secret, atau Developer Token.
 
 Sebelum timer diaktifkan, uji dari VPS bahwa `CS_MAIL_HOST:CS_MAIL_IMAP_PORT` dan `CS_MAIL_HOST:CS_MAIL_SMTP_PORT` dapat dijangkau, lalu jalankan uji koneksi dari **Koneksi layanan**. Timeout terjadi sebelum autentikasi sehingga bukan bukti kata sandi salah; periksa layanan IMAP/SMTP serta firewall cPanel terlebih dahulu. Isi `INTEGRATIONS_CRON_TOKEN`, URL HTTPS `INTEGRATIONS_SYNC_URL` (atau `APP_ORIGIN`), dan `INTEGRATIONS_ENCRYPTION_KEY` pada environment VPS sebelum menjalankan timer.
 
-Timer yang sehat melapor setiap lima menit. Halaman Email CS menampilkan waktu berhasil terakhir, percobaan terakhir, dan pembaruan berikutnya. Jika heartbeat tidak ada selama lebih dari 15 menit, data ditandai belum terbaru tetapi arsip inbox tetap dapat dibaca.
+Timer Email yang sehat melapor setiap lima menit dan ditandai terlambat setelah 15 menit. Timer Ads melapor setiap lima belas menit dan ditandai terlambat setelah 45 menit; klaim database tetap memastikan laporan hanya ditulis sekali per hari. Halaman admin menampilkan heartbeat masing-masing provider. Jika heartbeat terlambat, data tersimpan tetap dapat dibaca.
 
 Contoh unit `systemd` (siapkan tetapi **jangan aktifkan** sebelum owner menyetujui deploy):
 
 ```ini
-# /etc/systemd/system/anugrah-integrations-sync.service
+# /etc/systemd/system/anugrahplastik-integrations-mail.service
 [Service]
 Type=oneshot
 WorkingDirectory=/var/www/anugrahplastik/revamp/web
-EnvironmentFile=/etc/anugrahplastik/integrations.env
-ExecStart=/usr/bin/node scripts/run-integrations-sync.mjs
+EnvironmentFile=/etc/anugrahplastik/integrations-runner.env
+ExecStart=/usr/bin/node scripts/run-integrations-sync.mjs --service=mail
 StandardOutput=append:/var/log/anugrahplastik/integrations-sync.log
 StandardError=append:/var/log/anugrahplastik/integrations-sync.log
 ```
 
 ```ini
-# /etc/systemd/system/anugrah-integrations-sync.timer
+# /etc/systemd/system/anugrahplastik-integrations-mail.timer
 [Timer]
 OnCalendar=*:0/5
 Persistent=true
-Unit=anugrah-integrations-sync.service
+Unit=anugrahplastik-integrations-mail.service
 
 [Install]
 WantedBy=timers.target
 ```
 
-Setelah deploy dan pengisian environment privat, aktifkan dengan `systemctl enable --now anugrah-integrations-sync.timer`. Jalankan `systemctl status anugrah-integrations-sync.timer` dan periksa log service setelah aktivasi. UI admin menandai heartbeat terlambat setelah 15 menit. Riwayat eksekusi aman disimpan 30 hari. Jangan menjalankan timer ini dari laptop lokal.
+Unit Ads memakai pola yang sama dengan `--service=ads` dan `OnCalendar=*:0/15`. Setelah deploy dan pengisian environment privat, nonaktifkan timer gabungan lama, lalu aktifkan `anugrahplastik-integrations-mail.timer` dan `anugrahplastik-integrations-ads.timer`. Periksa status serta jurnal kedua service setelah aktivasi. Riwayat eksekusi aman disimpan 30 hari. Jangan menjalankan timer ini dari laptop lokal.
 
 Email yang dikirim melalui admin dicatat di folder **Terkirim**. Jika SMTP mengalami timeout yang statusnya tidak pasti, entri ditahan sebagai **Perlu diperiksa** dan tidak otomatis dikirim ulang untuk mencegah duplikasi. Periksa webmail sebelum mengirim ulang.
 
@@ -60,7 +60,7 @@ Konfigurasikan server-only environment berikut:
 - `GOOGLE_ADS_LOGIN_EMAIL=razornez@gmail.com` adalah akun Google owner yang diizinkan menyambungkan OAuth.
 - Lokal: `GOOGLE_ADS_REDIRECT_URI=http://localhost:3100/api/integrations/google-ads/callback`; daftarkan URL yang persis sama pada OAuth client.
 
-Administrator menyambungkan akun melalui **Koneksi layanan → Sambungkan Google Ads**, lalu memberi persetujuan scope laporan `adwords`. Aplikasi hanya meminta laporan kampanye, tidak mengubah iklan atau anggaran. Administrator harus menjalankan **Verifikasi akses API** sebelum memperbarui laporan; browser tidak pernah memulai sinkronisasi otomatis. Scheduler VPS—bila telah disetujui—memakai klaim atomik dan retry terbatas tanpa menghapus laporan lama.
+Administrator menyambungkan akun melalui **Koneksi layanan → Sambungkan Google Ads**, lalu memberi persetujuan scope laporan `adwords`. Aplikasi hanya meminta laporan kampanye, tidak mengubah iklan atau anggaran. Administrator harus menjalankan **Verifikasi akses API** sebelum pembaruan laporan pertama; browser tidak pernah memulai sinkronisasi otomatis. Setelah akun pernah diverifikasi, scheduler boleh mengulang probe baca-saja ketika verifikasi telah kedaluwarsa, lalu memakai klaim atomik dan retry terbatas tanpa menghapus laporan lama.
 
 Laporan default memakai tujuh hari kalender lengkap sampai kemarin (WIB). Preset 30/90 hari juga berakhir kemarin; URL/rentang kustom tetap tersedia. Empat metrik default adalah Klik, Impresi, Rata-rata CPC, dan Biaya; Konversi serta Nilai konversi dapat dipilih menggantikannya. CPC dihitung dari total biaya dibagi total klik, bukan rata-rata CPC harian. Tinggi setiap garis memakai skala relatifnya sendiri; tabel terbuka dan CSV menyediakan angka aslinya. Tidak ada kartu saldo billing.
 

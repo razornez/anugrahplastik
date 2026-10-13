@@ -5,14 +5,17 @@ import { Readable } from "node:stream";
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import sharp from "sharp";
+import { designStorageUsage } from "@/features/operations/design-file-input";
 import { getSession } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/database/client";
 import { auditLogs, productDesignFiles } from "@/lib/database/schema";
 import {
-  isPreviewable,
+  isBrowserPreviewable,
   preparePrivateDestination,
   privateFileExists,
   privateFilePath,
+  removePrivateFile,
+  storageBlockAt,
   thumbnailStorageName,
 } from "@/features/operations/private-storage";
 
@@ -56,9 +59,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
   const { database, file } = await findFile(id);
   if (!database) return NextResponse.json({ message: "Database belum terhubung." }, { status: 503 });
-  if (!file || !isPreviewable(file.format as Parameters<typeof isPreviewable>[0]))
-    return NextResponse.json({ message: "Thumbnail hanya tersedia untuk file STL, OBJ, atau GLB." }, { status: 400 });
+  if (!file || !isBrowserPreviewable(file.format as Parameters<typeof isBrowserPreviewable>[0]))
+    return NextResponse.json(
+      { message: "Thumbnail hanya tersedia untuk file STL, OBJ, GLB, IGES, atau STEP." },
+      { status: 400 },
+    );
   if (file.thumbnailStoragePath) return NextResponse.json({ created: false });
+  let storedPath: string | null = null;
   try {
     const formData = await request.formData();
     const uploaded = formData.get("thumbnail");
@@ -69,14 +76,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       .webp({ quality: 82 })
       .toBuffer();
     if (!normalized.length || normalized.length > thumbnailLimit) throw new Error("Preview gambar terlalu besar.");
-    const storagePath = thumbnailStorageName();
-    const absolutePath = await preparePrivateDestination(storagePath);
+    if ((await designStorageUsage(database)) + normalized.length > storageBlockAt)
+      return NextResponse.json({ message: "Kapasitas file hampir penuh. Preview belum disimpan." }, { status: 507 });
+    storedPath = thumbnailStorageName();
+    const absolutePath = await preparePrivateDestination(storedPath);
     await writeFile(absolutePath, normalized, { flag: "wx", mode: 0o600 });
     const checksum = createHash("sha256").update(normalized).digest("hex");
     const updated = await database
       .update(productDesignFiles)
       .set({
-        thumbnailStoragePath: storagePath,
+        thumbnailStoragePath: storedPath,
         thumbnailChecksum: checksum,
         thumbnailByteSize: normalized.length,
         thumbnailCreatedAt: new Date(),
@@ -84,9 +93,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       .where(and(eq(productDesignFiles.id, id), isNull(productDesignFiles.thumbnailStoragePath)))
       .returning({ id: productDesignFiles.id });
     if (!updated.length) {
-      await import("@/features/operations/private-storage").then(({ removePrivateFile }) =>
-        removePrivateFile(storagePath),
-      );
+      await removePrivateFile(storedPath);
+      storedPath = null;
       return NextResponse.json({ created: false });
     }
     await database.insert(auditLogs).values({
@@ -96,8 +104,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       entityId: id,
       metadata: { byteSize: normalized.length, checksum },
     });
+    storedPath = null;
     return NextResponse.json({ created: true }, { status: 201 });
   } catch (error) {
+    if (storedPath) await removePrivateFile(storedPath).catch(() => undefined);
     return NextResponse.json(
       { message: error instanceof Error ? error.message : "Thumbnail gagal disimpan." },
       { status: 400 },

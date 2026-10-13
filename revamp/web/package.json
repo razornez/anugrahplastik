@@ -7,8 +7,10 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test tests/transaction-flow-integration.test.cjs tests/email-transaction-picker.test.cjs tests/email-upload-origin.test.cjs tests/email-send-concurrency.test.cjs tests/email-workspace.test.cjs tests/transaction-workspace.test.cjs tests/finance-workspace.test.cjs tests/finance-report.test.cjs tests/quote-math.test.cjs tests/quotation-letter.test.cjs tests/quotation-attachments.test.cjs tests/invoice-math.test.cjs tests/invoice-render.test.cjs tests/docgen-policy.test.cjs tests/delivery-note.test.cjs tests/handover-note.test.cjs tests/official-templates.test.cjs tests/email-templates.test.cjs tests/analytics-report-period.test.cjs tests/growth-insights.test.cjs tests/seo-benchmark.test.cjs tests/growth-opportunity-board.test.cjs tests/prospects-demo.test.cjs tests/google-ads-lead-attribution.test.cjs tests/google-ads-report.test.cjs tests/visitor-report.test.cjs tests/business-discovery.test.cjs tests/master-3d-workspace.test.cjs tests/integration-health.test.cjs tests/health-route.test.cjs tests/remote-desktop.test.cjs tests/copy-style.test.cjs tests/landing-featured-product.test.cjs tests/social-metadata.test.cjs",
+    "test": "node --test tests/analytics-display-duration.test.cjs tests/admin-native-ui.test.cjs tests/transaction-flow-integration.test.cjs tests/email-transaction-picker.test.cjs tests/email-upload-origin.test.cjs tests/email-send-concurrency.test.cjs tests/email-workspace.test.cjs tests/transaction-workspace.test.cjs tests/finance-workspace.test.cjs tests/finance-report.test.cjs tests/quote-math.test.cjs tests/quotation-letter.test.cjs tests/quotation-attachments.test.cjs tests/invoice-math.test.cjs tests/invoice-render.test.cjs tests/docgen-policy.test.cjs tests/delivery-note.test.cjs tests/handover-note.test.cjs tests/official-templates.test.cjs tests/email-templates.test.cjs tests/analytics-report-period.test.cjs tests/growth-insights.test.cjs tests/seo-benchmark.test.cjs tests/growth-opportunity-board.test.cjs tests/prospects-demo.test.cjs tests/google-ads-lead-attribution.test.cjs tests/google-ads-report.test.cjs tests/visitor-report.test.cjs tests/business-discovery.test.cjs tests/master-3d-workspace.test.cjs tests/integration-health.test.cjs tests/health-route.test.cjs tests/remote-desktop.test.cjs tests/copy-style.test.cjs tests/landing-featured-product.test.cjs tests/social-metadata.test.cjs",
     "typecheck": "tsc --noEmit",
+    "test:ui": "playwright test",
+    "test:ui:update": "playwright test --update-snapshots",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed:demo": "psql -h 127.0.0.1 -U postgres -d anugrahplastik_revamp -f scripts/seed-demo.sql",
@@ -51,6 +53,7 @@
     "maxmind": "^5.0.7",
     "next": "16.3.7",
     "nodemailer": "^10.0.10",
+    "occt-import-js": "0.0.23",
     "pdf-lib": "^1.17.1",
     "pg": "^8.23.0",
     "react": "19.3.0",
@@ -60,6 +63,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^3.0.0",
     "@types/busboy": "^1.5.4",

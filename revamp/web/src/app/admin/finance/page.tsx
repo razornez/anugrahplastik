@@ -187,7 +187,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
           </div>
         ) : (
           <div className={styles.empty}>
-            <h3>Tambahkan rekening bank terlebih dahulu</h3>
+            <h3>Tambahkan rekening bank</h3>
             <p>Saldo awal dan seluruh catatan keuangan harus selalu masuk ke rekening yang jelas.</p>
           </div>
         )}
@@ -293,7 +293,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
           </div>
         ) : (
           <div className={styles.empty}>
-            <h3>Belum ada catatan pada periode ini</h3>
+            <h3>Belum ada catatan</h3>
             <p>Periksa rentang tanggal atau mulai dengan mencatat saldo awal dan transaksi bank pertama.</p>
           </div>
         )}

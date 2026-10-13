@@ -149,7 +149,7 @@
 .admin-shell .visitor-workspace .visitor-filters select {
   width: 100%;
   min-width: 0;
-  font-size: 14px;
+  font-size: var(--admin-control-font-size, 14px);
   padding-right: 28px;
 }
 .admin-shell .visitor-workspace .visitor-filters button[type="submit"] {

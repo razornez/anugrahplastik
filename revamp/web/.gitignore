@@ -22,7 +22,7 @@
 /build
 /storage/
 /tmp/
-/output/pdf/
+/output/
 
 # misc
 .DS_Store
@@ -45,3 +45,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 dev-server.log
+.next-local-*.log
+.codex-local-*.log

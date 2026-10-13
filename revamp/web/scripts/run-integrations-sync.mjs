@@ -6,6 +6,11 @@
  */
 const baseUrl = (process.env.INTEGRATIONS_SYNC_URL || process.env.APP_ORIGIN || "").replace(/\/$/, "");
 const token = process.env.INTEGRATIONS_CRON_TOKEN || "";
+const service = process.argv.find((argument) => argument.startsWith("--service="))?.slice("--service=".length) || "";
+if (service && service !== "mail" && service !== "ads") {
+  console.error("Integrations sync service must be mail or ads.");
+  process.exit(2);
+}
 if (!/^https:\/\//i.test(baseUrl) || !token) {
   console.error(
     "Integrations sync is not configured: set HTTPS INTEGRATIONS_SYNC_URL (or APP_ORIGIN) and INTEGRATIONS_CRON_TOKEN.",
@@ -16,7 +21,8 @@ if (!/^https:\/\//i.test(baseUrl) || !token) {
 try {
   const response = await fetch(`${baseUrl}/api/integrations/sync`, {
     method: "POST",
-    headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+    headers: { authorization: `Bearer ${token}`, accept: "application/json", "content-type": "application/json" },
+    body: JSON.stringify(service ? { services: [service] } : {}),
     signal: AbortSignal.timeout(45_000),
   });
   const payload = await response.json().catch(() => ({}));

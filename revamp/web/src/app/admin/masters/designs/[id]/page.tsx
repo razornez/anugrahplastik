@@ -1,14 +1,12 @@
 import { AdminPageHeader } from "@/components/admin-page-header";
 import { notFound } from "next/navigation";
-import { DesignModelViewer } from "@/components/design-model-viewer";
+import { DesignModelViewer, type ViewerFormat } from "@/components/design-model-viewer";
+import { DesignFileActions } from "@/components/design-file-manage-dialog";
 import { requireOperationsAccess } from "@/features/operations/access";
-import { getDesignFile } from "@/features/operations/service";
+import { isBrowserPreviewable, type DesignFormat } from "@/features/operations/private-storage";
+import { getDesignFile, getDesignUploadOptions } from "@/features/operations/service";
 
 export const instant = false;
-
-function previewFormat(value: string): value is "stl" | "obj" | "glb" {
-  return value === "stl" || value === "obj" || value === "glb";
-}
 
 function fileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -24,25 +22,51 @@ function relation(file: Awaited<ReturnType<typeof getDesignFile>>) {
 }
 
 export default async function DesignPreviewPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireOperationsAccess();
+  const user = await requireOperationsAccess();
   const { id } = await params;
   const file = await getDesignFile(id);
   if (!file) notFound();
-  const canPreview = previewFormat(file.format);
+  const designOptions = await getDesignUploadOptions();
+  const canPreview = isBrowserPreviewable(file.format as DesignFormat);
   return (
     <section className="operations-page design-preview-page">
       <AdminPageHeader
         title={file.originalName}
         description={`${relation(file)} · ${file.origin === "customer" ? "Referensi customer" : "File internal"}`}
         back={{ href: "/admin/masters/designs", label: "Kembali ke file 3D" }}
+        actions={
+          <DesignFileActions
+            file={{
+              id: file.id,
+              originalName: file.originalName,
+              format: file.format,
+              origin: file.origin,
+              fileKind: file.fileKind,
+              description: file.description,
+              productId: file.productId,
+              mouldId: file.mouldId,
+              customerId: file.customerId,
+              transactionId: file.transactionId,
+              materialId: file.materialId,
+              updatedAt: file.updatedAt.toISOString(),
+            }}
+            options={designOptions}
+            canDelete={user.role === "admin"}
+            redirectAfterDelete
+          />
+        }
       />
       <div className="design-preview-layout">
         <div className="design-preview-layout__viewer">
           {canPreview ? (
             <DesignModelViewer
               fileId={file.id}
-              format={file.format as "stl" | "obj" | "glb"}
+              format={file.format as ViewerFormat}
               hasThumbnail={Boolean(file.thumbnailStoragePath)}
+              sourceChecksum={file.checksum}
+              derivedPreviewAvailable={Boolean(
+                file.derivedPreviewStoragePath && file.derivedPreviewSourceChecksum === file.checksum,
+              )}
             />
           ) : (
             <section className="design-cad-placeholder">

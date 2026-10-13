@@ -153,7 +153,7 @@ export const INTEGRATION_HEALTH_STALE_HOURS = {
   googleAds: 36,
 } as const;
 
-export function getSchedulerHealth(lastScheduledRunAt: Date | null, now = new Date()) {
+export function getSchedulerHealth(lastScheduledRunAt: Date | null, now = new Date(), staleAfterMinutes = 15) {
   if (!lastScheduledRunAt)
     return {
       level: "needs-test" as const,
@@ -161,15 +161,15 @@ export function getSchedulerHealth(lastScheduledRunAt: Date | null, now = new Da
       summary: "Scheduler VPS belum pernah melaporkan eksekusi.",
     };
   const ageMs = now.getTime() - lastScheduledRunAt.getTime();
-  if (ageMs > 15 * 60 * 1000)
+  if (ageMs > staleAfterMinutes * 60 * 1000)
     return {
       level: "attention" as const,
       label: "Heartbeat terlambat",
-      summary: "Tidak ada eksekusi scheduler dalam 15 menit terakhir.",
+      summary: `Tidak ada eksekusi scheduler dalam ${staleAfterMinutes} menit terakhir.`,
     };
   return {
     level: "healthy" as const,
     label: "Aktif",
-    summary: "Scheduler terakhir melapor dalam 15 menit terakhir.",
+    summary: `Scheduler terakhir melapor dalam ${staleAfterMinutes} menit terakhir.`,
   };
 }

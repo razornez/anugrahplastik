@@ -295,6 +295,13 @@
       "when": 1791793624389,
       "tag": "0041_tiny_menace",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1791860715884,
+      "tag": "0042_cuddly_wiccan",
+      "breakpoints": true
     }
   ]
 }

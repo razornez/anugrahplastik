@@ -8,10 +8,18 @@ function canManage(role?: string) {
   return role === "admin" || role === "content";
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getSession();
   if (!canManage(user?.role)) return NextResponse.json({ error: "Tidak diizinkan." }, { status: 403 });
-  return NextResponse.json(await listLandingMedia());
+  const url = new URL(request.url);
+  const parsedLimit = Number(url.searchParams.get("limit") ?? "24");
+  return NextResponse.json(
+    await listLandingMedia({
+      q: url.searchParams.get("q") ?? "",
+      cursor: url.searchParams.get("cursor") ?? undefined,
+      limit: Number.isFinite(parsedLimit) ? parsedLimit : 24,
+    }),
+  );
 }
 
 export async function POST(request: Request) {

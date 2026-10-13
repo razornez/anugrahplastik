@@ -452,7 +452,7 @@ export default async function InsightsPage({
                 <path d="M7 4h10v16H7zM10 8h4m-4 4h4m-4 4h2" />
               </svg>
               <div>
-                <h3>Baca aktivitas sebuah kunjungan</h3>
+                <h3>Detail kunjungan</h3>
                 <p>Pilih baris di daftar untuk melihat urutan klik dan bagian website yang dibuka.</p>
                 {query.session ? <p>Kunjungan yang diminta tidak tersedia pada sumber data atau filter ini.</p> : null}
               </div>

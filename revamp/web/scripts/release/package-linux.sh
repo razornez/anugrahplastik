@@ -50,6 +50,10 @@ install -D -m 0644 "$project_root/ops/systemd/anugrahplastik-web.service" "$rele
 install -D -m 0644 "$project_root/ops/systemd/anugrahplastik-analytics.service" "$release_root/ops/systemd/anugrahplastik-analytics.service"
 install -D -m 0644 "$project_root/ops/systemd/anugrahplastik-integrations.service" "$release_root/ops/systemd/anugrahplastik-integrations.service"
 install -D -m 0644 "$project_root/ops/systemd/anugrahplastik-integrations.timer" "$release_root/ops/systemd/anugrahplastik-integrations.timer"
+install -D -m 0644 "$project_root/ops/systemd/anugrahplastik-integrations-mail.service" "$release_root/ops/systemd/anugrahplastik-integrations-mail.service"
+install -D -m 0644 "$project_root/ops/systemd/anugrahplastik-integrations-mail.timer" "$release_root/ops/systemd/anugrahplastik-integrations-mail.timer"
+install -D -m 0644 "$project_root/ops/systemd/anugrahplastik-integrations-ads.service" "$release_root/ops/systemd/anugrahplastik-integrations-ads.service"
+install -D -m 0644 "$project_root/ops/systemd/anugrahplastik-integrations-ads.timer" "$release_root/ops/systemd/anugrahplastik-integrations-ads.timer"
 install -D -m 0644 "$project_root/ops/nginx/anugrahplastik.conf.template" "$release_root/ops/nginx/anugrahplastik.conf.template"
 install -D -m 0755 "$project_root/scripts/release/audit-vps.sh" "$release_root/ops/audit-vps.sh"
 

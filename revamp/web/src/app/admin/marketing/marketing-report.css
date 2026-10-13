@@ -143,7 +143,7 @@
   color: inherit;
   background: transparent;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--admin-control-font-size, 14px);
   font-weight: 600;
   cursor: pointer;
 }
@@ -476,7 +476,7 @@
 
 @media (min-width: 981px) and (max-width: 1200px) {
   .admin-shell .marketing-page .ads-performance .ads-performance__tile select {
-    font-size: 12px;
+    font-size: var(--admin-control-font-size, 12px);
     padding-right: 12px;
   }
 }
@@ -571,7 +571,7 @@
   }
 
   .admin-shell .marketing-page .ads-performance .ads-performance__tile select {
-    font-size: 12px;
+    font-size: var(--admin-control-font-size, 12px);
     padding-right: 12px;
   }
 

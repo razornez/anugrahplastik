@@ -221,10 +221,11 @@
   display: grid;
   align-content: start;
   gap: 16px;
-  border: 1px solid var(--admin-line);
-  border-radius: 15px;
-  background: var(--admin-surface-soft);
-  padding: 19px;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 }
 .setupCardHead {
   display: flex;
@@ -247,10 +248,15 @@
   grid-template-columns: 25px 32px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
-  border: 1px solid color-mix(in srgb, var(--admin-line) 75%, transparent);
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--admin-surface) 74%, transparent);
-  padding: 11px;
+  min-height: 70px;
+  border: 0;
+  border-top: 1px solid var(--admin-line);
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 0;
+}
+.setupStep:first-child {
+  border-top: 0;
 }
 .stepNumber {
   display: grid;
@@ -308,6 +314,9 @@
   overflow-wrap: anywhere;
 }
 .setupStep a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
   color: var(--admin-blue);
   font-weight: 700;
   text-decoration-thickness: 1px;
@@ -496,12 +505,12 @@
     height: 44px;
   }
   .setupCard {
-    padding: 15px;
+    padding: 0;
   }
   .setupStep {
     grid-template-columns: 24px 30px minmax(0, 1fr);
     gap: 8px;
-    padding: 10px;
+    padding: 12px 0;
   }
   .stepNumber {
     width: 24px;

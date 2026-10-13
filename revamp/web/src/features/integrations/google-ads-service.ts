@@ -201,11 +201,18 @@ export async function probeGoogleAdsReporting() {
       "SELECT customer.id, customer.descriptive_name, customer.time_zone FROM customer LIMIT 1",
     );
     const customer = extractProbeCustomer(stream);
+    const expectedCustomerId = googleAdsCustomerId();
+    if (!expectedCustomerId || customer.id.replaceAll("-", "") !== expectedCustomerId)
+      throw new GoogleAdsServiceError(
+        "customer_access",
+        "Akun Google Ads yang merespons tidak sama dengan Customer ID laporan yang dikonfigurasi.",
+      );
+    const checkedAt = new Date().toISOString();
     await database
       .update(integrations)
       .set({
         lastError: null,
-        metadata: sql`jsonb_set(jsonb_set(jsonb_set(jsonb_set(coalesce(${integrations.metadata}, '{}'::jsonb), '{lastProbeAt}', to_jsonb(${new Date().toISOString()}::text), true), '{lastProbeCode}', '"success"'::jsonb, true), '{adsAccountTimeZone}', to_jsonb(${customer.timeZone}::text), true), '{adsAccountName}', to_jsonb(${customer.name}::text), true) - 'lastErrorCode'`,
+        metadata: sql`jsonb_set(jsonb_set(jsonb_set(jsonb_set(jsonb_set(coalesce(${integrations.metadata}, '{}'::jsonb), '{lastProbeAt}', to_jsonb(${checkedAt}::text), true), '{lastSuccessfulProbeAt}', to_jsonb(${checkedAt}::text), true), '{lastProbeCode}', '"success"'::jsonb, true), '{adsAccountTimeZone}', to_jsonb(${customer.timeZone}::text), true), '{adsAccountName}', to_jsonb(${customer.name}::text), true) - 'lastErrorCode'`,
       })
       .where(and(eq(integrations.key, "google-ads"), isNotNull(integrations.secretCiphertext)));
     return customer;
@@ -251,6 +258,18 @@ export function isFreshGoogleAdsProbe(metadata: Record<string, unknown>, now = n
   if (metadata.lastProbeCode !== "success" || typeof metadata.lastProbeAt !== "string") return false;
   const timestamp = Date.parse(metadata.lastProbeAt);
   return Number.isFinite(timestamp) && now.getTime() - timestamp <= 36 * 60 * 60_000;
+}
+
+/**
+ * Automatic re-probes are allowed only after an administrator has completed
+ * the initial account verification. Older successful records are recognised
+ * by the account identity written by previous releases.
+ */
+export function hasVerifiedGoogleAdsAccount(metadata: Record<string, unknown>) {
+  return (
+    typeof metadata.lastSuccessfulProbeAt === "string" ||
+    (typeof metadata.adsAccountName === "string" && typeof metadata.adsAccountTimeZone === "string")
+  );
 }
 
 export async function syncGoogleAdsReport(days = 30, timeZone = "Asia/Jakarta") {
@@ -348,7 +367,8 @@ export async function syncGoogleAdsOncePerJakartaDay(now = new Date()) {
     .where(eq(integrations.key, "google-ads"))
     .limit(1);
   const previousMetadata = (previous?.metadata ?? {}) as Record<string, unknown>;
-  if (!isFreshGoogleAdsProbe(previousMetadata, now)) {
+  const probeIsFresh = isFreshGoogleAdsProbe(previousMetadata, now);
+  if (!probeIsFresh && !hasVerifiedGoogleAdsAccount(previousMetadata)) {
     const message = safeGoogleAdsErrorMessage("probe_required");
     await updateGoogleAdsFailure("probe_required", message);
     return "probe-required" as const;
@@ -382,8 +402,12 @@ export async function syncGoogleAdsOncePerJakartaDay(now = new Date()) {
     return "not-due" as const;
   }
   try {
-    const accountTimeZone =
+    let accountTimeZone =
       typeof previousMetadata.adsAccountTimeZone === "string" ? previousMetadata.adsAccountTimeZone : "Asia/Jakarta";
+    if (!probeIsFresh) {
+      const customer = await probeGoogleAdsReporting();
+      accountTimeZone = customer.timeZone;
+    }
     const { from, to } = completeAdsRange(30, now, accountTimeZone);
     const rows = await syncGoogleAdsReportRange(from, to, accountTimeZone);
     await database

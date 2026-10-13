@@ -33,7 +33,7 @@ export function AnalyticsTrendChart({ points }: { points: TrendPoint[] }) {
       <figcaption>
         <div>
           <p className="eyebrow">Kunjungan website</p>
-          <h2 id="traffic-chart-title">Kunjungan dan permintaan masuk</h2>
+          <h2 id="traffic-chart-title">Kunjungan dan permintaan</h2>
         </div>
       </figcaption>
       {!hasData ? (

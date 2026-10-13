@@ -21,6 +21,14 @@ export function isPreviewable(format: DesignFormat) {
   return format === "stl" || format === "obj" || format === "glb";
 }
 
+export function isCadPreviewable(format: DesignFormat) {
+  return format === "step" || format === "stp" || format === "iges" || format === "igs";
+}
+
+export function isBrowserPreviewable(format: DesignFormat) {
+  return isPreviewable(format) || isCadPreviewable(format);
+}
+
 export function storageRoot() {
   const configured = process.env.PRIVATE_STORAGE_PATH;
   return configured
@@ -63,6 +71,16 @@ export function thumbnailStorageName() {
     String(now.getUTCFullYear()),
     String(now.getUTCMonth() + 1).padStart(2, "0"),
     `${randomUUID()}.webp`,
+  );
+}
+
+export function derivedPreviewStorageName() {
+  const now = new Date();
+  return join(
+    "design-previews",
+    String(now.getUTCFullYear()),
+    String(now.getUTCMonth() + 1).padStart(2, "0"),
+    `${randomUUID()}.glb`,
   );
 }
 

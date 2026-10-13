@@ -6,6 +6,7 @@ import { MasterRecordDialog } from "@/components/master-record-dialog";
 import { DesignListThumbnail } from "@/components/design-list-thumbnail";
 import { DesignDirectoryToolbar } from "@/components/design-directory-toolbar";
 import { DesignUploadForm } from "@/components/design-upload-form";
+import { DesignFileActions } from "@/components/design-file-manage-dialog";
 import {
   createCustomer,
   createMaterial,
@@ -138,10 +139,10 @@ export default async function MasterDirectoryPage({
   params: Promise<{ kind: string }>;
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const user = await getSession();
-  if (!user || user.role !== "admin") redirect("/admin");
   const { kind: rawKind } = await params;
   if (!isKind(rawKind)) notFound();
+  const user = await getSession();
+  if (!user || (user.role !== "admin" && !(user.role === "sales" && rawKind === "designs"))) redirect("/admin");
   const query = await searchParams;
   const filters: DirectoryQuery = {
     query: query.q,
@@ -245,7 +246,27 @@ export default async function MasterDirectoryPage({
                   <em className={`directory-status directory-status--${row.status}`}>
                     {row.status === "active" ? "Aktif" : row.status}
                   </em>
-                  <Link href={`/admin/masters/designs/${row.id}`}>Detail</Link>
+                  {designOptions && row.updatedAt ? (
+                    <DesignFileActions
+                      file={{
+                        id: row.id,
+                        originalName: row.title,
+                        format: row.format ?? row.code.toLowerCase(),
+                        origin: row.origin ?? row.status,
+                        fileKind: row.fileKind ?? "source",
+                        description: row.description ?? null,
+                        productId: row.productId ?? null,
+                        mouldId: row.mouldId ?? null,
+                        customerId: row.customerId ?? null,
+                        transactionId: row.transactionId ?? null,
+                        materialId: row.materialId ?? null,
+                        updatedAt: row.updatedAt.toISOString(),
+                      }}
+                      options={designOptions}
+                      canDelete={user.role === "admin"}
+                      detailHref={`/admin/masters/designs/${row.id}`}
+                    />
+                  ) : null}
                 </div>
               ) : (
                 <>

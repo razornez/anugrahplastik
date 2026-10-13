@@ -1,7 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { useEffect, useMemo, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
+import { useFormStatus } from "react-dom";
 import type { LandingContent } from "@/features/content/landing-content";
 
 type SectionId =
@@ -336,6 +338,23 @@ const sections: SectionDefinition[] = [
 ];
 
 type Revision = { id: string; version: number; action: string; createdAt: Date; actorName: string | null };
+
+function LandingSubmitButton({
+  children,
+  disabled,
+  pendingLabel = "Menyimpan…",
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode; pendingLabel?: string }) {
+  const { pending } = useFormStatus();
+
+  return (
+    <button {...props} aria-busy={pending} disabled={disabled || pending}>
+      {pending ? <span className="admin-spinner" aria-hidden="true" /> : null}
+      <span>{pending ? pendingLabel : children}</span>
+    </button>
+  );
+}
+
 type Props = {
   action: (formData: FormData) => void | Promise<void>;
   restoreAction: (revisionId: string, formData: FormData) => void | Promise<void>;
@@ -573,9 +592,9 @@ export function LandingContentEditor({
           <a href="/preview/landing" rel="noreferrer" target="_blank">
             Buka landing penuh ↗
           </a>
-          <button disabled={!canEdit || !hasLocalChanges} name="action" type="submit" value="draft">
+          <LandingSubmitButton disabled={!canEdit || !hasLocalChanges} name="action" type="submit" value="draft">
             Simpan rancangan
-          </button>
+          </LandingSubmitButton>
           <button
             disabled={!canEdit || !hasLocalChanges}
             onClick={(event) => {
@@ -600,9 +619,13 @@ export function LandingContentEditor({
                 </span>
                 <small>{revision.actorName ?? "Pengguna"}</small>
                 {canEdit ? (
-                  <button formAction={restoreAction.bind(null, revision.id)} type="submit">
+                  <LandingSubmitButton
+                    formAction={restoreAction.bind(null, revision.id)}
+                    pendingLabel="Memulihkan…"
+                    type="submit"
+                  >
                     Pulihkan & terbitkan
-                  </button>
+                  </LandingSubmitButton>
                 ) : null}
               </div>
             ))
@@ -618,9 +641,9 @@ export function LandingContentEditor({
       </aside>
       <div className="landing-editor__mobile-save" aria-live="polite">
         <span>{hasLocalChanges ? "Perubahan belum disimpan" : "Semua perubahan tersimpan"}</span>
-        <button disabled={!canEdit || !hasLocalChanges} name="action" type="submit" value="draft">
+        <LandingSubmitButton disabled={!canEdit || !hasLocalChanges} name="action" type="submit" value="draft">
           Simpan
-        </button>
+        </LandingSubmitButton>
       </div>
       {publishOpen ? (
         <div className="landing-editor__confirm" role="dialog" aria-modal="true" aria-labelledby="publish-title">
@@ -632,9 +655,9 @@ export function LandingContentEditor({
               <button onClick={() => setPublishOpen(false)} type="button">
                 Kembali
               </button>
-              <button name="action" type="submit" value="publish">
+              <LandingSubmitButton name="action" pendingLabel="Menerbitkan…" type="submit" value="publish">
                 Terbitkan sekarang
-              </button>
+              </LandingSubmitButton>
             </span>
           </div>
         </div>
@@ -1213,21 +1236,40 @@ function LandingMediaPicker({
 }) {
   const [assets, setAssets] = useState<LandingMediaAsset[]>([]);
   const [used, setUsed] = useState(0);
+  const [quota, setQuota] = useState(500 * 1024 * 1024);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [message, setMessage] = useState("");
-  useEffect(() => {
-    let mounted = true;
-    void fetch("/api/admin/landing-media", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { assets: LandingMediaAsset[]; used: number } | null) => {
-        if (!mounted || !payload) return;
-        setAssets(payload.assets);
-        setUsed(payload.used);
-      })
-      .catch(() => undefined);
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const loadAssets = async ({ append = false, next = "" }: { append?: boolean; next?: string } = {}) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: "24" });
+      if (query.trim()) params.set("q", query.trim());
+      if (next) params.set("cursor", next);
+      const response = await fetch(`/api/admin/landing-media?${params}`, { cache: "no-store" });
+      const payload = (await response.json()) as {
+        assets?: LandingMediaAsset[];
+        nextCursor?: string | null;
+        used?: number;
+        quota?: number;
+        error?: string;
+      };
+      if (!response.ok || !payload.assets) throw new Error(payload.error ?? "Pustaka media belum dapat dimuat.");
+      setAssets((current) => (append ? [...current, ...payload.assets!] : payload.assets!));
+      setCursor(payload.nextCursor ?? null);
+      setUsed(payload.used ?? 0);
+      setQuota(payload.quota ?? 500 * 1024 * 1024);
+      setMessage("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Pustaka media belum dapat dimuat.");
+    } finally {
+      setLoading(false);
+    }
+  };
   const upload = async (file: File | undefined) => {
     if (!file) return;
     if (!altText.trim()) {
@@ -1237,17 +1279,38 @@ function LandingMediaPicker({
     const formData = new FormData();
     formData.set("file", file);
     formData.set("altText", altText);
-    setMessage("Mengoptimalkan gambar...");
-    const response = await fetch("/api/admin/landing-media", { method: "POST", body: formData });
-    const payload = (await response.json()) as { asset?: LandingMediaAsset; error?: string };
-    if (!response.ok || !payload.asset) {
-      setMessage(payload.error ?? "Gambar belum dapat diunggah.");
-      return;
+    setUploading(true);
+    setUploadProgress(0);
+    setMessage("Mengunggah dan mengoptimalkan gambar…");
+    try {
+      const payload = await new Promise<{ asset?: LandingMediaAsset; error?: string }>((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open("POST", "/api/admin/landing-media");
+        request.responseType = "json";
+        request.upload.addEventListener("progress", (event) => {
+          if (event.lengthComputable) setUploadProgress(Math.round((event.loaded / event.total) * 100));
+        });
+        request.addEventListener("load", () => {
+          const body = request.response as { asset?: LandingMediaAsset; error?: string } | null;
+          if (request.status < 200 || request.status >= 300)
+            reject(new Error(body?.error ?? "Gambar belum dapat diunggah."));
+          else resolve(body ?? {});
+        });
+        request.addEventListener("error", () => reject(new Error("Koneksi terputus. Silakan coba unggah kembali.")));
+        request.addEventListener("abort", () => reject(new Error("Upload dibatalkan.")));
+        request.send(formData);
+      });
+      if (!payload.asset) throw new Error(payload.error ?? "Gambar belum dapat diunggah.");
+      onChange(payload.asset.url);
+      setAssets((current) => [payload.asset!, ...current.filter((asset) => asset.id !== payload.asset!.id)]);
+      setUsed((current) => current + payload.asset!.byteSize);
+      setMessage("Gambar siap digunakan.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Gambar belum dapat diunggah.");
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
     }
-    onChange(payload.asset.url);
-    setAssets((current) => [...current, payload.asset!]);
-    setUsed((current) => current + payload.asset!.byteSize);
-    setMessage("Gambar siap digunakan.");
   };
   const preview = value.startsWith("/api/media/")
     ? `${value.replace("/api/media/", "/api/admin/landing-media/")}?size=small`
@@ -1263,34 +1326,138 @@ function LandingMediaPicker({
           // eslint-disable-next-line @next/next/no-img-element
           <img alt={altText || "Pratinjau gambar"} src={preview} />
         ) : null}
-        <label>
-          Unggah JPEG, PNG, atau WebP
-          <input
-            accept="image/jpeg,image/png,image/webp"
-            disabled={disabled}
-            onChange={(event) => void upload(event.target.files?.[0])}
-            type="file"
-          />
-        </label>
-      </div>
-      <p>{message || `Pustaka memakai ${(used / 1024 / 1024).toFixed(1)} MB dari 500 MB.`}</p>
-      {assets.length ? (
-        <div className="landing-media-picker__assets" aria-label="Pilih gambar dari pustaka">
-          {assets.map((asset) => (
-            <button
-              aria-pressed={asset.url === value}
-              disabled={disabled}
-              key={asset.id}
-              onClick={() => onChange(asset.url)}
-              type="button"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img alt={asset.altText} src={`/api/admin/landing-media/${asset.id}?size=small`} />
-            </button>
-          ))}
+        <div className="landing-media-picker__actions">
+          <label className="landing-media-picker__upload">
+            {uploading ? `Mengunggah ${uploadProgress || ""}${uploadProgress ? "%" : "…"}` : "Unggah gambar"}
+            <input
+              accept="image/jpeg,image/png,image/webp"
+              className="admin-sr-only"
+              disabled={disabled || uploading}
+              onChange={(event) => void upload(event.target.files?.[0])}
+              type="file"
+            />
+          </label>
+          <Dialog.Root onOpenChange={setOpen} open={open}>
+            <Dialog.Trigger asChild>
+              <button
+                disabled={disabled || uploading}
+                onClick={() => {
+                  if (!assets.length) void loadAssets();
+                }}
+                type="button"
+              >
+                Pilih dari pustaka
+              </button>
+            </Dialog.Trigger>
+            <Dialog.Portal>
+              <Dialog.Overlay className="landing-media-dialog__overlay" />
+              <Dialog.Content className="landing-media-dialog">
+                <span className="landing-media-dialog__handle" aria-hidden="true" />
+                <header>
+                  <span>
+                    <Dialog.Title>Pustaka media</Dialog.Title>
+                    <Dialog.Description>Pilih gambar yang sudah ada atau cari berdasarkan alt text.</Dialog.Description>
+                  </span>
+                  <Dialog.Close aria-label="Tutup pustaka media">×</Dialog.Close>
+                </header>
+                <form
+                  className="landing-media-dialog__search"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void loadAssets();
+                  }}
+                >
+                  <label htmlFor="landing-media-search">Cari gambar</label>
+                  <span>
+                    <input
+                      id="landing-media-search"
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder="Contoh: spacer atau logo"
+                      value={query}
+                    />
+                    <button disabled={loading} type="submit">
+                      {loading ? "Mencari…" : "Cari"}
+                    </button>
+                  </span>
+                </form>
+                <p className="landing-media-dialog__quota">
+                  Pustaka memakai {(used / 1024 / 1024).toFixed(1)} MB dari {(quota / 1024 / 1024).toFixed(0)} MB.
+                </p>
+                {message && !uploading ? (
+                  <p className="landing-media-dialog__message" role="status">
+                    {message}
+                  </p>
+                ) : null}
+                {loading && !assets.length ? (
+                  <div className="landing-media-dialog__loading" aria-label="Memuat media">
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                ) : null}
+                {assets.length ? (
+                  <div className="landing-media-picker__assets" aria-label="Pilih gambar dari pustaka">
+                    {assets.map((asset) => (
+                      <button
+                        aria-label={`Pilih ${asset.altText}`}
+                        aria-pressed={asset.url === value}
+                        disabled={disabled}
+                        key={asset.id}
+                        onClick={() => {
+                          onChange(asset.url);
+                          setOpen(false);
+                        }}
+                        type="button"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img alt="" src={`/api/admin/landing-media/${asset.id}?size=small`} />
+                        <span>{asset.altText}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : !loading ? (
+                  <p className="landing-media-dialog__empty">Belum ada gambar yang cocok.</p>
+                ) : null}
+                {cursor ? (
+                  <button
+                    className="landing-media-dialog__more"
+                    disabled={loading}
+                    onClick={() => void loadAssets({ append: true, next: cursor })}
+                    type="button"
+                  >
+                    {loading ? "Memuat…" : "Muat gambar berikutnya"}
+                  </button>
+                ) : null}
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
         </div>
-      ) : null}
+      </div>
+      <p aria-live="polite" data-state={message.includes("belum") || message.includes("terputus") ? "error" : "status"}>
+        {message || "Gambar dapat diganti tanpa mengubah susunan landing."}
+      </p>
     </div>
+  );
+}
+
+function LandingEditorItem({ title, meta, children }: { title: string; meta?: string; children: React.ReactNode }) {
+  return (
+    <details className="landing-editor__repeat landing-editor__item">
+      <summary>
+        <span>
+          <strong>{title}</strong>
+          {meta ? <small>{meta}</small> : null}
+        </span>
+        <span className="landing-editor__item-action">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="m4 16-.8 4.8L8 20l11-11-4-4L4 16Zm9.5-9.5 4 4" />
+          </svg>
+          Edit
+        </span>
+      </summary>
+      <div className="landing-editor__item-fields">{children}</div>
+    </details>
   );
 }
 
@@ -1312,7 +1479,11 @@ function LandingVisualFields({
         <fieldset>
           <legend>Pertanyaan dan jawaban</legend>
           {content.faq.items.map((item, index) => (
-            <div className="landing-editor__repeat" key={`faq-${index}`}>
+            <LandingEditorItem
+              key={`faq-${index}`}
+              meta={`Pertanyaan ${index + 1}`}
+              title={item.question || "Pertanyaan baru"}
+            >
               <input
                 aria-label={`Pertanyaan ${index + 1}`}
                 disabled={disabled}
@@ -1357,7 +1528,7 @@ function LandingVisualFields({
               >
                 Hapus pertanyaan
               </button>
-            </div>
+            </LandingEditorItem>
           ))}
           <button
             disabled={disabled || content.faq.items.length >= 8}
@@ -1448,7 +1619,11 @@ function LandingVisualFields({
         <fieldset>
           <legend>Kartu material</legend>
           {content.material.items.map((item, index) => (
-            <div className="landing-editor__repeat" key={`material-${index}`}>
+            <LandingEditorItem
+              key={`material-${index}`}
+              meta={item.code || `Material ${index + 1}`}
+              title={item.name || "Material baru"}
+            >
               <input
                 aria-label={`Kode material ${index + 1}`}
                 disabled={disabled}
@@ -1529,7 +1704,7 @@ function LandingVisualFields({
                 onClick={() =>
                   set({
                     ...content,
-                    portfolio: { ...content.portfolio, items: moveItem(content.portfolio.items, index, -1) },
+                    material: { ...content.material, items: moveItem(content.material.items, index, -1) },
                   })
                 }
                 type="button"
@@ -1537,11 +1712,11 @@ function LandingVisualFields({
                 Geser ke atas
               </button>
               <button
-                disabled={disabled || index === content.portfolio.items.length - 1}
+                disabled={disabled || index === content.material.items.length - 1}
                 onClick={() =>
                   set({
                     ...content,
-                    portfolio: { ...content.portfolio, items: moveItem(content.portfolio.items, index, 1) },
+                    material: { ...content.material, items: moveItem(content.material.items, index, 1) },
                   })
                 }
                 type="button"
@@ -1563,7 +1738,7 @@ function LandingVisualFields({
               >
                 Hapus material
               </button>
-            </div>
+            </LandingEditorItem>
           ))}
           <button
             disabled={disabled || content.material.items.length >= 12}
@@ -1634,7 +1809,11 @@ function LandingVisualFields({
         <fieldset>
           <legend>Produk dan hasil produksi</legend>
           {content.portfolio.items.map((item, index) => (
-            <div className="landing-editor__repeat" key={`portfolio-${item.id}`}>
+            <LandingEditorItem
+              key={`portfolio-${item.id}`}
+              meta={`${item.isPublished ? "Tampil" : "Disembunyikan"}${item.isHot ? " · Produk unggulan" : ""}`}
+              title={item.title || `Produk ${index + 1}`}
+            >
               <input
                 aria-label={`ID portfolio ${index + 1}`}
                 disabled={disabled}
@@ -1789,7 +1968,7 @@ function LandingVisualFields({
               >
                 Hapus produk
               </button>
-            </div>
+            </LandingEditorItem>
           ))}
           <button
             disabled={disabled || content.portfolio.items.length >= 60}
@@ -1828,7 +2007,11 @@ function LandingVisualFields({
         <fieldset>
           <legend>Logo klien dan mitra</legend>
           {content.trust.partners.map((item, index) => (
-            <div className="landing-editor__repeat" key={`partner-${index}`}>
+            <LandingEditorItem
+              key={`partner-${index}`}
+              meta={item.isFeatured ? "Mitra unggulan" : `Mitra ${index + 1}`}
+              title={item.name || "Mitra baru"}
+            >
               <input
                 aria-label={`Nama mitra ${index + 1}`}
                 disabled={disabled}
@@ -1922,7 +2105,7 @@ function LandingVisualFields({
               >
                 Hapus mitra
               </button>
-            </div>
+            </LandingEditorItem>
           ))}
           <button
             disabled={disabled || content.trust.partners.length >= 24}

@@ -1,6 +1,20 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { runIntegrationSync } from "@/features/integrations/sync-runner";
+import { runIntegrationSync, type SyncService } from "@/features/integrations/sync-runner";
+
+function requestedServices(payload: unknown): SyncService[] | null {
+  if (
+    payload === null ||
+    payload === undefined ||
+    (typeof payload === "object" && !Array.isArray(payload) && !("services" in payload))
+  )
+    return ["mail", "ads"];
+  if (!payload || typeof payload !== "object" || Array.isArray(payload) || !("services" in payload)) return null;
+  const services = (payload as { services?: unknown }).services;
+  if (!Array.isArray(services) || services.length < 1 || services.length > 2) return null;
+  const unique = [...new Set(services)];
+  return unique.every((service): service is SyncService => service === "mail" || service === "ads") ? unique : null;
+}
 
 export async function POST(request: Request) {
   const expected = process.env.INTEGRATIONS_CRON_TOKEN;
@@ -11,7 +25,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
   }
   try {
-    const result = await runIntegrationSync({ trigger: "scheduled" });
+    const body = await request.json().catch(() => null);
+    const services = requestedServices(body);
+    if (!services)
+      return NextResponse.json(
+        { ok: false, error: "Invalid services" },
+        { status: 400, headers: { "Cache-Control": "no-store" } },
+      );
+    const result = await runIntegrationSync({ trigger: "scheduled", services });
     const failed = result.status === "failed";
     return NextResponse.json(
       {

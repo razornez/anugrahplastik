@@ -148,6 +148,7 @@ export function AdminSidebar({ name, role, onLogout, initialTheme }: AdminSideba
     ...(role === "admin" || role === "sales" ? [{ href: "/admin/email", label: "Email CS", icon: <MailIcon /> }] : []),
     { href: "/admin/content", label: "Konten landing", icon: <ContentIcon /> },
     ...(role === "admin" ? [{ href: "/admin/masters", label: "Data master", icon: <MasterIcon /> }] : []),
+    ...(role === "sales" ? [{ href: "/admin/masters/designs", label: "File 3D", icon: <MasterIcon /> }] : []),
     ...(role === "admin"
       ? [{ href: "/admin/settings/integrations", label: "Koneksi layanan", icon: <SettingsIcon /> }]
       : []),

@@ -44,16 +44,46 @@ function publicRecord(record: typeof mediaAssets.$inferSelect): LandingMedia | n
   };
 }
 
-export async function listLandingMedia() {
+export type LandingMediaQuery = { q?: string; cursor?: string; limit?: number };
+
+function decodeCursor(value?: string) {
+  if (!value) return 0;
+  try {
+    const parsed = Number(Buffer.from(value, "base64url").toString("utf8"));
+    return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function listLandingMedia(query: LandingMediaQuery = {}) {
   const database = getDatabase();
-  if (!database) return { assets: [] as LandingMedia[], used: 0, quota: LANDING_MEDIA_QUOTA };
+  if (!database)
+    return { assets: [] as LandingMedia[], nextCursor: null as string | null, used: 0, quota: LANDING_MEDIA_QUOTA };
   const records = await database
     .select()
     .from(mediaAssets)
     .where(eq(mediaAssets.scope, "landing"))
     .orderBy(asc(mediaAssets.createdAt));
-  const assets = records.map(publicRecord).filter((asset): asset is LandingMedia => Boolean(asset));
-  return { assets, used: assets.reduce((total, asset) => total + asset.byteSize, 0), quota: LANDING_MEDIA_QUOTA };
+  const allAssets = records.map(publicRecord).filter((asset): asset is LandingMedia => Boolean(asset));
+  const normalizedQuery = query.q?.trim().toLocaleLowerCase("id-ID") ?? "";
+  const filtered = normalizedQuery
+    ? allAssets.filter((asset) =>
+        [asset.altText, asset.caption, asset.id].some((value) =>
+          value?.toLocaleLowerCase("id-ID").includes(normalizedQuery),
+        ),
+      )
+    : allAssets;
+  const limit = Math.min(48, Math.max(1, Math.trunc(query.limit ?? 24)));
+  const offset = Math.min(decodeCursor(query.cursor), filtered.length);
+  const assets = filtered.slice(offset, offset + limit);
+  const nextOffset = offset + assets.length;
+  return {
+    assets,
+    nextCursor: nextOffset < filtered.length ? Buffer.from(String(nextOffset)).toString("base64url") : null,
+    used: allAssets.reduce((total, asset) => total + asset.byteSize, 0),
+    quota: LANDING_MEDIA_QUOTA,
+  };
 }
 
 export async function uploadLandingMedia(file: File, altText: string, caption: string | null, actorId: string) {

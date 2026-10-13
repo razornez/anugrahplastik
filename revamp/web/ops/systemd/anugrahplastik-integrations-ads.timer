@@ -1,0 +1,10 @@
+[Unit]
+Description=Check Anugrah Plastik Google Ads reporting sync every fifteen minutes
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+Unit=anugrahplastik-integrations-ads.service
+
+[Install]
+WantedBy=timers.target

@@ -45,6 +45,16 @@ export type DirectoryRow = {
   description?: string | null;
   materialName?: string | null;
   thumbnailStoragePath?: string | null;
+  origin?: string;
+  fileKind?: string;
+  format?: string;
+  version?: number;
+  updatedAt?: Date;
+  productId?: string | null;
+  mouldId?: string | null;
+  customerId?: string | null;
+  transactionId?: string | null;
+  materialId?: string | null;
 };
 
 function money(value: string | number | null) {
@@ -246,6 +256,16 @@ export async function getMasterDirectoryPage(kind: MasterKind, query: DirectoryQ
         materialName: materials.name,
         thumbnailStoragePath: productDesignFiles.thumbnailStoragePath,
         status: productDesignFiles.origin,
+        origin: productDesignFiles.origin,
+        fileKind: productDesignFiles.fileKind,
+        format: productDesignFiles.format,
+        version: productDesignFiles.version,
+        updatedAt: productDesignFiles.updatedAt,
+        productId: productDesignFiles.productId,
+        mouldId: productDesignFiles.mouldId,
+        customerId: productDesignFiles.customerId,
+        transactionId: productDesignFiles.transactionId,
+        materialId: productDesignFiles.materialId,
         createdAt: productDesignFiles.createdAt,
       })
       .from(productDesignFiles)
@@ -528,9 +548,18 @@ export async function getDesignFile(id: string) {
       checksum: productDesignFiles.checksum,
       mimeType: productDesignFiles.mimeType,
       description: productDesignFiles.description,
+      productId: productDesignFiles.productId,
+      mouldId: productDesignFiles.mouldId,
+      customerId: productDesignFiles.customerId,
+      transactionId: productDesignFiles.transactionId,
+      materialId: productDesignFiles.materialId,
       materialName: materials.name,
       thumbnailStoragePath: productDesignFiles.thumbnailStoragePath,
+      derivedPreviewStoragePath: productDesignFiles.derivedPreviewStoragePath,
+      derivedPreviewSourceChecksum: productDesignFiles.derivedPreviewSourceChecksum,
+      derivedPreviewByteSize: productDesignFiles.derivedPreviewByteSize,
       createdAt: productDesignFiles.createdAt,
+      updatedAt: productDesignFiles.updatedAt,
       productName: products.name,
       mouldName: moulds.name,
       customerName: customers.displayName,

@@ -3,7 +3,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AdminShimmer } from "@/components/admin-shimmer";
 
-type ViewerFormat = "stl" | "obj" | "glb";
+export type ViewerFormat = "stl" | "obj" | "glb" | "step" | "stp" | "iges" | "igs";
+
+type CadMesh = {
+  name?: string;
+  color?: [number, number, number];
+  attributes: {
+    position: { array: number[] };
+    normal?: { array: number[] };
+  };
+  index: { array: number[] };
+};
+
+type CadResult = {
+  success: boolean;
+  meshes?: CadMesh[];
+};
+
+function isCadFormat(format: ViewerFormat) {
+  return format === "step" || format === "stp" || format === "iges" || format === "igs";
+}
 
 function ViewerIcon({ kind }: { kind: "fit" | "reset" | "fullscreen" | "help" }) {
   if (kind === "fit")
@@ -36,10 +55,14 @@ export function DesignModelViewer({
   fileId,
   format,
   hasThumbnail,
+  sourceChecksum,
+  derivedPreviewAvailable,
 }: {
   fileId: string;
   format: ViewerFormat;
   hasThumbnail: boolean;
+  sourceChecksum: string;
+  derivedPreviewAvailable: boolean;
 }) {
   const shell = useRef<HTMLElement>(null);
   const mount = useRef<HTMLDivElement>(null);
@@ -48,6 +71,7 @@ export function DesignModelViewer({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [cacheWarning, setCacheWarning] = useState<string | null>(null);
 
   const fullscreen = useCallback(() => {
     if (document.fullscreenElement) {
@@ -63,15 +87,25 @@ export function DesignModelViewer({
     let disposed = false;
     setLoading(true);
     setError(null);
-    let cleanup = () => undefined;
+    setCacheWarning(null);
+    const abortController = new AbortController();
+    let cancelCadWorker = () => undefined;
+    let cleanup = () => {
+      abortController.abort();
+      cancelCadWorker();
+    };
     void (async () => {
       try {
         const [
           {
             AmbientLight,
             Box3,
+            BufferAttribute,
+            BufferGeometry,
             Color,
             DirectionalLight,
+            DoubleSide,
+            Float32BufferAttribute,
             MOUSE,
             Mesh,
             MeshStandardMaterial,
@@ -124,28 +158,146 @@ export function DesignModelViewer({
         controls.minDistance = 0.05;
         controls.maxDistance = 100000;
         controls.target.set(0, 0, 0);
-        let model: import("three").Object3D;
+        let model: import("three").Object3D | undefined;
+        let generatedCadPreview = false;
         const source = `/api/admin/design-files/${fileId}`;
-        if (format === "stl") {
+        const derivedSource = `/api/admin/design-files/${fileId}/derived-preview`;
+        const loadGlb = async (url: string) => {
+          const dracoLoader = new draco.DRACOLoader();
+          dracoLoader.setDecoderPath("/api/admin/three/draco/");
+          const gltfLoader = new gltf.GLTFLoader();
+          gltfLoader.setDRACOLoader(dracoLoader);
+          try {
+            return (await gltfLoader.loadAsync(url)).scene;
+          } finally {
+            dracoLoader.dispose();
+          }
+        };
+        if (isCadFormat(format) && derivedPreviewAvailable) {
+          try {
+            model = await loadGlb(derivedSource);
+          } catch {
+            setCacheWarning("Preview tersimpan tidak dapat dibaca. Sumber CAD sedang diproses ulang.");
+          }
+        }
+        if (!model && format === "stl") {
           const geometry = await new stl.STLLoader().loadAsync(source);
           geometry.computeVertexNormals();
           model = new Mesh(geometry, new MeshStandardMaterial({ color: "#1767d1", metalness: 0.18, roughness: 0.48 }));
-        } else if (format === "obj") {
+        } else if (!model && format === "obj") {
           model = await new obj.OBJLoader().loadAsync(source);
           model.traverse((node: import("three").Object3D) => {
             const mesh = node as import("three").Mesh;
             if (mesh.isMesh)
               mesh.material = new MeshStandardMaterial({ color: "#1767d1", metalness: 0.18, roughness: 0.48 });
           });
-        } else {
-          const dracoLoader = new draco.DRACOLoader();
-          dracoLoader.setDecoderPath("/api/admin/three/draco/");
-          const gltfLoader = new gltf.GLTFLoader();
-          gltfLoader.setDRACOLoader(dracoLoader);
-          model = (await gltfLoader.loadAsync(source)).scene;
-          cleanup = () => {
-            dracoLoader.dispose();
-          };
+        } else if (!model && format === "glb") {
+          model = await loadGlb(source);
+        } else if (!model && isCadFormat(format)) {
+          const response = await fetch(source, { signal: abortController.signal, credentials: "same-origin" });
+          if (!response.ok) throw new Error(`CAD_SOURCE_${response.status}`);
+          const fileBuffer = await response.arrayBuffer();
+          if (disposed) return;
+          const cadResult = await new Promise<CadResult>((resolve, reject) => {
+            const worker = new Worker("/api/admin/three/occt/occt-import-js-worker.js");
+            let settled = false;
+            const finish = () => {
+              settled = true;
+              worker.terminate();
+              cancelCadWorker = () => undefined;
+            };
+            worker.onmessage = (event: MessageEvent<CadResult>) => {
+              finish();
+              resolve(event.data);
+            };
+            worker.onerror = () => {
+              finish();
+              reject(new Error("CAD_WORKER_FAILED"));
+            };
+            cancelCadWorker = () => {
+              if (settled) return;
+              finish();
+              reject(new DOMException("Preview dibatalkan.", "AbortError"));
+            };
+            const workerFormat = format === "iges" || format === "igs" ? "iges" : "step";
+            const bytes = new Uint8Array(fileBuffer);
+            worker.postMessage(
+              {
+                format: workerFormat,
+                buffer: bytes,
+                params: {
+                  linearUnit: "millimeter",
+                  linearDeflectionType: "bounding_box_ratio",
+                  linearDeflection: 0.002,
+                  angularDeflection: 0.5,
+                },
+              },
+              [fileBuffer],
+            );
+          });
+          if (disposed) return;
+          if (!cadResult.success || !cadResult.meshes?.length) throw new Error("CAD_IMPORT_FAILED");
+          const validMeshes = cadResult.meshes.filter(
+            (cadMesh) => cadMesh.attributes?.position?.array?.length && cadMesh.index?.array?.length,
+          );
+          if (!validMeshes.length) throw new Error("CAD_IMPORT_EMPTY");
+          const positionCount = validMeshes.reduce(
+            (total, cadMesh) => total + cadMesh.attributes.position.array.length,
+            0,
+          );
+          const indexCount = validMeshes.reduce((total, cadMesh) => total + cadMesh.index.array.length, 0);
+          const hasCompleteNormals = validMeshes.every(
+            (cadMesh) => cadMesh.attributes.normal?.array.length === cadMesh.attributes.position.array.length,
+          );
+          const positions = new Float32Array(positionCount);
+          const normals = hasCompleteNormals ? new Float32Array(positionCount) : null;
+          const indices = new Uint32Array(indexCount);
+          let positionOffset = 0;
+          let indexOffset = 0;
+          let vertexOffset = 0;
+          for (const cadMesh of validMeshes) {
+            positions.set(cadMesh.attributes.position.array, positionOffset);
+            if (normals && cadMesh.attributes.normal) normals.set(cadMesh.attributes.normal.array, positionOffset);
+            for (const index of cadMesh.index.array) indices[indexOffset++] = index + vertexOffset;
+            positionOffset += cadMesh.attributes.position.array.length;
+            vertexOffset += cadMesh.attributes.position.array.length / 3;
+          }
+          const geometry = new BufferGeometry();
+          geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+          if (normals) geometry.setAttribute("normal", new Float32BufferAttribute(normals, 3));
+          else geometry.computeVertexNormals();
+          geometry.setIndex(new BufferAttribute(indices, 1));
+          model = new Mesh(
+            geometry,
+            new MeshStandardMaterial({ color: "#1767d1", metalness: 0.12, roughness: 0.5, side: DoubleSide }),
+          );
+          generatedCadPreview = true;
+        }
+        if (disposed || !model) return;
+        if (generatedCadPreview) {
+          try {
+            const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
+            const binary = await new GLTFExporter().parseAsync(model, { binary: true });
+            if (!(binary instanceof ArrayBuffer)) throw new Error("GLB_EXPORT_FAILED");
+            if (binary.byteLength > 25 * 1024 * 1024) {
+              setCacheWarning("Model dapat dilihat, tetapi preview lebih besar dari 25 MB sehingga tidak disimpan.");
+            } else {
+              const previewForm = new FormData();
+              previewForm.set("sourceChecksum", sourceChecksum);
+              previewForm.set("preview", new File([binary], "derived-preview.glb", { type: "model/gltf-binary" }));
+              const cacheResponse = await fetch(derivedSource, { method: "POST", body: previewForm });
+              if (!cacheResponse.ok) {
+                const result = (await cacheResponse.json().catch(() => null)) as { message?: string } | null;
+                setCacheWarning(
+                  result?.message ?? "Model dapat dilihat, tetapi preview belum tersimpan untuk pembukaan berikutnya.",
+                );
+              } else {
+                setCacheWarning(null);
+              }
+            }
+          } catch {
+            setCacheWarning("Model dapat dilihat, tetapi preview belum tersimpan untuk pembukaan berikutnya.");
+          }
         }
         if (disposed) return;
         scene.add(model);
@@ -278,7 +430,9 @@ export function DesignModelViewer({
           setError(
             detail.includes("DRACO")
               ? "Model memakai kompresi Draco, tetapi decoder belum dapat dimuat. Muat ulang halaman atau unduh file untuk memeriksa sumbernya."
-              : "Preview belum dapat dibuka di perangkat ini. Unduh file untuk memeriksa sumbernya.",
+              : isCadFormat(format)
+                ? "File CAD tidak dapat diproses menjadi preview. Pastikan file IGS atau STEP tidak rusak, lalu coba muat ulang halaman."
+                : "Preview belum dapat dibuka di perangkat ini. Unduh file untuk memeriksa sumbernya.",
           );
         }
       }
@@ -287,13 +441,23 @@ export function DesignModelViewer({
       disposed = true;
       cleanup();
     };
-  }, [fileId, format, hasThumbnail]);
+  }, [derivedPreviewAvailable, fileId, format, hasThumbnail, sourceChecksum]);
 
   if (error) return <p className="empty-copy design-viewer__error">{error}</p>;
   return (
     <section ref={shell} className="design-viewer-shell" aria-busy={loading} aria-label="Preview desain 3D">
       <div className="design-viewer" ref={mount} aria-label="Model 3D interaktif" />
       {loading ? <AdminShimmer className="design-viewer__shimmer" /> : null}
+      {loading && isCadFormat(format) ? (
+        <p className="design-viewer__loading" role="status" aria-live="polite">
+          Menyiapkan model CAD. File yang kompleks dapat memerlukan beberapa saat.
+        </p>
+      ) : null}
+      {cacheWarning && !loading ? (
+        <p className="design-viewer__cache-warning" role="status">
+          {cacheWarning}
+        </p>
+      ) : null}
       <div className="design-viewer__toolbar" aria-label="Kontrol preview 3D">
         <button
           type="button"
@@ -341,7 +505,10 @@ export function DesignModelViewer({
           <span>F: sesuaikan · R: reset · Esc: tutup bantuan/layar penuh</span>
         </div>
       ) : null}
-      <p className="design-viewer__hint">Tarik putar · Shift + tarik geser · scroll/cubit zoom</p>
+      <p className="design-viewer__hint">
+        <span className="design-viewer__hint-desktop">Tarik: putar · Shift + tarik: geser · Scroll/cubit: zoom</span>
+        <span className="design-viewer__hint-mobile">Tarik untuk putar · Cubit untuk zoom</span>
+      </p>
     </section>
   );
 }

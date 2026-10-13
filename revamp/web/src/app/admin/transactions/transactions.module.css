@@ -74,28 +74,10 @@
 }
 .detail :global(.transaction-flow-summary > div),
 .detail :global(.transaction-flow-focus),
-.detail :global(.transaction-flow-card),
-.detail :global(.transaction-flow-nav a) {
+.detail :global(.transaction-flow-card) {
   background: var(--admin-surface);
   color: var(--admin-ink);
   border-color: var(--admin-line);
-}
-.detail :global(.transaction-flow-nav a.is-active) {
-  background: var(--admin-soft-blue);
-  border-color: var(--admin-blue);
-  box-shadow: inset 0 0 0 1px var(--admin-blue);
-}
-.detail :global(.transaction-flow-nav a > span) {
-  background: var(--admin-surface-soft);
-  color: var(--admin-muted);
-}
-.detail :global(.transaction-flow-nav a.is-active > span) {
-  background: var(--admin-navy);
-  color: var(--admin-on-accent);
-}
-.detail :global(.transaction-flow-nav a:focus-visible) {
-  outline: 3px solid var(--admin-blue);
-  outline-offset: 3px;
 }
 .detail :global(.transaction-flow-summary strong) {
   overflow-wrap: anywhere;
@@ -170,18 +152,6 @@
   line-height: 1.6;
   margin: 0 0 12px;
 }
-.detail :global(.transaction-flow-nav a small) {
-  color: var(--admin-muted);
-  line-height: 1.5;
-}
-.detail :global(.transaction-flow-nav a[data-state="attention"] > span) {
-  background: var(--admin-soft-blue);
-  color: var(--admin-blue);
-}
-.detail :global(.transaction-flow-nav a.is-active > span) {
-  background: var(--admin-navy);
-  color: var(--admin-on-accent);
-}
 .detail .stepBadge {
   max-width: 100%;
   white-space: normal;
@@ -199,9 +169,6 @@
   padding-bottom: 14px;
   border-bottom: 1px solid var(--admin-line);
   margin-bottom: 14px;
-}
-.detail :global(.transaction-flow-stack > .transaction-flow-card:first-child) {
-  background: color-mix(in srgb, var(--admin-soft-blue) 35%, var(--admin-surface));
 }
 .detail :global(.transaction-flow-details) {
   background: var(--admin-surface);

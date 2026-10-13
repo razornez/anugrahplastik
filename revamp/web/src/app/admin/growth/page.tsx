@@ -43,7 +43,7 @@ export default async function GrowthPage({
         <section className="growth-visitor" aria-labelledby="growth-visitor-title">
           <div className="growth-visitor__head">
             <div>
-              <h2 id="growth-visitor-title">Pengunjung baru dan yang kembali</h2>
+              <h2 id="growth-visitor-title">Pengunjung baru vs kembali</h2>
             </div>
             <nav aria-label="Pilih periode grafik pengunjung" className="growth-visitor__period">
               <Link href="/admin/growth?days=7" aria-current={days === 7 ? "page" : undefined}>

@@ -27,7 +27,12 @@ import {
   isGoogleAdsOAuthConfigured,
   isGoogleAdsReportingConfigured,
 } from "@/features/integrations/google-ads-config";
-import { getIntegrationHealth, INTEGRATION_HEALTH_STALE_HOURS } from "@/features/integrations/integration-health";
+import {
+  getIntegrationHealth,
+  getSchedulerHealth,
+  INTEGRATION_HEALTH_STALE_HOURS,
+} from "@/features/integrations/integration-health";
+import { getLastScheduledIntegrationRun } from "@/features/integrations/sync-runner";
 import { getPaidGoogleLeadFunnel } from "@/features/workspace/paid-lead-report";
 import { prospectStatusLabel } from "@/features/workspace/prospect-status";
 import { redirect } from "next/navigation";
@@ -75,7 +80,7 @@ export default async function MarketingPage({
   const days = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
   const previousFrom = dateShift(from, -days);
   const previousTo = dateShift(from, -1);
-  const [allCurrent, current, previous, campaignOptions, paidLeadFunnel] = await Promise.all([
+  const [allCurrent, current, previous, campaignOptions, paidLeadFunnel, lastAdsScheduledRunAt] = await Promise.all([
     getGoogleAdsOverview(from, to, undefined, accountTimeZone),
     getGoogleAdsOverview(from, to, selectedCampaigns, accountTimeZone),
     compare
@@ -83,6 +88,7 @@ export default async function MarketingPage({
       : Promise.resolve(null),
     getGoogleAdsCampaigns(),
     getPaidGoogleLeadFunnel(from, to),
+    getLastScheduledIntegrationRun("ads"),
   ]);
   const currentRows = current?.rows ?? [];
   const hasPreviousData = (previous?.rows.length ?? 0) > 0;
@@ -140,6 +146,7 @@ export default async function MarketingPage({
     staleAfterHours: INTEGRATION_HEALTH_STALE_HOURS.googleAds,
   });
   const probeRequired = !isFreshGoogleAdsProbe(metadata);
+  const adsSchedulerHealth = getSchedulerHealth(lastAdsScheduledRunAt, new Date(), 45);
 
   return (
     <section className="admin-page marketing-page">
@@ -149,6 +156,12 @@ export default async function MarketingPage({
         description="Pantau klik, tayangan, biaya, dan konversi pada periode yang telah lengkap."
       />
       <MarketingWorkspaceNav current="/admin/marketing" />
+      {process.env.NODE_ENV === "production" && adsSchedulerHealth.level !== "healthy" ? (
+        <p className="integration-alert" role="alert">
+          Scheduler Google Ads {adsSchedulerHealth.label.toLowerCase()}. {adsSchedulerHealth.summary}{" "}
+          <Link href="/admin/settings/integrations">Periksa koneksi layanan.</Link>
+        </p>
+      ) : null}
       {params.synced ? (
         <p className="integration-success" role="status">
           Laporan Google Ads berhasil diperbarui untuk periode yang dipilih.
@@ -297,7 +310,7 @@ export default async function MarketingPage({
       <article className="marketing-visitor-card">
         <div>
           <p className="admin-eyebrow">BACA BERSAMA DATA WEBSITE</p>
-          <h2>Dari klik iklan ke kunjungan</h2>
+          <h2>Klik iklan ke kunjungan</h2>
           <p>
             Laporan pengunjung membantu melihat perilaku di website. Tanpa atribusi terpisah, satu klik iklan belum
             dapat dipastikan menjadi prospek valid.
@@ -310,7 +323,7 @@ export default async function MarketingPage({
       <article className="marketing-lead-funnel" aria-labelledby="marketing-lead-funnel-title">
         <div>
           <p className="admin-eyebrow">KUALITAS LEAD DARI GOOGLE ADS</p>
-          <h2 id="marketing-lead-funnel-title">Dari formulir ke penawaran</h2>
+          <h2 id="marketing-lead-funnel-title">Formulir ke penawaran</h2>
           <p>
             Hanya lead beratribusi Google Ads pada periode ini. Ubah status di Prospek agar angka iklan tidak disamakan
             dengan penjualan.

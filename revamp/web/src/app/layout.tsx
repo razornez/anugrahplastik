@@ -20,6 +20,9 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
   title: defaultTitle,
   description: defaultDescription,
+  verification: {
+    google: "nduf5IZf3GkeWsVFQGLWPxKUJ3cibs3NyaKOr4SDb3k",
+  },
   ...socialMetadata({ title: defaultTitle, description: defaultDescription }),
   icons: {
     icon: [

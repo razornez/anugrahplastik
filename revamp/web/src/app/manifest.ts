@@ -9,6 +9,9 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone",
     background_color: "#f5f7fb",
     theme_color: "#0b2442",
-    icons: [{ src: "/icon", sizes: "any", type: "image/png" }],
+    icons: [
+      { src: "/brand/anugrah-plastik-icon-192.png", sizes: "192x192", type: "image/png" },
+      { src: "/brand/anugrah-plastik-icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
   };
 }

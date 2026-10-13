@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { NativeLandingTemplate } from "@/components/native-landing-template";
 import { LandingStructuredData } from "@/components/landing-structured-data";
 import { getPublishedLandingContent } from "@/features/content/landing-service";
+import { socialMetadata } from "@/features/marketing/site-metadata";
 
 // Halaman boleh menunggu koneksi request demi membaca konten yang sudah
 // diterbitkan; tanpa ini Cache Components mencoba memprarendernya saat build.
@@ -14,7 +15,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: content.metadata.title,
     description: content.metadata.description,
     alternates: { canonical: "/" },
-    openGraph: { title: content.metadata.title, description: content.metadata.description, type: "website" },
+    ...socialMetadata({ title: content.metadata.title, description: content.metadata.description }),
   };
 }
 

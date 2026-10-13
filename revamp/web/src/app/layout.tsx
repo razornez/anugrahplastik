@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Hanken_Grotesk, Space_Mono } from "next/font/google";
+import { SITE_ORIGIN, socialMetadata } from "@/features/marketing/site-metadata";
 import "./globals.css";
 import "./landing-template.css";
 
@@ -11,11 +12,23 @@ const heading = Archivo({
 const sans = Hanken_Grotesk({ variable: "--font-hanken", subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 const mono = Space_Mono({ variable: "--font-space", subsets: ["latin"], weight: ["400", "700"] });
 
+const defaultTitle = "Cetak Plastik Custom Tanpa Minimum Order | Anugrah Plastik Bandung";
+const defaultDescription =
+  "Buat ulang spare part dan produk plastik custom dari sampel atau gambar. Free moulding tanpa syarat, tanpa minimum order.";
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://anugrahplastik.com"),
-  title: "Cetak Plastik Custom Tanpa Minimum Order | Anugrah Plastik Bandung",
-  description:
-    "Buat ulang spare part dan produk plastik custom dari sampel atau gambar. Free moulding tanpa syarat, tanpa minimum order.",
+  metadataBase: new URL(SITE_ORIGIN),
+  title: defaultTitle,
+  description: defaultDescription,
+  ...socialMetadata({ title: defaultTitle, description: defaultDescription }),
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/brand/anugrah-plastik-icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/brand/anugrah-plastik-icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/brand/anugrah-plastik-apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export const viewport: Viewport = { themeColor: "#0b2442", viewportFit: "cover" };

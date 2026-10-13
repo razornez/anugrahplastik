@@ -6,6 +6,45 @@ export type GoogleAdsConfigurationIssue = {
   recovery: string;
 };
 
+export type GoogleAdsDataSource = "live" | "snapshot";
+
+export function googleAdsDataSource(): GoogleAdsDataSource {
+  return process.env.GOOGLE_ADS_DATA_SOURCE?.trim().toLowerCase() === "snapshot" ? "snapshot" : "live";
+}
+
+export function isGoogleAdsSnapshotSource() {
+  return googleAdsDataSource() === "snapshot";
+}
+
+export function googleAdsSnapshotUrl() {
+  const raw = process.env.GOOGLE_ADS_SNAPSHOT_URL?.trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      url.pathname !== "/api/integrations/google-ads/snapshot"
+    )
+      return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+export function googleAdsSnapshotToken() {
+  const token = process.env.GOOGLE_ADS_SNAPSHOT_TOKEN?.trim() ?? "";
+  return token.length >= 32 && token.length <= 512 ? token : null;
+}
+
+export function isGoogleAdsSnapshotConfigured() {
+  return Boolean(isGoogleAdsSnapshotSource() && googleAdsSnapshotUrl() && googleAdsSnapshotToken());
+}
+
 function normalizedCustomerId(value?: string) {
   const normalized = value?.replaceAll("-", "").trim() ?? "";
   return /^\d{10}$/.test(normalized) ? normalized : null;

@@ -6,6 +6,7 @@ import { adsDateInJakarta, adsDateInTimeZone, completeAdsRange } from "./google-
 import { decryptSecret } from "./secrets";
 import {
   googleAdsCustomerId,
+  googleAdsDataSource,
   googleAdsDeveloperToken,
   googleAdsLoginCustomerId,
   isGoogleAdsReportingConfigured,
@@ -150,6 +151,8 @@ async function accessToken() {
 }
 
 async function queryGoogleAdsApi(query: string, suppliedAccessToken?: string) {
+  if (googleAdsDataSource() !== "live")
+    throw new GoogleAdsServiceError("oauth_configuration", "Mode snapshot tidak menghubungi Google Ads langsung.");
   const customerId = googleAdsCustomerId();
   const managerId = googleAdsLoginCustomerId();
   const developerToken = googleAdsDeveloperToken();

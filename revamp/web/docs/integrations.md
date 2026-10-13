@@ -53,12 +53,26 @@ Status koneksi berarti kredensial masih tersimpan, bukan jaminan penyedia selalu
 
 Konfigurasikan server-only environment berikut:
 
+- GOOGLE_ADS_DATA_SOURCE=live di VPS production. Localhost yang hanya membaca salinan laporan memakai snapshot.
 - `GOOGLE_ADS_CLIENT_ID` dan `GOOGLE_ADS_CLIENT_SECRET` dari OAuth client bertipe Web application.
 - `GOOGLE_ADS_DEVELOPER_TOKEN` hanya untuk kompatibilitas instalasi lama. Sejak 9 September 2026 Google mengabaikan header ini dan menentukan level akses dari project Google Cloud pemilik OAuth Client.
 - `GOOGLE_ADS_CUSTOMER_ID=6738895829` (angka saja; tanda hubung boleh digunakan).
 - `GOOGLE_ADS_LOGIN_CUSTOMER_ID` adalah ID 10 digit MCC aktif yang sudah ditautkan ke Customer ID di atas.
 - `GOOGLE_ADS_LOGIN_EMAIL=razornez@gmail.com` adalah akun Google owner yang diizinkan menyambungkan OAuth.
 - Lokal: `GOOGLE_ADS_REDIRECT_URI=http://localhost:3100/api/integrations/google-ads/callback`; daftarkan URL yang persis sama pada OAuth client.
+
+### Snapshot laporan untuk localhost
+
+Localhost tidak memakai refresh token atau OAuth Client production. Gunakan mode snapshot, URL
+https://anugrahplastik.com/api/integrations/google-ads/snapshot, dan token acak khusus minimal 32 karakter pada environment
+lokal. VPS memakai token snapshot yang sama, tetapi tidak memerlukan URL snapshot. Token ini harus berbeda dari token
+scheduler integrasi.
+
+Administrator mengambil snapshot secara manual dari halaman **Kinerja Iklan Google**. Permintaan berjalan server-to-server
+melalui HTTPS dan menyalin hanya agregat harian kampanye selama 90 hari lengkap sampai kemarin. OAuth token, kredensial
+database, pengguna, prospek, dan data Email CS tidak masuk ke respons. Import memvalidasi seluruh payload sebelum transaksi;
+kegagalan tidak menghapus snapshot lokal sebelumnya. Endpoint menolak HTTP, token salah, rentang di atas 365 hari, dan
+permintaan ketika sumber production bukan live.
 
 Administrator menyambungkan akun melalui **Koneksi layanan → Sambungkan Google Ads**, lalu memberi persetujuan scope laporan `adwords`. Aplikasi hanya meminta laporan kampanye, tidak mengubah iklan atau anggaran. Administrator harus menjalankan **Verifikasi akses API** sebelum pembaruan laporan pertama; browser tidak pernah memulai sinkronisasi otomatis. Setelah akun pernah diverifikasi, scheduler boleh mengulang probe baca-saja ketika verifikasi telah kedaluwarsa, lalu memakai klaim atomik dan retry terbatas tanpa menghapus laporan lama.
 

@@ -122,6 +122,7 @@ test("only admins can trigger provider refreshes", async () => {
         throw new Error(`redirect:${url}`);
       },
     },
+    "./google-ads-config": { googleAdsDataSource: () => "live" },
     "./google-ads-service": {
       syncGoogleAdsOncePerJakartaDay: async () => {
         calls++;
@@ -183,6 +184,202 @@ test("CSV keeps accurate CPC and rejects unauthenticated and content-editor acce
   assert.match(csv, /"'=Danger"/);
 });
 
+test("snapshot endpoint requires HTTPS and a dedicated constant-time bearer token", async () => {
+  const payload = {
+    schemaVersion: 1,
+    generatedAt: "2026-10-13T01:00:00.000Z",
+    sourceLastSyncAt: "2026-10-13T00:00:00.000Z",
+    accountTimeZone: "Asia/Jakarta",
+    from: "2026-10-06",
+    to: "2026-10-12",
+    completeThrough: "2026-10-12",
+    rows: [],
+  };
+  let calls = 0;
+  const route = load("app/api/integrations/google-ads/snapshot/route.ts", {
+    "@/features/integrations/google-ads-config": { googleAdsSnapshotToken: () => "s".repeat(48) },
+    "@/features/integrations/google-ads-snapshot": {
+      createGoogleAdsSnapshot: async () => {
+        calls++;
+        return payload;
+      },
+    },
+  });
+  const request = (url, token, forwardedProto) =>
+    new Request(url, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        ...(forwardedProto ? { "x-forwarded-proto": forwardedProto } : {}),
+      },
+      body: JSON.stringify({ from: payload.from, to: payload.to }),
+    });
+  assert.equal((await route.POST(request("http://example.test", "s".repeat(48)))).status, 400);
+  assert.equal((await route.POST(request("https://example.test", "wrong"))).status, 401);
+  const response = await route.POST(request("http://example.test", "s".repeat(48), "https"));
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("cache-control"), /no-store/);
+  assert.deepEqual(await response.json(), payload);
+  assert.equal(calls, 1);
+});
+
+test("snapshot mode is explicit and blocks live Google refreshes", () => {
+  const config = load("features/integrations/google-ads-config.ts", { "server-only": {} });
+  const previous = {
+    source: process.env.GOOGLE_ADS_DATA_SOURCE,
+    url: process.env.GOOGLE_ADS_SNAPSHOT_URL,
+    token: process.env.GOOGLE_ADS_SNAPSHOT_TOKEN,
+  };
+  try {
+    delete process.env.GOOGLE_ADS_DATA_SOURCE;
+    assert.equal(config.googleAdsDataSource(), "live");
+    process.env.GOOGLE_ADS_DATA_SOURCE = "snapshot";
+    process.env.GOOGLE_ADS_SNAPSHOT_URL = "http://anugrahplastik.com/api/integrations/google-ads/snapshot";
+    process.env.GOOGLE_ADS_SNAPSHOT_TOKEN = "x".repeat(48);
+    assert.equal(config.isGoogleAdsSnapshotConfigured(), false);
+    process.env.GOOGLE_ADS_SNAPSHOT_URL = "https://anugrahplastik.com/api/integrations/google-ads/snapshot";
+    assert.equal(config.isGoogleAdsSnapshotConfigured(), true);
+    assert.equal(config.googleAdsSnapshotUrl(), process.env.GOOGLE_ADS_SNAPSHOT_URL);
+  } finally {
+    if (previous.source === undefined) delete process.env.GOOGLE_ADS_DATA_SOURCE;
+    else process.env.GOOGLE_ADS_DATA_SOURCE = previous.source;
+    if (previous.url === undefined) delete process.env.GOOGLE_ADS_SNAPSHOT_URL;
+    else process.env.GOOGLE_ADS_SNAPSHOT_URL = previous.url;
+    if (previous.token === undefined) delete process.env.GOOGLE_ADS_SNAPSHOT_TOKEN;
+    else process.env.GOOGLE_ADS_SNAPSHOT_TOKEN = previous.token;
+  }
+  const service = readFileSync(join(__dirname, "../src/features/integrations/google-ads-service.ts"), "utf8");
+  const runner = readFileSync(join(__dirname, "../src/features/integrations/sync-runner.ts"), "utf8");
+  assert.match(service, /googleAdsDataSource\(\) !== "live"/);
+  assert.match(runner, /googleAdsDataSource\(\) === "live"/);
+});
+
+test("marketing snapshot controls are manual, admin-only, and preserve the local report on failure", () => {
+  const page = readFileSync(join(__dirname, "../src/app/admin/marketing/page.tsx"), "utf8");
+  const controls = readFileSync(join(__dirname, "../src/components/google-ads-report-controls.tsx"), "utf8");
+  const actions = readFileSync(join(__dirname, "../src/features/integrations/actions.ts"), "utf8");
+  const snapshot = readFileSync(join(__dirname, "../src/features/integrations/google-ads-snapshot.ts"), "utf8");
+  assert.match(page, /snapshotMode \|\| Boolean\(connection\?\.secretCiphertext\)/);
+  assert.match(page, /canImportSnapshot=\{user\.role === "admin" && snapshotConfigured\}/);
+  assert.match(controls, /Ambil snapshot production/);
+  assert.match(controls, /refreshGoogleAdsSnapshot/);
+  assert.match(actions, /requireRole\(\["admin"\]\)/);
+  assert.match(snapshot, /database\.transaction/);
+  assert.match(snapshot, /await requestGoogleAdsSnapshot\(\)/);
+  assert.ok(snapshot.indexOf("await requestGoogleAdsSnapshot()") < snapshot.indexOf("database.transaction"));
+  assert.match(snapshot, /delete\(googleAdsDailyReports\)/);
+  assert.match(snapshot, /snapshotImportedAt/);
+});
+
+test(
+  "snapshot import replaces only its validated range atomically and is idempotent",
+  {
+    skip: process.env.GOOGLE_ADS_DB_TEST !== "1",
+  },
+  async () => {
+    process.loadEnvFile(".env.local");
+    const { Pool } = require("pg");
+    const { drizzle } = require("drizzle-orm/node-postgres");
+    const { randomUUID } = require("node:crypto");
+    const schemaName = `ads_snapshot_test_${randomUUID().replaceAll("-", "")}`;
+    const owner = new Pool({ connectionString: process.env.DATABASE_URL });
+    const schema = load("lib/database/schema.ts");
+    let pool;
+    const originalFetch = global.fetch;
+    try {
+      await owner.query(`CREATE SCHEMA "${schemaName}"`);
+      await owner.query(`CREATE TABLE "${schemaName}".integrations (LIKE public.integrations INCLUDING ALL)`);
+      await owner.query(
+        `CREATE TABLE "${schemaName}".google_ads_daily_reports (LIKE public.google_ads_daily_reports INCLUDING ALL)`,
+      );
+      pool = new Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${schemaName}` });
+      await pool.query(
+        "INSERT INTO integrations (key, status, secret_ciphertext, metadata) VALUES ('google-ads', 'connected', 'keep-me', '{}')",
+      );
+      await pool.query(
+        "INSERT INTO google_ads_daily_reports (report_date, campaign_id, campaign_name, status, currency_code, impressions, clicks, cost_micros, conversions, conversions_value) VALUES ('2026-06-01', '9', 'Outside', 'PAUSED', 'IDR', 1, 1, '1', '0', '0'), ('2026-10-06', '8', 'Stale', 'PAUSED', 'IDR', 1, 1, '1', '0', '0')",
+      );
+      const db = drizzle({ client: pool, schema });
+      const snapshot = load("features/integrations/google-ads-snapshot.ts", {
+        "server-only": {},
+        "@/lib/database/client": { getDatabase: () => db },
+        "@/lib/database/schema": schema,
+        "./google-ads-config": {
+          googleAdsDataSource: () => "snapshot",
+          googleAdsSnapshotToken: () => "s".repeat(48),
+          googleAdsSnapshotUrl: () => "https://anugrahplastik.com/api/integrations/google-ads/snapshot",
+          isGoogleAdsSnapshotConfigured: () => true,
+        },
+        "./google-ads-report-model": {
+          completeAdsRange: () => ({ from: "2026-07-15", to: "2026-10-12" }),
+          adsDateInTimeZone: () => "2026-10-12",
+        },
+        "./google-ads-service": { validateGoogleAdsRange: () => true },
+      });
+      let invalid = false;
+      global.fetch = async (_url, options) => {
+        const request = JSON.parse(options.body);
+        if (invalid) return Response.json({ invalid: true });
+        return Response.json({
+          schemaVersion: 1,
+          generatedAt: "2026-10-13T01:00:00.000Z",
+          sourceLastSyncAt: "2026-10-13T00:00:00.000Z",
+          accountTimeZone: "Asia/Jakarta",
+          from: request.from,
+          to: request.to,
+          completeThrough: request.to,
+          rows: [
+            {
+              reportDate: "2026-10-06",
+              campaignId: "123",
+              campaignName: "GOOG_DG_LEADS_KORIDOR-INDUSTRI_2026Q4",
+              status: "ENABLED",
+              currencyCode: "IDR",
+              impressions: 26736,
+              clicks: 622,
+              costMicros: "165783000000",
+              conversions: "0",
+              conversionsValue: "0",
+              syncedAt: "2026-10-13T00:00:00.000Z",
+            },
+          ],
+        });
+      };
+      const actorId = randomUUID();
+      assert.deepEqual(await snapshot.importGoogleAdsSnapshot(actorId), {
+        rows: 1,
+        from: "2026-07-15",
+        to: "2026-10-12",
+      });
+      await snapshot.importGoogleAdsSnapshot(actorId);
+      const { rows } = await pool.query(
+        "SELECT campaign_id, campaign_name FROM google_ads_daily_reports ORDER BY report_date, campaign_id",
+      );
+      assert.deepEqual(
+        rows.map((item) => item.campaign_id),
+        ["9", "123"],
+      );
+      assert.equal(rows[1].campaign_name, "GOOG_DG_LEADS_KORIDOR-INDUSTRI_2026Q4");
+      const {
+        rows: [connection],
+      } = await pool.query(
+        "SELECT secret_ciphertext, metadata->>'snapshotImportedAt' AS imported_at FROM integrations WHERE key='google-ads'",
+      );
+      assert.equal(connection.secret_ciphertext, "keep-me");
+      assert.ok(connection.imported_at);
+      invalid = true;
+      await assert.rejects(snapshot.importGoogleAdsSnapshot(actorId), /Struktur snapshot production tidak valid/);
+      assert.equal((await pool.query("SELECT count(*) AS n FROM google_ads_daily_reports")).rows[0].n, "2");
+    } finally {
+      global.fetch = originalFetch;
+      if (pool) await pool.end();
+      await owner.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      await owner.end();
+    }
+  },
+);
+
 test(
   "shared daily claim is atomic in PostgreSQL and failure preserves stored reports",
   {
@@ -229,6 +426,7 @@ test(
         "./google-ads-report-model": model,
         "./secrets": { decryptSecret: () => ({ refreshToken: "test-only" }) },
         "./google-ads-config": {
+          googleAdsDataSource: () => "live",
           googleAdsCustomerId: () => process.env.GOOGLE_ADS_CUSTOMER_ID,
           googleAdsDeveloperToken: () => process.env.GOOGLE_ADS_DEVELOPER_TOKEN,
           googleAdsLoginCustomerId: () => process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,

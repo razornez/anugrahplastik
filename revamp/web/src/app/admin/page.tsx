@@ -13,6 +13,7 @@ import { getWorkspaceOverview, type WorkspacePeriod } from "@/features/workspace
 import { getSession } from "@/lib/auth/session";
 import { getSchedulerHealth } from "@/features/integrations/integration-health";
 import { getLastScheduledIntegrationRun } from "@/features/integrations/sync-runner";
+import { googleAdsDataSource } from "@/features/integrations/google-ads-config";
 
 export const instant = false;
 
@@ -194,6 +195,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   const query = await searchParams;
   const period: WorkspacePeriod = query.period === "today" || query.period === "month" ? query.period : "week";
   const days: ReportPeriod = period === "today" ? 1 : period === "month" ? 30 : 7;
+  const adsSnapshotMode = googleAdsDataSource() === "snapshot";
   const reportFilters = { days, device: "all" as const, city: "", source: "", outcome: "" };
   const [overview, report, insight, analyticsHealth, integrationHeartbeats] = await Promise.all([
     getWorkspaceOverview(period),
@@ -201,7 +203,10 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
     getAnalyticsInsight(days, "public"),
     user.role === "admin" ? getAnalyticsHealth() : Promise.resolve(null),
     user.role === "admin" && process.env.NODE_ENV === "production"
-      ? Promise.all([getLastScheduledIntegrationRun("mail"), getLastScheduledIntegrationRun("ads")])
+      ? Promise.all([
+          getLastScheduledIntegrationRun("mail"),
+          adsSnapshotMode ? Promise.resolve(null) : getLastScheduledIntegrationRun("ads"),
+        ])
       : Promise.resolve([null, null] as const),
   ]);
   const label = period === "today" ? "Hari ini" : period === "month" ? "30 hari terakhir" : "7 hari terakhir";
@@ -211,7 +216,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   const integrationsNeedAttention =
     process.env.NODE_ENV === "production" &&
     user.role === "admin" &&
-    (mailSchedulerHealth.level !== "healthy" || adsSchedulerHealth.level !== "healthy");
+    (mailSchedulerHealth.level !== "healthy" || (!adsSnapshotMode && adsSchedulerHealth.level !== "healthy"));
 
   return (
     <div className="home-dashboard">
@@ -219,7 +224,8 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
         <aside className="home-data-warning" role="alert">
           <strong>Sinkronisasi layanan perlu diperiksa</strong>
           <p>
-            Email CS: {mailSchedulerHealth.label}. Google Ads: {adsSchedulerHealth.label}. Data tersimpan tetap
+            Email CS: {mailSchedulerHealth.label}. Google Ads:{" "}
+            {adsSnapshotMode ? "snapshot production diperbarui manual" : adsSchedulerHealth.label}. Data tersimpan tetap
             tersedia.
           </p>
           <Link href="/admin/settings/integrations">Buka koneksi layanan →</Link>

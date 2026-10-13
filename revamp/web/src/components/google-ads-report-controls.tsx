@@ -3,7 +3,12 @@
 import { useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import { refreshGoogleAdsRange, runGoogleAdsAccessProbe } from "@/features/integrations/actions";
+import {
+  refreshGoogleAdsRange,
+  refreshGoogleAdsSnapshot,
+  runGoogleAdsAccessProbe,
+} from "@/features/integrations/actions";
+import type { GoogleAdsDataSource } from "@/features/integrations/google-ads-config";
 import type { AdsMetric } from "./google-ads-trend-chart";
 
 type Campaign = { id: string; name: string; status: string };
@@ -20,6 +25,9 @@ type Props = {
   canManageReports: boolean;
   probeRequired: boolean;
   accountTimeZone: string;
+  dataSource: GoogleAdsDataSource;
+  canImportSnapshot: boolean;
+  sourceStatus: string;
 };
 
 function shiftDate(value: string, days: number) {
@@ -33,6 +41,15 @@ function RefreshReportButton({ disabled }: { disabled: boolean }) {
   return (
     <button className="admin-primary-button ads-report-submit" type="submit" disabled={pending || disabled}>
       {pending ? "Memperbarui laporan…" : "Perbarui laporan sekarang"}
+    </button>
+  );
+}
+
+function RefreshSnapshotButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button className="admin-primary-button ads-report-submit" type="submit" disabled={pending} aria-busy={pending}>
+      {pending ? "Mengambil snapshot…" : "Ambil snapshot production"}
     </button>
   );
 }
@@ -185,7 +202,18 @@ export function GoogleAdsReportControls(props: Props) {
           </a>
         </div>
       </form>
-      {props.canManageReports ? (
+      {props.dataSource === "snapshot" ? (
+        <div className="ads-report-provider-actions">
+          {props.canImportSnapshot ? (
+            <form action={refreshGoogleAdsSnapshot}>
+              <RefreshSnapshotButton />
+            </form>
+          ) : null}
+          <span aria-live="polite" className="ads-report-provider-actions__status" role="status">
+            {props.sourceStatus}
+          </span>
+        </div>
+      ) : props.canManageReports ? (
         <div className="ads-report-provider-actions">
           <button className="admin-secondary-button" type="button" disabled={probePending} onClick={verifyAccess}>
             {probePending ? "Memverifikasi akses…" : "Verifikasi akses API"}

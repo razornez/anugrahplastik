@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { adsMetricOptions, type AdsMetric } from "@/features/integrations/google-ads-report-model";
+import type { GoogleAdsDataSource } from "@/features/integrations/google-ads-config";
 import { GoogleAdsReportControls } from "./google-ads-report-controls";
 import { GoogleAdsTrendChart, type AdsPoint } from "./google-ads-trend-chart";
 
@@ -34,6 +35,9 @@ type Props = {
   canManageReports: boolean;
   probeRequired: boolean;
   accountTimeZone: string;
+  dataSource: GoogleAdsDataSource;
+  canImportSnapshot: boolean;
+  sourceStatus: string;
 };
 
 export function GoogleAdsPerformance(props: Props) {
@@ -72,6 +76,9 @@ export function GoogleAdsPerformance(props: Props) {
         canManageReports={props.canManageReports}
         probeRequired={props.probeRequired}
         accountTimeZone={props.accountTimeZone}
+        dataSource={props.dataSource}
+        canImportSnapshot={props.canImportSnapshot}
+        sourceStatus={props.sourceStatus}
       />
       <section className="ads-performance__summary" aria-label="Empat metrik kinerja iklan">
         {metrics.map((metric, index) => {

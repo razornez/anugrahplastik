@@ -3,6 +3,7 @@ import { and, desc, eq, isNotNull, lt, ne } from "drizzle-orm";
 import { getDatabase } from "@/lib/database/client";
 import { integrationSyncRuns, integrations } from "@/lib/database/schema";
 import { syncGoogleAdsOncePerJakartaDay } from "./google-ads-service";
+import { googleAdsDataSource } from "./google-ads-config";
 import { syncMailbox, type MailboxFailureCode } from "./mail-service";
 
 export type SyncTrigger = "scheduled" | "manual";
@@ -58,7 +59,7 @@ export async function runIntegrationSync({
     .from(integrations)
     .where(isNotNull(integrations.secretCiphertext));
   const hasMail = configured.some((item) => item.key === "cs-mail");
-  const hasAds = configured.some((item) => item.key === "google-ads");
+  const hasAds = googleAdsDataSource() === "live" && configured.some((item) => item.key === "google-ads");
   const [run] = await database
     .insert(integrationSyncRuns)
     .values({

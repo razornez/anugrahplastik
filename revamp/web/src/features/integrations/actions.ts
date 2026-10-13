@@ -22,6 +22,7 @@ import { encryptSecret, hasIntegrationEncryptionKey } from "./secrets";
 import {
   getGoogleAdsOAuthConfigurationIssues,
   getGoogleAdsReportingConfigurationIssues,
+  googleAdsDataSource,
   googleAdsRedirectUri,
   isGoogleAdsOAuthConfigured,
 } from "./google-ads-config";
@@ -120,6 +121,8 @@ export async function disconnectCsMailbox() {
 
 export async function startGoogleAdsConnection() {
   const user = await requireRole(["admin"]);
+  if (googleAdsDataSource() === "snapshot")
+    throw new Error("Mode snapshot tidak membuka koneksi OAuth Google dari komputer lokal.");
   const clientId = process.env.GOOGLE_ADS_CLIENT_ID;
   const redirectUri = googleAdsRedirectUri();
   const callbackHost = new URL(redirectUri).hostname;
@@ -156,6 +159,8 @@ export async function startGoogleAdsConnection() {
 
 export async function disconnectGoogleAds() {
   const user = await requireRole(["admin"]);
+  if (googleAdsDataSource() === "snapshot")
+    throw new Error("Koneksi Google Ads live tidak dikelola dari mode snapshot.");
   const database = getDatabase();
   if (!database) throw new Error("Database belum terhubung.");
   await database
@@ -240,6 +245,8 @@ export async function runGoogleAdsHealthCheck(): Promise<IntegrationHealthAction
 /** Verifies Cloud-project access, MCC hierarchy, and target customer access without changing stored report rows. */
 export async function runGoogleAdsAccessProbe(): Promise<IntegrationHealthActionResult> {
   const user = await requireRole(["admin"]);
+  if (googleAdsDataSource() === "snapshot")
+    return { ok: false, message: "Mode snapshot tidak menghubungi Google Ads secara langsung." };
   const configurationIssues = [
     ...getGoogleAdsOAuthConfigurationIssues(),
     ...getGoogleAdsReportingConfigurationIssues(),
@@ -416,6 +423,7 @@ export async function refreshMailbox(formData: FormData) {
 
 export async function refreshGoogleAds() {
   await requireRole(["admin"]);
+  if (googleAdsDataSource() === "snapshot") throw new Error("Mode snapshot tidak memperbarui Google Ads langsung.");
   const { syncGoogleAdsReport } = await import("./google-ads-service");
   try {
     await syncGoogleAdsReport(30);
@@ -429,6 +437,7 @@ export async function refreshGoogleAds() {
 
 export async function refreshGoogleAdsIfDue() {
   await requireRole(["admin"]);
+  if (googleAdsDataSource() === "snapshot") return "not-connected" as const;
   const { syncGoogleAdsOncePerJakartaDay } = await import("./google-ads-service");
   const result = await syncGoogleAdsOncePerJakartaDay();
   if (result === "updated") revalidatePath("/admin/marketing");
@@ -437,6 +446,7 @@ export async function refreshGoogleAdsIfDue() {
 
 export async function refreshGoogleAdsRange(formData: FormData) {
   await requireRole(["admin"]);
+  if (googleAdsDataSource() === "snapshot") throw new Error("Mode snapshot tidak memperbarui Google Ads langsung.");
   const dateInput = z
     .object({
       from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -493,6 +503,30 @@ export async function refreshGoogleAdsRange(formData: FormData) {
   }
   revalidatePath("/admin/marketing");
   redirect(`/admin/marketing?${query.toString()}&synced=1`);
+}
+
+export async function refreshGoogleAdsSnapshot() {
+  const user = await requireRole(["admin"]);
+  try {
+    const { importGoogleAdsSnapshot } = await import("./google-ads-snapshot");
+    const result = await importGoogleAdsSnapshot(user.id);
+    const database = getDatabase();
+    if (database)
+      await database.insert(auditLogs).values({
+        actorId: user.id,
+        action: "integration.google_ads_snapshot_imported",
+        entityType: "integration",
+        entityId: "google-ads",
+        metadata: { rows: result.rows, from: result.from, to: result.to },
+      });
+    revalidatePath("/admin/marketing");
+    revalidatePath("/admin/settings/integrations");
+    redirect(`/admin/marketing?snapshot=1&rows=${result.rows}`);
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    revalidatePath("/admin/marketing");
+    redirect("/admin/marketing?snapshot=error");
+  }
 }
 
 // Legacy direct-send requests are refused; documents use the shared frozen-preview flow.

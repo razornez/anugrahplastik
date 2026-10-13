@@ -22,9 +22,11 @@ import { hasIntegrationEncryptionKey } from "@/features/integrations/secrets";
 import {
   getGoogleAdsOAuthConfigurationIssues,
   getGoogleAdsReportingConfigurationIssues,
+  googleAdsDataSource,
   googleAdsCustomerId,
   googleAdsLoginCustomerId,
   googleAdsRedirectUri,
+  isGoogleAdsSnapshotConfigured,
   isGoogleAdsOAuthConfigured,
   isGoogleAdsReportingConfigured,
   maskGoogleAdsCustomerId,
@@ -70,6 +72,8 @@ export default async function IntegrationsPage({
   const mailConfigured = Boolean(mail?.secretCiphertext);
   const mailServer = getCsMailboxServerConfig();
   const adsConfigured = Boolean(ads?.secretCiphertext);
+  const adsSnapshotMode = googleAdsDataSource() === "snapshot";
+  const adsSnapshotConfigured = isGoogleAdsSnapshotConfigured();
   const params = await searchParams;
   const encryptionReady = hasIntegrationEncryptionKey();
   const googleConfigured = isGoogleAdsOAuthConfigured();
@@ -78,7 +82,7 @@ export default async function IntegrationsPage({
   const googleReportingIssues = getGoogleAdsReportingConfigurationIssues();
   const googleActionIssues = [...googleOAuthIssues, ...googleReportingIssues];
   const googleActionIssueLabels = googleActionIssues.map((issue) => issue.label);
-  const isLocalRuntime = process.env.NODE_ENV !== "production";
+  const isLocalRuntime = process.env.NODE_ENV !== "production" || adsSnapshotMode;
   const callbackHost = new URL(googleAdsRedirectUri()).hostname;
   const localCallbackReady = process.env.NODE_ENV === "production" || ["localhost", "127.0.0.1"].includes(callbackHost);
   const googleReady = googleConfigured && googleOAuthIssues.length === 0 && localCallbackReady;
@@ -98,6 +102,12 @@ export default async function IntegrationsPage({
   const adsSchedulerHealth = getSchedulerHealth(lastAdsScheduledRunAt, new Date(), 45);
   const schedulerConfiguration = getSchedulerConfiguration();
   const adsMetadata = (ads?.metadata ?? {}) as Record<string, unknown>;
+  const adsSnapshotImportedAt =
+    typeof adsMetadata.snapshotImportedAt === "string" && Number.isFinite(Date.parse(adsMetadata.snapshotImportedAt))
+      ? adsMetadata.snapshotImportedAt
+      : null;
+  const adsSnapshotFresh =
+    Boolean(adsSnapshotImportedAt) && new Date().getTime() - Date.parse(adsSnapshotImportedAt!) <= 24 * 60 * 60_000;
   const mailMetadata = (mail?.metadata ?? {}) as Record<string, unknown>;
   const adsRetryCount = Math.min(Math.max(Number(adsMetadata.adsAutoFailureCount) || 0, 0), 3);
   // Older versions incorrectly saved a single message-body fetch error as the
@@ -111,6 +121,22 @@ export default async function IntegrationsPage({
     lastSyncAt: ads?.lastSyncAt,
     staleAfterHours: INTEGRATION_HEALTH_STALE_HOURS.googleAds,
   });
+  const adsDisplayHealth = adsSnapshotMode
+    ? {
+        level: adsSnapshotFresh ? "healthy" : adsSnapshotImportedAt ? "attention" : "disconnected",
+        label: adsSnapshotFresh
+          ? "Snapshot production"
+          : adsSnapshotImportedAt
+            ? "Snapshot perlu diperbarui"
+            : "Snapshot belum diambil",
+        summary: adsSnapshotImportedAt
+          ? `Diimpor ${formatWib(adsSnapshotImportedAt)}.`
+          : "Belum ada laporan production pada database lokal.",
+        recovery: adsSnapshotConfigured
+          ? "Buka Kinerja Iklan Google untuk mengambil snapshot production secara manual."
+          : "Lengkapi URL dan token snapshot pada environment lokal.",
+      }
+    : adsHealth;
   const mailHealth = getIntegrationHealth({
     configured: mailConfigured,
     configurationReady: encryptionReady,
@@ -221,17 +247,23 @@ export default async function IntegrationsPage({
                 <p>Laporan performa kampanye, hanya-baca</p>
               </div>
             </div>
-            <span className={`integration-status is-${adsHealth.level}`}>{adsHealth.label}</span>
+            <span className={`integration-status is-${adsDisplayHealth.level}`}>{adsDisplayHealth.label}</span>
           </div>
           <div className="integration-facts">
             <span>Akun</span>
-            <strong>Anugrah Plastik · {maskGoogleAdsCustomerId(googleAdsCustomerId())}</strong>
+            <strong>
+              {adsSnapshotMode
+                ? "Anugrah Plastik · snapshot production"
+                : `Anugrah Plastik · ${maskGoogleAdsCustomerId(googleAdsCustomerId())}`}
+            </strong>
             <span>MCC laporan</span>
-            <strong>{maskGoogleAdsCustomerId(googleAdsLoginCustomerId())}</strong>
+            <strong>
+              {adsSnapshotMode ? "Dikelola di production" : maskGoogleAdsCustomerId(googleAdsLoginCustomerId())}
+            </strong>
             <span>Data</span>
             <strong>Impresi, klik, biaya, konversi, dan status kampanye</strong>
             <span>Data terakhir diperbarui</span>
-            <strong>{formatWib(ads?.lastSyncAt)}</strong>
+            <strong>{formatWib(adsSnapshotMode ? adsSnapshotImportedAt : ads?.lastSyncAt)}</strong>
             <span>Pemeriksaan terakhir</span>
             <strong>
               {latestAdsRun
@@ -245,22 +277,27 @@ export default async function IntegrationsPage({
               </>
             ) : null}
             <span>Hasil terakhir</span>
-            <strong>{adsHealth.summary}</strong>
+            <strong>{adsDisplayHealth.summary}</strong>
             {!isLocalRuntime ? (
               <>
                 <span>Scheduler Google Ads</span>
                 <strong>{activeAdsRun ? "Sedang berjalan" : adsSchedulerHealth.label}</strong>
               </>
             ) : null}
-            {adsRetryCount ? (
+            {!adsSnapshotMode && adsRetryCount ? (
               <>
                 <span>Retry laporan hari ini</span>
                 <strong>{adsRetryCount} dari 3 upaya telah digunakan</strong>
               </>
             ) : null}
           </div>
-          <p className={`integration-health-note is-${adsHealth.level}`}>{adsHealth.recovery}</p>
-          {canManage && (!adsConfigured || adsHealth.level === "reconnect") ? (
+          <p className={`integration-health-note is-${adsDisplayHealth.level}`}>{adsDisplayHealth.recovery}</p>
+          {adsSnapshotMode ? (
+            <Link className="admin-primary-button" href="/admin/marketing">
+              Buka laporan dan ambil snapshot
+            </Link>
+          ) : null}
+          {!adsSnapshotMode && canManage && (!adsConfigured || adsHealth.level === "reconnect") ? (
             <>
               <form action={startGoogleAdsConnection}>
                 <button className="admin-primary-button" type="submit" disabled={!googleReady}>
@@ -273,14 +310,14 @@ export default async function IntegrationsPage({
               </p>
             </>
           ) : null}
-          {!googleReady ? (
+          {!adsSnapshotMode && !googleReady ? (
             <p className="integration-note">
               {!googleConfigured || googleOAuthIssues.length
                 ? `Belum siap disambungkan: ${googleOAuthIssues.map((issue) => issue.label).join(" dan ") || "OAuth Client"} belum diatur pada server. Jangan masukkan rahasia ke chat; konfigurasi hanya di environment server.`
                 : "Callback saat ini bukan localhost. Atur callback lokal sebelum memulai sambungan dari aplikasi ini."}
             </p>
           ) : null}
-          {googleReady && !googleReportingReady ? (
+          {!adsSnapshotMode && googleReady && !googleReportingReady ? (
             <div className="integration-note" role="status">
               <strong>Laporan belum siap ditarik.</strong>
               <p>Lengkapi di environment privat server, lalu restart aplikasi:</p>
@@ -293,7 +330,7 @@ export default async function IntegrationsPage({
               </ul>
             </div>
           ) : null}
-          {adsConfigured && canManage ? (
+          {!adsSnapshotMode && adsConfigured && canManage ? (
             <IntegrationHealthControls
               connected
               kind="google-ads"
@@ -304,7 +341,7 @@ export default async function IntegrationsPage({
               }
             />
           ) : null}
-          {!adsConfigured ? (
+          {!adsSnapshotMode && !adsConfigured ? (
             <p className="integration-note">
               Google Cloud OAuth, akses project ke Google Ads API, dan izin laporan perlu disiapkan lebih dulu.
             </p>

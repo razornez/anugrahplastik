@@ -24,6 +24,8 @@ import { getDatabase } from "@/lib/database/client";
 import { integrations } from "@/lib/database/schema";
 import {
   getGoogleAdsReportingConfigurationIssues,
+  googleAdsDataSource,
+  isGoogleAdsSnapshotConfigured,
   isGoogleAdsOAuthConfigured,
   isGoogleAdsReportingConfigured,
 } from "@/features/integrations/google-ads-config";
@@ -59,6 +61,19 @@ export default async function MarketingPage({
     : [];
   const params = await searchParams;
   const metadata = (connection?.metadata ?? {}) as Record<string, unknown>;
+  const dataSource = googleAdsDataSource();
+  const snapshotMode = dataSource === "snapshot";
+  const snapshotConfigured = isGoogleAdsSnapshotConfigured();
+  const snapshotImportedAt =
+    typeof metadata.snapshotImportedAt === "string" && Number.isFinite(Date.parse(metadata.snapshotImportedAt))
+      ? metadata.snapshotImportedAt
+      : null;
+  const snapshotAge = snapshotImportedAt
+    ? new Date().getTime() - Date.parse(snapshotImportedAt)
+    : Number.POSITIVE_INFINITY;
+  const snapshotFresh = snapshotAge <= 24 * 60 * 60_000;
+  const snapshotSourceLastSyncAt =
+    typeof metadata.snapshotSourceLastSyncAt === "string" ? metadata.snapshotSourceLastSyncAt : null;
   const accountTimeZone =
     typeof metadata.adsAccountTimeZone === "string" ? metadata.adsAccountTimeZone : "Asia/Jakarta";
   const today = adsDateInTimeZone(accountTimeZone);
@@ -147,6 +162,25 @@ export default async function MarketingPage({
   });
   const probeRequired = !isFreshGoogleAdsProbe(metadata);
   const adsSchedulerHealth = getSchedulerHealth(lastAdsScheduledRunAt, new Date(), 45);
+  const visibleHealth = snapshotMode
+    ? {
+        level: snapshotFresh ? "healthy" : snapshotImportedAt ? "attention" : "disconnected",
+        label: snapshotFresh
+          ? "Snapshot production"
+          : snapshotImportedAt
+            ? "Snapshot perlu diperbarui"
+            : "Snapshot belum diambil",
+      }
+    : adsHealth;
+  const sourceStatus = snapshotImportedAt
+    ? "Snapshot production diimpor " +
+      new Date(snapshotImportedAt).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }) +
+      " WIB" +
+      (snapshotFresh ? "." : "; ambil ulang agar data terbaru.")
+    : snapshotConfigured
+      ? "Belum ada snapshot lokal. Administrator dapat mengambil laporan production sekarang."
+      : "Sumber snapshot production belum disiapkan pada environment lokal.";
+  const hasReportSource = snapshotMode || Boolean(connection?.secretCiphertext);
 
   return (
     <section className="admin-page marketing-page">
@@ -156,7 +190,7 @@ export default async function MarketingPage({
         description="Pantau klik, tayangan, biaya, dan konversi pada periode yang telah lengkap."
       />
       <MarketingWorkspaceNav current="/admin/marketing" />
-      {process.env.NODE_ENV === "production" && adsSchedulerHealth.level !== "healthy" ? (
+      {!snapshotMode && process.env.NODE_ENV === "production" && adsSchedulerHealth.level !== "healthy" ? (
         <p className="integration-alert" role="alert">
           Scheduler Google Ads {adsSchedulerHealth.label.toLowerCase()}. {adsSchedulerHealth.summary}{" "}
           <Link href="/admin/settings/integrations">Periksa koneksi layanan.</Link>
@@ -165,6 +199,16 @@ export default async function MarketingPage({
       {params.synced ? (
         <p className="integration-success" role="status">
           Laporan Google Ads berhasil diperbarui untuk periode yang dipilih.
+        </p>
+      ) : null}
+      {selectedValue(params.snapshot) === "1" ? (
+        <p className="integration-success" role="status">
+          Snapshot production berhasil disimpan pada database lokal.
+        </p>
+      ) : null}
+      {selectedValue(params.snapshot) === "error" ? (
+        <p className="integration-alert" role="alert">
+          Snapshot production belum dapat diambil. Data lokal sebelumnya tetap dipertahankan.
         </p>
       ) : null}
       {params.error === "range" ? (
@@ -178,9 +222,9 @@ export default async function MarketingPage({
             <p className="admin-eyebrow">GOOGLE ADS · {periodLabel}</p>
             <h2>Performa kampanye</h2>
           </div>
-          <span className={`integration-status is-${adsHealth.level}`}>{adsHealth.label}</span>
+          <span className={`integration-status is-${visibleHealth.level}`}>{visibleHealth.label}</span>
         </div>
-        {connection?.secretCiphertext ? (
+        {hasReportSource ? (
           <>
             <GoogleAdsPerformance
               key={[today, from, to, interval, compare, selectedCampaigns.join(","), metrics.join(",")].join(":")}
@@ -202,6 +246,9 @@ export default async function MarketingPage({
               canManageReports={user.role === "admin" && reportingReady}
               probeRequired={probeRequired}
               accountTimeZone={accountTimeZone}
+              dataSource={dataSource}
+              canImportSnapshot={user.role === "admin" && snapshotConfigured}
+              sourceStatus={sourceStatus}
             />
             <section className="marketing-campaigns marketing-campaigns--table">
               <div className="marketing-campaigns__heading">
@@ -265,7 +312,19 @@ export default async function MarketingPage({
                 dengan prospek valid atau transaksi.
               </p>
               <p>
-                {connection.lastSyncAt ? (
+                {snapshotMode ? (
+                  snapshotSourceLastSyncAt ? (
+                    <>
+                      Sumber production terakhir sinkron{" "}
+                      {new Date(snapshotSourceLastSyncAt).toLocaleString("id-ID", {
+                        timeZone: "Asia/Jakarta",
+                      })}{" "}
+                      WIB.
+                    </>
+                  ) : (
+                    "Snapshot belum memiliki waktu sinkron sumber."
+                  )
+                ) : connection?.lastSyncAt ? (
                   <>
                     Data terakhir diambil{" "}
                     {new Date(connection.lastSyncAt).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}.
@@ -281,14 +340,16 @@ export default async function MarketingPage({
                 {adsHealth.summary} {adsHealth.recovery}
               </p>
             ) : null}
-            {!reportingReady ? (
+            {!snapshotMode && !reportingReady ? (
               <p className="integration-alert" role="status">
                 Laporan tersimpan tetap dapat dibaca, tetapi pembaruan dinonaktifkan sampai{" "}
                 {reportingIssues.map((issue) => issue.label).join(", ")} lengkap.{" "}
                 {user.role === "admin" ? <Link href="/admin/settings/integrations">Buka Koneksi layanan</Link> : null}
               </p>
             ) : null}
-            {connection.lastError ? <p className="integration-alert">{connection.lastError}</p> : null}
+            {!snapshotMode && connection?.lastError ? (
+              <p className="integration-alert">{connection.lastError}</p>
+            ) : null}
           </>
         ) : (
           <div className="integration-empty">

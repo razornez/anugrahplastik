@@ -62,7 +62,7 @@ dan perubahan DNS tetap merupakan gate terpisah.
   menghalangi provider lain. Timer gabungan lama harus tetap nonaktif.
 - Enable timer Email CS hanya setelah IMAP 993 dan SMTP 465 berhasil diuji dari
   VPS serta koneksi tersimpan dapat disinkronkan.
-- Google Ads scheduler tetap nonaktif sampai OAuth Production, Developer Token,
+- Google Ads scheduler tetap nonaktif sampai OAuth Production, akses project Google Cloud,
   probe akses, dan rekonsiliasi laporan tujuh hari dinyatakan lulus. Setelah
   itu timer Ads berjalan setiap 15 menit, sedangkan klaim database membatasi
   pembaruan laporan menjadi sekali per hari dengan maksimal tiga retry.

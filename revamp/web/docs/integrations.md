@@ -54,7 +54,7 @@ Status koneksi berarti kredensial masih tersimpan, bukan jaminan penyedia selalu
 Konfigurasikan server-only environment berikut:
 
 - `GOOGLE_ADS_CLIENT_ID` dan `GOOGLE_ADS_CLIENT_SECRET` dari OAuth client bertipe Web application.
-- `GOOGLE_ADS_DEVELOPER_TOKEN` dari API Center MCC. Simpan hanya di secret environment server; token ini dikirim sebagai header pada setiap request Google Ads API.
+- `GOOGLE_ADS_DEVELOPER_TOKEN` hanya untuk kompatibilitas instalasi lama. Sejak 9 September 2026 Google mengabaikan header ini dan menentukan level akses dari project Google Cloud pemilik OAuth Client.
 - `GOOGLE_ADS_CUSTOMER_ID=6738895829` (angka saja; tanda hubung boleh digunakan).
 - `GOOGLE_ADS_LOGIN_CUSTOMER_ID` adalah ID 10 digit MCC aktif yang sudah ditautkan ke Customer ID di atas.
 - `GOOGLE_ADS_LOGIN_EMAIL=razornez@gmail.com` adalah akun Google owner yang diizinkan menyambungkan OAuth.
@@ -66,7 +66,7 @@ Laporan default memakai tujuh hari kalender lengkap sampai kemarin (WIB). Preset
 
 Untuk menguji klaim harian pada database lokal tanpa API eksternal, jalankan `GOOGLE_ADS_DB_TEST=1 node --test tests/google-ads-report.test.cjs` (PowerShell: `$env:GOOGLE_ADS_DB_TEST='1'`). Pengujian membuat dan menghapus schema test unik, memalsukan respons HTTP, dan tidak menulis ke data aplikasi.
 
-Permintaan laporan memakai OAuth dan akses project Google Cloud; aplikasi hanya menjalankan kueri laporan. Ikuti dokumentasi resmi untuk [akses project dan token developer](https://developers.google.com/google-ads/api/docs/api-policy/developer-token), [OAuth web server lokal](https://developers.google.com/identity/protocols/oauth2/web-server), [pelaporan](https://developers.google.com/google-ads/api/docs/reporting/overview), dan [Search/SearchStream](https://developers.google.com/google-ads/api/rest/common/search).
+Permintaan laporan memakai OAuth dan akses project Google Cloud; aplikasi hanya menjalankan kueri laporan. Ikuti dokumentasi resmi untuk [akses project setelah penghentian developer token](https://developers.google.com/google-ads/api/docs/api-policy/developer-token), [OAuth web server lokal](https://developers.google.com/identity/protocols/oauth2/web-server), [pelaporan](https://developers.google.com/google-ads/api/docs/reporting/overview), dan [Search/SearchStream](https://developers.google.com/google-ads/api/rest/common/search).
 
 Status koneksi Google Ads berarti refresh token masih tersimpan, bukan bahwa laporan pasti dapat ditarik. Pusat Kesehatan membedakan OAuth, akses project Google Cloud, MCC, dan akses Customer ID supaya tindakan pemulihan tidak salah. Kegagalan refresh atau laporan tidak menghapus token OAuth; aplikasi menampilkan peringatan agar administrator dapat menyambungkan ulang atau memeriksa akses. Explorer cukup untuk laporan produksi dan memberi batas 2.880 operasi harian. Basic tidak dibutuhkan untuk laporan baca-saja.
 
@@ -74,11 +74,11 @@ Status koneksi Google Ads berarti refresh token masih tersimpan, bukan bahwa lap
 
 1. Buat **Google Ads Manager Account/MCC** baru bernama misalnya `Anugrah Plastik – Reporting Manager`. Jangan mengaktifkan akun MCC yang sudah dibatalkan.
 2. Kirim lalu setujui permintaan penautan antara MCC tersebut dan Customer ID `6738895829`. Tidak perlu mengubah kampanye, anggaran, billing, atau pengguna akun iklan.
-3. Pada project Google Cloud production, aktifkan Google Ads API lalu ajukan akses **Explorer** untuk penggunaan internal baca-saja, kemudian ambil Developer Token dari API Center MCC.
-4. Setelah disetujui, isi `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID`, dan `GOOGLE_ADS_LOGIN_CUSTOMER_ID` di secret environment VPS; restart aplikasi.
+3. Pada project Google Cloud production, aktifkan Google Ads API lalu ajukan akses **Explorer** untuk penggunaan internal baca-saja.
+4. Setelah disetujui, isi `GOOGLE_ADS_CUSTOMER_ID` dan `GOOGLE_ADS_LOGIN_CUSTOMER_ID` di secret environment VPS; restart aplikasi.
 5. Di **Koneksi layanan**, jalankan **Verifikasi akses API**. Aksi ini hanya menguji project Cloud, hierarki MCC, dan akses akun; tidak mengubah laporan tersimpan. Setelah berhasil, jalankan **Perbarui laporan sekarang** dan cocokkan rentang tujuh hari WIB dengan Google Ads UI.
 
-Google mensyaratkan `developer-token` pada setiap request dan `login-customer-id` ketika MCC mengakses akun klien. Gunakan project Google Cloud yang sudah berstatus Explorer. Lihat [autentikasi API](https://developers.google.com/google-ads/api/rest/auth) dan [level akses API](https://developers.google.com/google-ads/api/docs/api-policy/access-levels).
+Google mensyaratkan `login-customer-id` ketika MCC mengakses akun klien. Gunakan OAuth Client dari project Google Cloud yang sudah berstatus Explorer. Header `developer-token` hanya dikirim bila credential lama masih tersedia dan tidak menjadi syarat konfigurasi. Lihat [panduan penghentian token](https://developers.google.com/google-ads/api/docs/api-policy/developer-token) dan [level akses API](https://developers.google.com/google-ads/api/docs/api-policy/access-levels).
 
 ### Persiapan OAuth production
 

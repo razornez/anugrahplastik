@@ -1,7 +1,7 @@
 import "server-only";
 
 export type GoogleAdsConfigurationIssue = {
-  code: "oauth" | "developer-token" | "customer-id" | "manager-id";
+  code: "oauth" | "customer-id" | "manager-id";
   label: string;
   recovery: string;
 };
@@ -41,7 +41,10 @@ export function googleAdsExpectedEmail() {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 }
 
-/** Server-only secret. It is never persisted or returned to a client. */
+/**
+ * Legacy server-only secret. Google sunset developer tokens on 9 September
+ * 2026, but still accepts and ignores the header for backwards compatibility.
+ */
 export function googleAdsDeveloperToken() {
   const token = process.env.GOOGLE_ADS_DEVELOPER_TOKEN?.trim() ?? "";
   return token.length >= 10 && token.length <= 512 ? token : null;
@@ -66,12 +69,6 @@ export function getGoogleAdsOAuthConfigurationIssues(): GoogleAdsConfigurationIs
 
 export function getGoogleAdsReportingConfigurationIssues(): GoogleAdsConfigurationIssue[] {
   const issues: GoogleAdsConfigurationIssue[] = [];
-  if (!googleAdsDeveloperToken())
-    issues.push({
-      code: "developer-token",
-      label: "Developer Token Google Ads",
-      recovery: "Simpan Developer Token yang telah disetujui pada environment privat server.",
-    });
   if (!googleAdsCustomerId())
     issues.push({
       code: "customer-id",

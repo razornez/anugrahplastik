@@ -153,22 +153,24 @@ async function queryGoogleAdsApi(query: string, suppliedAccessToken?: string) {
   const customerId = googleAdsCustomerId();
   const managerId = googleAdsLoginCustomerId();
   const developerToken = googleAdsDeveloperToken();
-  if (!isGoogleAdsReportingConfigured() || !customerId || !managerId || !developerToken)
+  if (!isGoogleAdsReportingConfigured() || !customerId || !managerId)
     throw new GoogleAdsServiceError(
-      "developer_token",
-      "Pengaturan laporan Google Ads belum lengkap. Lengkapi Developer Token, Customer ID, dan MCC Login Customer ID.",
+      "oauth_configuration",
+      "Pengaturan laporan Google Ads belum lengkap. Lengkapi Customer ID dan MCC Login Customer ID.",
     );
   const token = suppliedAccessToken ?? (await accessToken());
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${token}`,
+    "content-type": "application/json",
+    "login-customer-id": managerId,
+  };
+  // Kept only for installations that still carry the pre-sunset credential.
+  if (developerToken) headers["developer-token"] = developerToken;
   let response: Response;
   try {
     response = await fetch(`https://googleads.googleapis.com/v25/customers/${customerId}/googleAds:searchStream`, {
       method: "POST",
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-        "developer-token": developerToken,
-        "login-customer-id": managerId,
-      },
+      headers,
       body: JSON.stringify({ query }),
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),

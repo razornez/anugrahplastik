@@ -220,7 +220,7 @@ test("Email CS shows honest sync status from successful and attempted mailbox ru
   assert.match(actions, /runIntegrationSync\(\{ trigger: "manual", services: \["mail"\] \}\)/);
 });
 
-test("Google Ads reports require explicit OAuth, Developer Token, MCC, and customer configuration", () => {
+test("Google Ads reports require explicit OAuth, Cloud-project access, MCC, and customer configuration", () => {
   const service = readFileSync(join(__dirname, "../src/features/integrations/google-ads-service.ts"), "utf8");
   const callback = readFileSync(join(__dirname, "../src/app/api/integrations/google-ads/callback/route.ts"), "utf8");
   const config = readFileSync(join(__dirname, "../src/features/integrations/google-ads-config.ts"), "utf8");
@@ -229,8 +229,8 @@ test("Google Ads reports require explicit OAuth, Developer Token, MCC, and custo
   assert.match(service, /hasVerifiedGoogleAdsAccount/);
   assert.match(service, /await probeGoogleAdsReporting\(\)/);
   assert.match(service, /customer\.id\.replaceAll\("-", ""\) !== expectedCustomerId/);
-  assert.match(service, /"developer-token": developerToken/);
-  assert.match(config, /GOOGLE_ADS_DEVELOPER_TOKEN/);
+  assert.match(service, /if \(developerToken\) headers\["developer-token"\] = developerToken/);
+  assert.doesNotMatch(config, /code: "developer-token"/);
   assert.doesNotMatch(service, /GOOGLE_ADS_CUSTOMER_ID \|\| "6738895829"/);
   assert.doesNotMatch(callback, /GOOGLE_ADS_CUSTOMER_ID \|\| "6738895829"/);
   assert.match(config, /GOOGLE_ADS_LOGIN_CUSTOMER_ID/);

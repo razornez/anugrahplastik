@@ -40,6 +40,7 @@ export async function validateDocumentEmailSource(
     )
     .limit(1);
   const document = record?.document;
+  const sendState = (document?.payload as { sendState?: string } | null)?.sendState;
   if (
     !record ||
     !document ||
@@ -49,29 +50,22 @@ export async function validateDocumentEmailSource(
     document.status !== "ready" ||
     document.direction !== "outbound" ||
     !document.storagePath ||
-    document.sentMessageId ||
-    (document.payload as { sendState?: string } | null)?.sendState ||
+    sendState === "pending" ||
+    sendState === "uncertain" ||
     record.header.cancelledAt
   ) {
     throw new Error("Dokumen berubah atau sudah diproses. Periksa versi aktif dan status email di Transaksi.");
   }
-  if (!["quotation", "invoice_dp", "invoice_final", "delivery_note"].includes(document.type))
-    throw new Error("STB dan kontrak historis tidak boleh dikirim melalui email.");
-  if (
-    recipients.to.length !== 1 ||
-    recipients.cc.length ||
-    recipients.bcc.length ||
-    !record.customer.email ||
-    recipients.to[0].toLowerCase() !== record.customer.email.trim().toLowerCase()
-  )
-    throw new Error(
-      "Penerima dokumen harus sama dengan email pelanggan; CC/BCC tidak tersedia untuk dokumen transaksi.",
-    );
+  if (!["quotation", "invoice_dp", "invoice_final", "delivery_note", "bast"].includes(document.type))
+    throw new Error("Dokumen ini tidak dapat dikirim sebagai dokumen keluar.");
+  if (!recipients.to.length || recipients.bcc.length || recipients.to.length + recipients.cc.length > 10)
+    throw new Error("Isi penerima utama dan gunakan maksimal 10 alamat To serta CC.");
   if ((document.payload as { renderSource?: string } | null)?.renderSource === "local_qa") {
     throw new Error("PDF pratinjau QA lokal tidak boleh dikirim melalui email.");
   }
   const dummy = (document.payload as { isDummy?: boolean } | null)?.isDummy === true;
-  assertDocGenEmailAllowed(record.header.dataClass, recipients.to[0], dummy);
+  for (const recipient of [...recipients.to, ...recipients.cc])
+    assertDocGenEmailAllowed(record.header.dataClass, recipient, dummy);
   if ((docGenDummyMode() || dummy) && !subject.startsWith("[UJI]"))
     throw new Error("Subjek dokumen contoh harus diawali [UJI].");
   if (document.type === "quotation") {
@@ -132,8 +126,8 @@ export async function validateDocumentEmailSource(
   }
   const path = privateFilePath(document.storagePath!);
   const info = await stat(path);
-  if (!info.isFile() || info.size < 1 || info.size > 10 * 1024 * 1024)
-    throw new Error("PDF tidak tersedia atau melebihi batas email 10 MB.");
+  if (!info.isFile() || info.size < 1 || info.size > 100 * 1024 * 1024)
+    throw new Error("PDF tidak tersedia atau melebihi batas arsip 100 MB.");
   const bytes = await readFile(path);
   if (createHash("sha256").update(bytes).digest("hex") !== source.checksum)
     throw new Error("Checksum PDF tidak sesuai. Pengiriman dihentikan.");

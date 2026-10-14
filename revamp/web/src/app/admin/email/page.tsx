@@ -397,7 +397,7 @@ export default async function EmailPage({
         {folder === "sent" ? (
           <select name="status" aria-label="Status pengiriman" defaultValue={params.status ?? ""}>
             <option value="">Semua status</option>
-            {["sent", "partial", "failed", "uncertain", "pending", "simulated"].map((status) => (
+            {["sent", "partial", "failed", "bounced", "uncertain", "pending", "simulated"].map((status) => (
               <option key={status} value={status}>
                 {outgoingStatusLabel(status)}
               </option>

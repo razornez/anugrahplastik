@@ -38,7 +38,7 @@ export const viewport: Viewport = { themeColor: "#0b2442", viewportFit: "cover" 
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="id" className={`${heading.variable} ${sans.variable} ${mono.variable}`}>
+    <html data-scroll-behavior="smooth" lang="id" className={`${heading.variable} ${sans.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   );

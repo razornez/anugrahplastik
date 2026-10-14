@@ -179,3 +179,25 @@ test("workspace template memakai preview tertunda dan dialog aktivasi aplikasi",
   assert.match(restore, /<Dialog\.Root/);
   assert.doesNotMatch(restore, /window\.confirm|window\.alert/);
 });
+
+test("variabel editor berupa chip atomik dan draft sesi dipulihkan", () => {
+  const editor = readFileSync(editorFilename, "utf8");
+  const richEditor = readFileSync(join(__dirname, "../src/components/rich-email-editor.tsx"), "utf8");
+  assert.match(richEditor, /name: "emailVariable"/);
+  assert.match(richEditor, /atom: true/);
+  assert.match(richEditor, /data-email-variable/);
+  assert.match(editor, /sessionStorage/);
+  assert.match(editor, /Draft tetap tersimpan selama sesi ini/);
+});
+
+test("lampiran tetap template disimpan privat, dipindai, dan dibekukan saat preview", () => {
+  const actions = readFileSync(join(__dirname, "../src/features/integrations/email-template-actions.ts"), "utf8");
+  const drafts = readFileSync(join(__dirname, "../src/features/integrations/email-drafts.ts"), "utf8");
+  const manager = readFileSync(join(__dirname, "../src/components/template-attachment-manager.tsx"), "utf8");
+  assert.match(actions, /uploadEmailTemplateAttachment/);
+  assert.match(actions, /preparePrivateDestination/);
+  assert.match(actions, /scanBytes/);
+  assert.match(drafts, /emailTemplateAttachments/);
+  assert.match(drafts, /readFile\(privateFilePath/);
+  assert.match(manager, /Maksimal empat file dan total 15 MB/);
+});

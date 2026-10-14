@@ -1,16 +1,44 @@
 "use client";
 
 import { useEditor, EditorContent } from "@tiptap/react";
+import { Node, mergeAttributes } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import { TableKit } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { uploadEmailTemplateImage } from "@/features/integrations/email-template-actions";
 import type { EmailNode } from "@/features/integrations/email-templates";
 import { emailVariableLabels } from "./email-variable-labels";
+
+const EmailVariable = Node.create({
+  name: "emailVariable",
+  group: "inline",
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return { token: { default: "" } };
+  },
+  parseHTML() {
+    return [{ tag: "span[data-email-variable]" }];
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    const token = String(node.attrs.token ?? "");
+    return [
+      "span",
+      mergeAttributes(HTMLAttributes, {
+        "data-email-variable": token,
+        "aria-label": `Data otomatis ${emailVariableLabels[token] ?? token}`,
+        class: "email-variable-chip",
+        contenteditable: "false",
+      }),
+      `{{${token}}}`,
+    ];
+  },
+});
 
 const extensions = [
   StarterKit.configure({ link: false, underline: false }),
@@ -19,6 +47,7 @@ const extensions = [
   Image.configure({ inline: false, allowBase64: false }),
   TableKit.configure({ table: { resizable: false } }),
   TextAlign.configure({ types: ["paragraph", "heading"] }),
+  EmailVariable,
 ];
 
 export function RichEmailEditor({
@@ -36,6 +65,8 @@ export function RichEmailEditor({
 }) {
   const [value, setValue] = useState<EmailNode>(initial);
   const [error, setError] = useState("");
+  const [variableToken, setVariableToken] = useState("");
+  const variableListId = useId();
   const fileInput = useRef<HTMLInputElement>(null);
   const editor = useEditor({
     extensions,
@@ -92,59 +123,81 @@ export function RichEmailEditor({
         >
           <em>I</em>
         </button>
-        <button
-          type="button"
-          aria-label="Garis bawah"
-          aria-pressed={editor?.isActive("underline") ?? false}
-          onClick={() => editor?.chain().focus().toggleUnderline().run()}
-        >
-          <u>U</u>
-        </button>
         <button type="button" onClick={() => editor?.chain().focus().toggleBulletList().run()}>
           Daftar
-        </button>
-        <button type="button" onClick={() => editor?.chain().focus().toggleOrderedList().run()}>
-          Nomor
         </button>
         <button type="button" onClick={addLink}>
           Tautan
         </button>
-        <button
-          type="button"
-          onClick={() => editor?.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: true }).run()}
-        >
-          Tabel
-        </button>
-        {canUpload ? (
-          <button type="button" onClick={() => fileInput.current?.click()}>
-            Gambar
-          </button>
-        ) : null}
-        <button type="button" onClick={() => editor?.chain().focus().undo().run()}>
-          Urungkan
-        </button>
-        <button type="button" onClick={() => editor?.chain().focus().redo().run()}>
-          Ulangi
-        </button>
+        <details className="rich-email-editor__more">
+          <summary>Lainnya</summary>
+          <div>
+            <button
+              type="button"
+              aria-label="Garis bawah"
+              aria-pressed={editor?.isActive("underline") ?? false}
+              onClick={() => editor?.chain().focus().toggleUnderline().run()}
+            >
+              <u>U</u>
+            </button>
+            <button type="button" onClick={() => editor?.chain().focus().toggleOrderedList().run()}>
+              Nomor
+            </button>
+            <button
+              type="button"
+              onClick={() => editor?.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: true }).run()}
+            >
+              Tabel
+            </button>
+            {canUpload ? (
+              <button type="button" onClick={() => fileInput.current?.click()}>
+                Gambar
+              </button>
+            ) : null}
+            <button type="button" onClick={() => editor?.chain().focus().undo().run()}>
+              Urungkan
+            </button>
+            <button type="button" onClick={() => editor?.chain().focus().redo().run()}>
+              Ulangi
+            </button>
+          </div>
+        </details>
       </div>
       {variables.length ? (
         <label className="rich-email-editor__variables">
           Sisipkan data otomatis
-          <select
-            aria-label="Sisipkan data otomatis"
-            defaultValue=""
-            onChange={(event) => {
-              if (event.target.value) editor?.chain().focus().insertContent(`{{${event.target.value}}}`).run();
-              event.target.value = "";
-            }}
-          >
-            <option value="">Pilih data…</option>
-            {variables.map((variable) => (
-              <option key={variable} value={variable}>
-                {emailVariableLabels[variable] ?? variable}
-              </option>
-            ))}
-          </select>
+          <span>
+            <input
+              aria-label="Cari data otomatis"
+              autoComplete="off"
+              list={variableListId}
+              onChange={(event) => setVariableToken(event.target.value)}
+              placeholder="Cari data…"
+              value={variableToken}
+            />
+            <datalist id={variableListId}>
+              {variables.map((variable) => (
+                <option key={variable} value={variable}>
+                  {emailVariableLabels[variable] ?? variable}
+                </option>
+              ))}
+            </datalist>
+            <button
+              disabled={!variables.includes(variableToken)}
+              onClick={() => {
+                if (!variables.includes(variableToken)) return;
+                editor
+                  ?.chain()
+                  .focus()
+                  .insertContent({ type: "emailVariable", attrs: { token: variableToken } })
+                  .run();
+                setVariableToken("");
+              }}
+              type="button"
+            >
+              Sisipkan
+            </button>
+          </span>
         </label>
       ) : null}
       <EditorContent editor={editor} aria-label="Isi email" className="rich-email-editor__canvas" />

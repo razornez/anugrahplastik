@@ -25,9 +25,10 @@ let qaRunId = null;
 
 async function createUser(role) {
   const email = `${qaLabel.toLowerCase()}-${role}@local.invalid`;
+  const username = `qa.${role}.${randomUUID().replaceAll("-", "").slice(0, 10)}`;
   const { rows } = await pool.query(
-    "insert into users (email,name,password_hash,role,is_active) values ($1,$2,'!finance-e2e-no-login',$3,true) returning id,email,name,role",
-    [email, `[UJI Keuangan] ${role}`, role],
+    "insert into users (username,email,name,password_hash,role,is_active) values ($1,$2,$3,'!finance-e2e-no-login',$4,true) returning id,username,email,name,role",
+    [username, email, `[UJI Keuangan] ${role}`, role],
   );
   const user = rows[0];
   temporaryUserIds.push(user.id);
@@ -36,7 +37,7 @@ async function createUser(role) {
 
 async function sessionCookie(user) {
   const { rows } = await pool.query(
-    "insert into sessions (user_id,expires_at) values ($1,now() + interval '10 minutes') returning id",
+    "insert into sessions (user_id,expires_at,absolute_expires_at) values ($1,now() + interval '10 minutes',now() + interval '10 minutes') returning id",
     [user.id],
   );
   const sessionId = rows[0].id;

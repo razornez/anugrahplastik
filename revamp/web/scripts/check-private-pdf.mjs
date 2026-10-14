@@ -32,7 +32,7 @@ try {
   const document = rows[0];
   assert(document?.checksum && document?.user_id);
   const session = await pool.query(
-    "insert into sessions (user_id,expires_at) values ($1,now() + interval '10 minutes') returning id",
+    "insert into sessions (user_id,expires_at,absolute_expires_at) values ($1,now() + interval '10 minutes',now() + interval '10 minutes') returning id",
     [document.user_id],
   );
   sessionId = session.rows[0].id;

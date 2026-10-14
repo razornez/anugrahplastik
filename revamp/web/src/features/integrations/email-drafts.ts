@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID, createHash } from "node:crypto";
-import { and, eq, isNull, desc, sql } from "drizzle-orm";
+import { readFile } from "node:fs/promises";
+import { and, eq, inArray, isNull, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
@@ -12,8 +13,11 @@ import {
   csEmailDrafts,
   csEmailDraftFiles,
   csEmailOutbox,
+  emailTemplateAttachments,
   auditLogs,
   transactionDocuments,
+  userNotifications,
+  users,
 } from "@/lib/database/schema";
 import { encryptSecret, decryptSecret } from "./secrets";
 import {
@@ -25,6 +29,9 @@ import {
 } from "./email-templates";
 import { getEmailRecord, getMailboxSettings } from "./mail-service";
 import { validateDocumentEmailSource, type DocumentEmailSource } from "./document-email-source";
+import { scanBytes } from "@/features/security/malware-scanner";
+import { issuePrivateDocumentLink, revokePrivateDocumentLinks } from "./private-download-links";
+import { privateFilePath } from "@/features/operations/private-storage";
 import {
   maxUploadBytes,
   parseRecipients,
@@ -44,6 +51,13 @@ export type DraftPayload = {
   templateVersion: number;
   originalSubject: string;
   documentSource?: DocumentEmailSource;
+  templateSnapshot?: {
+    id: string | null;
+    name: string;
+    key: string;
+    language: string;
+    version: number;
+  };
 };
 export type DraftView = {
   id: string;
@@ -52,18 +66,28 @@ export type DraftView = {
   revision: number;
   updatedAt: string;
   payload: DraftPayload;
-  files: { id: string; filename: string; contentType: string; size: number }[];
+  files: {
+    id: string;
+    filename: string;
+    contentType: string;
+    size: number;
+    scanStatus: string;
+    scanDetail: string | null;
+  }[];
 };
 type Snapshot = {
   recipients: EmailRecipients;
   subject: string;
   from: string;
+  senderName?: string;
   html: string;
   text: string;
   attachments: { filename: string; contentType: string; content: string; cid?: string; sha256: string }[];
   inReplyTo?: string;
   references?: string[];
   documentSource?: DocumentEmailSource;
+  templateSnapshot?: DraftPayload["templateSnapshot"];
+  privateDocumentLink?: { id: string; url: string; expiresAt: string };
 };
 
 async function context() {
@@ -90,6 +114,8 @@ export async function readDraft(id: string): Promise<DraftView> {
       filename: csEmailDraftFiles.filename,
       contentType: csEmailDraftFiles.contentType,
       size: csEmailDraftFiles.size,
+      scanStatus: csEmailDraftFiles.scanStatus,
+      scanDetail: csEmailDraftFiles.scanDetail,
     })
     .from(csEmailDraftFiles)
     .where(and(eq(csEmailDraftFiles.draftId, id), isNull(csEmailDraftFiles.removedAt)))
@@ -220,6 +246,9 @@ export async function copyDraft(id: string, input: Pick<DraftPayload, "to" | "cc
           size: file.size,
           sha256: file.sha256,
           contentCiphertext: file.contentCiphertext,
+          scanStatus: file.scanStatus,
+          scanDetail: file.scanDetail,
+          scannedAt: file.scannedAt,
           createdAt: file.createdAt,
         })),
       );
@@ -294,19 +323,29 @@ export async function saveDraft(
 
 export async function uploadDraftFile(id: string, revision: number, filename: string, bytes: Buffer) {
   const { database, user } = await accessibleDraft(id);
-  if (!bytes.length || bytes.length > maxUploadBytes) throw new Error("Ukuran berkas harus 1 byte sampai 10 MB.");
+  if (!bytes.length || bytes.length > maxUploadBytes) throw new Error("Ukuran berkas harus 1 byte sampai 15 MB.");
   const name = filename.replace(/[\r\n"\\/\x00-\x1f]/g, "_").slice(0, 180);
-  let contentType: string;
+  let contentType = "application/octet-stream";
   if (bytes.subarray(0, 5).toString() === "%PDF-") {
     await PDFDocument.load(bytes);
     contentType = "application/pdf";
   } else {
-    const metadata = await sharp(bytes, { limitInputPixels: 40_000_000 }).metadata();
-    const types: Record<string, string> = { jpeg: "image/jpeg", png: "image/png", webp: "image/webp" };
-    contentType = types[metadata.format ?? ""];
-    if (!contentType || (metadata.pages ?? 1) > 1) throw new Error("Gunakan PDF, JPG, PNG, atau WebP yang valid.");
-    await sharp(bytes, { limitInputPixels: 40_000_000 }).stats();
+    try {
+      const metadata = await sharp(bytes, { limitInputPixels: 40_000_000 }).metadata();
+      const types: Record<string, string> = {
+        jpeg: "image/jpeg",
+        png: "image/png",
+        webp: "image/webp",
+        gif: "image/gif",
+        tiff: "image/tiff",
+      };
+      contentType = types[metadata.format ?? ""] ?? contentType;
+    } catch {
+      // Unknown extensions remain downloadable attachments and rely on malware scanning.
+    }
   }
+  const scan = await scanBytes(bytes);
+  if (scan.status === "malware") throw new Error("Lampiran ditolak karena terdeteksi berbahaya.");
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const [document] = await database
     .select({ id: transactionDocuments.id })
@@ -326,7 +365,7 @@ export async function uploadDraftFile(id: string, revision: number, filename: st
       .from(csEmailDraftFiles)
       .where(and(eq(csEmailDraftFiles.draftId, id), isNull(csEmailDraftFiles.removedAt)));
     if (files.length >= 5 || files.reduce((sum, file) => sum + file.size, bytes.length) > maxUploadBytes)
-      throw new Error("Maksimal lima lampiran dengan total 10 MB.");
+      throw new Error("Maksimal lima lampiran dengan total 15 MB.");
     await tx.insert(csEmailDraftFiles).values({
       draftId: id,
       createdAt: new Date(),
@@ -335,6 +374,9 @@ export async function uploadDraftFile(id: string, revision: number, filename: st
       size: bytes.length,
       sha256,
       contentCiphertext: encryptSecret({ source: bytes.toString("base64") }),
+      scanStatus: scan.status,
+      scanDetail: scan.detail,
+      scannedAt: new Date(),
     });
     await tx.insert(auditLogs).values({
       actorId: user.id,
@@ -351,7 +393,7 @@ export async function uploadDraftFile(id: string, revision: number, filename: st
   return readDraft(id);
 }
 
-export async function prepareDraft(id: string, revision: number) {
+export async function prepareDraft(id: string, revision: number, allowUnscanned = false) {
   const { database, user, row } = await accessibleDraft(id);
   if (row.status !== "draft" || row.revision !== revision)
     throw new Error("Draf berubah. Simpan lalu periksa kembali.");
@@ -381,22 +423,59 @@ export async function prepareDraft(id: string, revision: number) {
     .from(csEmailDraftFiles)
     .where(and(eq(csEmailDraftFiles.draftId, id), isNull(csEmailDraftFiles.removedAt)));
   files.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+  const templateFiles = payload.templateSnapshot?.id
+    ? await database
+        .select()
+        .from(emailTemplateAttachments)
+        .where(eq(emailTemplateAttachments.templateId, payload.templateSnapshot.id))
+        .orderBy(emailTemplateAttachments.createdAt, emailTemplateAttachments.id)
+    : [];
+  if ([...files, ...templateFiles].some((file) => file.scanStatus === "malware"))
+    throw new Error("Lampiran berbahaya telah diblokir. Lepas file sebelum mengirim.");
+  if (!allowUnscanned && [...files, ...templateFiles].some((file) => file.scanStatus !== "clean"))
+    throw new Error(
+      "Pemindai lampiran belum tersedia. Centang konfirmasi pengiriman tanpa hasil scan untuk melanjutkan.",
+    );
   const attachments: Snapshot["attachments"] = files.map((file) => {
     const content = decryptSecret<{ source: string }>(file.contentCiphertext).source;
     if (createHash("sha256").update(Buffer.from(content, "base64")).digest("hex") !== file.sha256)
       throw new Error("Checksum lampiran berubah. Unggah ulang berkas yang benar.");
     return { filename: file.filename, contentType: file.contentType, content, sha256: file.sha256 };
   });
+  for (const file of templateFiles) {
+    const bytes = await readFile(privateFilePath(file.storagePath));
+    if (bytes.length !== file.size || createHash("sha256").update(bytes).digest("hex") !== file.sha256)
+      throw new Error(`Lampiran tetap ${file.filename} berubah. Unggah ulang file yang benar.`);
+    attachments.push({
+      filename: file.filename,
+      contentType: file.mimeType,
+      content: bytes.toString("base64"),
+      sha256: file.sha256,
+    });
+  }
   let documentInfo: { number: string | null; type: string; version: number } | undefined;
+  let privateDocumentLink: Snapshot["privateDocumentLink"];
   if (payload.documentSource) {
     const document = await validateDocumentEmailSource(database, payload.documentSource, recipients, payload.subject);
     documentInfo = { number: document.documentNo, type: document.type, version: payload.documentSource.version };
-    attachments.unshift({
-      filename: document.filename,
-      contentType: "application/pdf",
-      content: document.bytes.toString("base64"),
-      sha256: payload.documentSource.checksum,
-    });
+    if (document.bytes.length <= maxUploadBytes) {
+      attachments.unshift({
+        filename: document.filename,
+        contentType: "application/pdf",
+        content: document.bytes.toString("base64"),
+        sha256: payload.documentSource.checksum,
+      });
+    } else {
+      const link = await issuePrivateDocumentLink(payload.documentSource.documentId, user.id);
+      privateDocumentLink = { id: link.id, url: link.url, expiresAt: link.expiresAt.toISOString() };
+      const safeUrl = link.url.replace(
+        /[&<>"']/g,
+        (character) =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character,
+      );
+      formatted.html += `<p><strong>Dokumen berukuran besar</strong><br><a href="${safeUrl}">Unduh dokumen melalui tautan privat</a><br><small>Tautan berlaku 30 hari.</small></p>`;
+      formatted.text += `\n\nDokumen berukuran besar: ${link.url}\nTautan berlaku 30 hari.`;
+    }
   }
   formatted.attachments.forEach((file) =>
     attachments.push({
@@ -419,10 +498,13 @@ export async function prepareDraft(id: string, revision: number) {
     recipients,
     subject: payload.subject,
     from: settings.email,
+    senderName: user.name,
     html: formatted.html,
     text: formatted.text,
     attachments,
     documentSource: payload.documentSource,
+    templateSnapshot: payload.templateSnapshot,
+    privateDocumentLink,
     ...(source?.messageId
       ? {
           inReplyTo: source.messageId,
@@ -508,6 +590,7 @@ export async function sendPreparedDraft(attemptId: string) {
   const snapshot = decryptSecret<Snapshot>(attempt.snapshotCiphertext);
   if (
     snapshot.documentSource &&
+    !snapshot.privateDocumentLink &&
     (snapshot.attachments[0]?.sha256 !== snapshot.documentSource.checksum ||
       snapshot.attachments[0]?.contentType !== "application/pdf")
   )
@@ -587,7 +670,8 @@ export async function sendPreparedDraft(attemptId: string) {
     });
     try {
       const result = await transport.sendMail({
-        from: { name: "Anugrah Plastik", address: snapshot.from },
+        from: { name: snapshot.senderName || "Anugrah Plastik", address: snapshot.from },
+        replyTo: snapshot.from,
         to: snapshot.recipients.to,
         cc: snapshot.recipients.cc,
         bcc: snapshot.recipients.bcc,
@@ -616,17 +700,25 @@ export async function sendPreparedDraft(attemptId: string) {
   }
   // A persistence failure after SMTP acceptance must never be classified as retryable SMTP failure.
   await database.transaction(async (tx) => {
+    const finalizedAt = new Date();
     if (snapshot.documentSource) {
       // Failed before acceptance and simulation do not mark the document as sent.
       const state = status === "failed" || status === "simulated" ? null : status;
+      const deliveryMetadata = {
+        lastEmailState: status,
+        lastEmailAttemptId: attemptId,
+        ...(status === "sent" || status === "partial"
+          ? { lastEmailSentAt: finalizedAt.toISOString(), lastEmailSenderName: user.name }
+          : {}),
+      };
       await tx
         .update(transactionDocuments)
         .set({
           sentMessageId: status === "sent" || status === "partial" ? messageId : undefined,
           recipient: status === "sent" || status === "partial" ? snapshot.recipients.to[0] : undefined,
           payload: state
-            ? sql`coalesce(${transactionDocuments.payload}, '{}'::jsonb) || ${JSON.stringify({ sendState: state, lastEmailState: status, lastEmailAttemptId: attemptId })}::jsonb`
-            : sql`(coalesce(${transactionDocuments.payload}, '{}'::jsonb) - 'sendState') || ${JSON.stringify({ lastEmailState: status, lastEmailAttemptId: attemptId })}::jsonb`,
+            ? sql`coalesce(${transactionDocuments.payload}, '{}'::jsonb) || ${JSON.stringify({ ...deliveryMetadata, sendState: state })}::jsonb`
+            : sql`(coalesce(${transactionDocuments.payload}, '{}'::jsonb) - 'sendState') || ${JSON.stringify(deliveryMetadata)}::jsonb`,
         })
         .where(eq(transactionDocuments.id, snapshot.documentSource.documentId));
     }
@@ -688,11 +780,133 @@ export async function downloadDraftFile(id: string, fileId: string) {
       and(eq(csEmailDraftFiles.id, fileId), eq(csEmailDraftFiles.draftId, id), isNull(csEmailDraftFiles.removedAt)),
     )
     .limit(1);
-  if (!file) throw new Error("Lampiran tidak ditemukan.");
+  if (!file || file.scanStatus === "malware") throw new Error("Lampiran tidak ditemukan atau telah diblokir.");
   const bytes = Buffer.from(decryptSecret<{ source: string }>(file.contentCiphertext).source, "base64");
   if (createHash("sha256").update(bytes).digest("hex") !== file.sha256)
     throw new Error("Checksum lampiran tidak sesuai.");
-  return { bytes, filename: file.filename, contentType: file.contentType };
+  return { bytes, filename: file.filename, contentType: file.contentType, scanStatus: file.scanStatus };
+}
+
+export async function rescanPendingEmailFiles(limit = 20) {
+  const database = getDatabase();
+  if (!database || !process.env.CLAMAV_TCP_HOST?.trim()) return { clean: 0, malware: 0 };
+  const files = await database
+    .select()
+    .from(csEmailDraftFiles)
+    .where(and(inArray(csEmailDraftFiles.scanStatus, ["pending", "unavailable"]), isNull(csEmailDraftFiles.removedAt)))
+    .orderBy(csEmailDraftFiles.createdAt)
+    .limit(limit);
+  let clean = 0;
+  let malware = 0;
+  for (const file of files) {
+    const bytes = Buffer.from(decryptSecret<{ source: string }>(file.contentCiphertext).source, "base64");
+    if (createHash("sha256").update(bytes).digest("hex") !== file.sha256) continue;
+    const result = await scanBytes(bytes);
+    if (result.status === "unavailable") continue;
+    await database.transaction(async (tx) => {
+      await tx
+        .update(csEmailDraftFiles)
+        .set({ scanStatus: result.status, scanDetail: result.detail, scannedAt: new Date() })
+        .where(eq(csEmailDraftFiles.id, file.id));
+      if (result.status !== "malware") return;
+      const [draft] = await tx.select().from(csEmailDrafts).where(eq(csEmailDrafts.id, file.draftId)).limit(1);
+      if (!draft) return;
+      const payload = decryptSecret<DraftPayload>(draft.payloadCiphertext);
+      if (payload.documentSource) {
+        await tx
+          .update(transactionDocuments)
+          .set({
+            payload: sql`coalesce(${transactionDocuments.payload}, '{}'::jsonb) || '{"lastEmailState":"malware"}'::jsonb`,
+          })
+          .where(eq(transactionDocuments.id, payload.documentSource.documentId));
+      }
+      await tx.update(csEmailOutbox).set({ status: "attachment_blocked" }).where(eq(csEmailOutbox.draftId, draft.id));
+      const admins = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.role, "admin"), eq(users.isActive, true)));
+      const recipients = new Set([draft.ownerId, ...admins.map((admin) => admin.id)]);
+      await tx.insert(userNotifications).values(
+        [...recipients].map((userId) => ({
+          userId,
+          kind: "malware",
+          title: "Lampiran berbahaya diblokir",
+          body: `File ${file.filename} tidak lagi dapat diunduh atau dikirim.`,
+          href: payload.documentSource
+            ? `/admin/transactions/${payload.documentSource.transactionId}`
+            : "/admin/email?folder=drafts",
+        })),
+      );
+      await tx.insert(auditLogs).values({
+        actorId: draft.ownerId,
+        action: "email_workspace.malware_detected",
+        entityType: "email_draft",
+        entityId: draft.id,
+        metadata: { fileId: file.id, checksum: file.sha256 },
+      });
+    });
+    if (result.status === "clean") clean += 1;
+    else {
+      malware += 1;
+      const [draft] = await database.select().from(csEmailDrafts).where(eq(csEmailDrafts.id, file.draftId)).limit(1);
+      if (draft) {
+        const payload = decryptSecret<DraftPayload>(draft.payloadCiphertext);
+        if (payload.documentSource) await revokePrivateDocumentLinks(payload.documentSource.documentId);
+      }
+    }
+  }
+  const remaining = Math.max(0, limit - files.length);
+  const templateFiles = remaining
+    ? await database
+        .select()
+        .from(emailTemplateAttachments)
+        .where(inArray(emailTemplateAttachments.scanStatus, ["pending", "unavailable"]))
+        .orderBy(emailTemplateAttachments.createdAt)
+        .limit(remaining)
+    : [];
+  for (const file of templateFiles) {
+    let bytes: Buffer;
+    try {
+      bytes = await readFile(privateFilePath(file.storagePath));
+    } catch {
+      continue;
+    }
+    if (bytes.length !== file.size || createHash("sha256").update(bytes).digest("hex") !== file.sha256) continue;
+    const result = await scanBytes(bytes);
+    if (result.status === "unavailable") continue;
+    await database.transaction(async (tx) => {
+      await tx
+        .update(emailTemplateAttachments)
+        .set({ scanStatus: result.status, scanDetail: result.detail })
+        .where(eq(emailTemplateAttachments.id, file.id));
+      if (result.status !== "malware") return;
+      const admins = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.role, "admin"), eq(users.isActive, true)));
+      const recipients = new Set([...admins.map((admin) => admin.id), ...(file.uploadedBy ? [file.uploadedBy] : [])]);
+      if (recipients.size)
+        await tx.insert(userNotifications).values(
+          [...recipients].map((userId) => ({
+            userId,
+            kind: "malware",
+            title: "Lampiran template diblokir",
+            body: `File ${file.filename} tidak akan disertakan pada email berikutnya.`,
+            href: `/admin/settings/email-templates?template=${file.templateId}`,
+          })),
+        );
+      await tx.insert(auditLogs).values({
+        actorId: file.uploadedBy,
+        action: "email_template.attachment_malware_detected",
+        entityType: "email_template_attachment",
+        entityId: file.id,
+        metadata: { templateId: file.templateId, checksum: file.sha256 },
+      });
+    });
+    if (result.status === "clean") clean += 1;
+    else malware += 1;
+  }
+  return { clean, malware };
 }
 
 export async function retryRejectedRecipients(attemptId: string) {

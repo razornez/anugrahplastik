@@ -4,6 +4,7 @@ import {
   auditLogs,
   businessTransactions,
   csEmails,
+  customerContacts,
   customers,
   materials,
   moulds,
@@ -413,6 +414,8 @@ export async function getTransactionPage(
   const loaded = await database
     .select({
       id: businessTransactions.id,
+      customerId: businessTransactions.customerId,
+      ownerId: businessTransactions.ownerId,
       referenceNo: businessTransactions.referenceNo,
       quotationNo: businessTransactions.quotationNo,
       quoteLetter: businessTransactions.quoteLetter,
@@ -581,6 +584,8 @@ export async function getTransactionDetail(id: string) {
   const [header] = await database
     .select({
       id: businessTransactions.id,
+      customerId: businessTransactions.customerId,
+      ownerId: businessTransactions.ownerId,
       dataClass: businessTransactions.dataClass,
       referenceNo: businessTransactions.referenceNo,
       quotationNo: businessTransactions.quotationNo,
@@ -606,7 +611,7 @@ export async function getTransactionDetail(id: string) {
     .where(eq(businessTransactions.id, id));
   if (!header) return null;
 
-  const [lines, invoices, documents, entries, batches, deliveryRows, deliveryItems, relatedEmails, activity] =
+  const [lines, invoices, documents, entries, batches, deliveryRows, deliveryItems, relatedEmails, activity, contacts] =
     await Promise.all([
       database
         .select({ ...getTableColumns(transactionLines), productName: products.name, materialName: materials.name })
@@ -685,6 +690,11 @@ export async function getTransactionDetail(id: string) {
         .where(sql`${auditLogs.entityType} = 'transaction' and ${auditLogs.entityId} = ${id}`)
         .orderBy(desc(auditLogs.createdAt))
         .limit(30),
+      database
+        .select()
+        .from(customerContacts)
+        .where(eq(customerContacts.customerId, header.customerId))
+        .orderBy(desc(customerContacts.isPrimary), customerContacts.name),
     ]);
   const calculatedQuote = (() => {
     try {
@@ -728,6 +738,7 @@ export async function getTransactionDetail(id: string) {
     shipments: deliveryRows,
     shipmentItems: deliveryItems,
     relatedEmails,
+    contacts,
     activity,
     workspace,
     totals: {

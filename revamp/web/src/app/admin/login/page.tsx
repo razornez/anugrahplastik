@@ -1,70 +1,45 @@
-import { login } from "@/features/content/admin-actions";
-import { getSession } from "@/lib/auth/session";
 import Image from "next/image";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AdminLoginForm } from "@/components/admin-login-form";
+import { login } from "@/features/auth/actions";
+import { getSession } from "@/lib/auth/session";
 
 export const instant = false;
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; status?: string }>;
+}) {
   const session = await getSession();
   if (session) redirect("/admin");
-  const { error } = await searchParams;
-  const localAutofill =
-    process.env.NODE_ENV === "development" && process.env.LOCAL_ADMIN_AUTOFILL === "true"
-      ? {
-          email: process.env.INITIAL_ADMIN_EMAIL ?? "",
-          password: process.env.INITIAL_ADMIN_PASSWORD ?? "",
-        }
-      : null;
+  const { error, status } = await searchParams;
+  const username = (await cookies()).get("ap_admin_username")?.value ?? "";
   const message =
     error === "database"
-      ? "Database belum terhubung."
+      ? "Layanan masuk sedang tidak tersedia. Coba lagi sebentar."
       : error === "credentials"
-        ? "Email atau kata sandi tidak sesuai."
+        ? "Username atau PIN tidak sesuai."
         : error === "rate-limit"
-          ? "Terlalu banyak percobaan. Silakan tunggu beberapa saat."
+          ? "Terlalu banyak percobaan. Akses sementara dikunci."
           : null;
 
   return (
-    <section className="login-experience">
-      <aside className="login-context" aria-hidden="true">
-        <Image
-          src="/images-webp/mesin/Anugrah Plastik (71).webp"
-          alt=""
-          fill
-          priority
-          sizes="(max-width: 760px) 100vw, 50vw"
-        />
-        <div className="login-context__copy">
-          <Image alt="" className="login-context__mark" height={42} src="/brand/anugrah-plastik-mark.png" width={42} />
-          <p className="eyebrow">Area kerja internal</p>
-          <p className="login-context__message">Kelola prospek, konten, dan operasional dalam satu tempat.</p>
-        </div>
-      </aside>
-      <main className="login-panel" aria-labelledby="login-title">
-        <header className="login-panel__header">
-          <Image
-            alt="Anugrah Plastik"
-            className="login-mark"
-            height={46}
-            priority
-            src="/brand/anugrah-plastik-mark.png"
-            width={46}
-          />
+    <section className="admin-auth-page" aria-labelledby="login-title">
+      <main className="admin-auth-panel">
+        <header className="admin-auth-brand">
+          <Image alt="" height={42} priority src="/brand/anugrah-plastik-mark.png" width={42} />
           <div>
             <p className="eyebrow">ANUGRAH PLASTIK</p>
-            <p className="login-panel__brand">Ruang kerja internal</p>
+            <p>Back Office</p>
           </div>
         </header>
-        <h1 id="login-title">Masuk ke ruang kerja</h1>
-        <p className="login-panel__intro">Gunakan akun yang telah diberikan untuk melanjutkan pekerjaan.</p>
-        <AdminLoginForm
-          action={login}
-          email={localAutofill?.email}
-          password={localAutofill?.password}
-          message={message}
-        />
+        <div className="admin-auth-heading">
+          <h1 id="login-title">Masuk</h1>
+          <p>Gunakan username dan PIN enam digit Anda.</p>
+        </div>
+        <AdminLoginForm action={login} message={message} status={status} username={username} />
       </main>
     </section>
   );

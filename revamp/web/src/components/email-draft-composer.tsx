@@ -28,6 +28,7 @@ export function EmailDraftComposer({ initial, currentUserId }: { initial: DraftV
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [copies, setCopies] = useState(Boolean(value.cc || value.bcc));
+  const [allowUnscanned, setAllowUnscanned] = useState(false);
   const [preview, setPreview] = useState<Extract<Awaited<ReturnType<typeof prepareEmailDraft>>, { ok: true }> | null>(
     null,
   );
@@ -148,7 +149,7 @@ export function EmailDraftComposer({ initial, currentUserId }: { initial: DraftV
     setError("");
     try {
       if (!(await save())) return;
-      const result = await prepareEmailDraft(initial.id, revisionRef.current);
+      const result = await prepareEmailDraft(initial.id, revisionRef.current, allowUnscanned);
       if (result.ok) setPreview(result);
       else setError(result.error);
     } catch {
@@ -165,9 +166,9 @@ export function EmailDraftComposer({ initial, currentUserId }: { initial: DraftV
     }
     if (
       selected.some((file) => !file.size) ||
-      [...files, ...selected].reduce((total, file) => total + file.size, 0) > 10 * 1024 * 1024
+      [...files, ...selected].reduce((total, file) => total + file.size, 0) > 15 * 1024 * 1024
     ) {
-      setError("Berkas tidak boleh kosong dan total lampiran maksimal 10 MB.");
+      setError("Berkas tidak boleh kosong dan total lampiran maksimal 15 MB.");
       return;
     }
     setBusy(true);
@@ -315,7 +316,6 @@ export function EmailDraftComposer({ initial, currentUserId }: { initial: DraftV
               type="file"
               multiple
               disabled={busy}
-              accept="application/pdf,image/jpeg,image/png,image/webp"
               onChange={(event) => {
                 const selected = Array.from(event.target.files ?? []);
                 event.target.value = "";
@@ -324,8 +324,8 @@ export function EmailDraftComposer({ initial, currentUserId }: { initial: DraftV
             />
           </label>
           <p className="email-help">
-            Pilih beberapa file sekaligus · PDF, JPG, PNG, WebP · maksimal 5 lampiran, total 10 MB termasuk gambar
-            template. PDF transaksi wajib termasuk dalam batas lampiran.
+            Pilih beberapa file sekaligus · maksimal 5 lampiran, total 15 MB termasuk gambar template. Nama file
+            disanitasi dan unduhan selalu diperlakukan sebagai lampiran.
           </p>
           {files.map((file) => (
             <div className="email-file" key={file.id}>
@@ -333,11 +333,24 @@ export function EmailDraftComposer({ initial, currentUserId }: { initial: DraftV
                 {file.filename}
               </a>
               <span>{(file.size / 1024).toLocaleString("id-ID", { maximumFractionDigits: 0 })} KB</span>
+              <small>
+                {file.scanStatus === "clean" ? "Bersih" : file.scanStatus === "malware" ? "Diblokir" : "Belum dipindai"}
+              </small>
               <button type="button" aria-label={`Hapus lampiran ${file.filename}`} onClick={() => void remove(file.id)}>
                 Hapus
               </button>
             </div>
           ))}
+          {files.some((file) => file.scanStatus !== "clean" && file.scanStatus !== "malware") ? (
+            <label className="email-scan-bypass">
+              <input
+                checked={allowUnscanned}
+                onChange={(event) => setAllowUnscanned(event.target.checked)}
+                type="checkbox"
+              />
+              Pemindai sedang tidak tersedia. Saya memahami risikonya dan tetap ingin mengirim.
+            </label>
+          ) : null}
           <div className="email-composer-actions">
             <button type="button" className="admin-secondary-button" onClick={() => void save()}>
               Simpan draf

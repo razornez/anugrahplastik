@@ -49,10 +49,23 @@ dan perubahan DNS tetap merupakan gate terpisah.
 4. Restore database dan media yang telah terverifikasi. Jalankan
    `node scripts/release/migrate-production.mjs` dari release baru satu kali;
    eksekusi kedua harus selesai tanpa perubahan.
-5. Arahkan symlink `current` ke release baru, kemudian mulai web dan worker
-   analitik. Pastikan `curl http://127.0.0.1:3050/api/health` memberi `200` dan
+5. Jalankan release baru sebagai canary pada port loopback sementara dengan
+   environment production yang sama, kemudian jalankan
+   `bash scripts/release/smoke-release.sh http://127.0.0.1:<port-canary>`.
+   Skrip wajib memeriksa health, landing, fingerprint runtime error, dan login
+   username + PIN. Jangan mengubah symlink bila satu pemeriksaan gagal.
+6. Untuk aktivasi awal pusat dokumen, jalankan
+   `DOCUMENT_TEMPLATE_RELEASE_CONFIRM=publish-official-v1 node scripts/release/publish-document-templates.mjs`
+   langsung dari release dengan environment production. Perintah ini membuat
+   serta melakukan smoke render keempat template tanpa email. Pointer database
+   baru berpindah dalam satu transaksi setelah seluruh PDF valid; bila satu
+   gagal, versi aktif sebelumnya tetap dipakai. Jangan menaruh API key pada
+   command line atau history.
+7. Setelah smoke canary lulus, arahkan symlink `current` ke release baru lalu
+   mulai web dan worker analitik. Jalankan kembali
+   `bash scripts/release/smoke-release.sh http://127.0.0.1:3050` dan pastikan
    jurnal service bersih sebelum Nginx/DNS diubah.
-6. Pasang Nginx, lakukan smoke melalui host override, lalu ubah apex/`www`
+8. Pasang Nginx, lakukan smoke melalui host override, lalu ubah apex/`www`
    pada jendela rilis. Uji HTTPS, redirect, cookie login, upload media privat,
    dan halaman publik dari jaringan luar.
 

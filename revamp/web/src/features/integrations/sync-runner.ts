@@ -5,6 +5,8 @@ import { integrationSyncRuns, integrations } from "@/lib/database/schema";
 import { syncGoogleAdsOncePerJakartaDay } from "./google-ads-service";
 import { googleAdsDataSource } from "./google-ads-config";
 import { syncMailbox, type MailboxFailureCode } from "./mail-service";
+import { sendPendingAuthCutoverNotices } from "./security-mail";
+import { rescanPendingEmailFiles } from "./email-drafts";
 
 export type SyncTrigger = "scheduled" | "manual";
 export type SyncService = "mail" | "ads";
@@ -76,9 +78,11 @@ export async function runIntegrationSync({
   if (services.includes("mail") && hasMail) {
     try {
       const result = await syncMailbox();
+      const notices = result.skipped ? { sent: 0 } : await sendPendingAuthCutoverNotices();
+      if (!result.skipped) await rescanPendingEmailFiles();
       mail = result.skipped
         ? { status: "busy", count: 0, code: null }
-        : { status: "success", count: result.synced, code: null };
+        : { status: "success", count: result.synced + notices.sent, code: null };
     } catch (error) {
       mail = { status: "failed", count: 0, code: errorCode(error, "mail") };
     }

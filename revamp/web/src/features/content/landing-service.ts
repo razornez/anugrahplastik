@@ -9,6 +9,7 @@ import {
   upgradeLandingContent,
   type LandingContent,
 } from "./landing-content";
+import { readPublicContentOrFallback } from "./public-content-fallback";
 
 function parseLandingContent(value: unknown): LandingContent {
   const parsed = landingContentSchema.safeParse(upgradeLandingContent(value));
@@ -18,23 +19,34 @@ function parseLandingContent(value: unknown): LandingContent {
 export async function getPublishedLandingContent(): Promise<LandingContent> {
   const database = getDatabase();
   if (!database) return defaultLandingContent;
-
-  const [record] = await database
-    .select({ publishedContent: contentBlocks.publishedContent, legacyContent: contentBlocks.content })
-    .from(contentBlocks)
-    .where(eq(contentBlocks.key, LANDING_CONTENT_KEY));
-
-  return parseLandingContent(record?.publishedContent ?? record?.legacyContent);
+  return readPublicContentOrFallback(
+    async () => {
+      const [record] = await database
+        .select({ publishedContent: contentBlocks.publishedContent, legacyContent: contentBlocks.content })
+        .from(contentBlocks)
+        .where(eq(contentBlocks.key, LANDING_CONTENT_KEY));
+      return parseLandingContent(record?.publishedContent ?? record?.legacyContent);
+    },
+    defaultLandingContent,
+    LANDING_CONTENT_KEY,
+  );
 }
 
 export async function getLandingPublishedAt(): Promise<Date> {
   const database = getDatabase();
-  if (!database) return new Date("2026-01-01T00:00:00.000Z");
-  const [record] = await database
-    .select({ publishedAt: contentBlocks.publishedAt, updatedAt: contentBlocks.updatedAt })
-    .from(contentBlocks)
-    .where(eq(contentBlocks.key, LANDING_CONTENT_KEY));
-  return record?.publishedAt ?? record?.updatedAt ?? new Date("2026-01-01T00:00:00.000Z");
+  const fallback = new Date("2026-01-01T00:00:00.000Z");
+  if (!database) return fallback;
+  return readPublicContentOrFallback(
+    async () => {
+      const [record] = await database
+        .select({ publishedAt: contentBlocks.publishedAt, updatedAt: contentBlocks.updatedAt })
+        .from(contentBlocks)
+        .where(eq(contentBlocks.key, LANDING_CONTENT_KEY));
+      return record?.publishedAt ?? record?.updatedAt ?? fallback;
+    },
+    fallback,
+    `${LANDING_CONTENT_KEY}.publishedAt`,
+  );
 }
 
 export async function getDraftLandingContent(): Promise<LandingContent> {

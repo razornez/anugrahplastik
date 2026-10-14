@@ -2,13 +2,10 @@
 
 import { and, eq } from "drizzle-orm";
 import { revalidatePath, updateTag } from "next/cache";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { compare, hash } from "bcryptjs";
 import { getDatabase } from "@/lib/database/client";
-import { auditLogs, contentBlocks, contentRevisions, users } from "@/lib/database/schema";
-import { clearSession, createSession, getSession, type SessionUser } from "@/lib/auth/session";
-import { clientAddress, takeRateLimit } from "@/lib/security/rate-limit";
+import { auditLogs, contentBlocks, contentRevisions } from "@/lib/database/schema";
+import { getSession, type SessionUser } from "@/lib/auth/session";
 import {
   hasForbiddenLandingCopySeparator,
   LANDING_CONTENT_KEY,
@@ -24,44 +21,6 @@ function canManageContent(user: SessionUser | null): user is SessionUser {
 async function requireContentManager() {
   const user = await getSession();
   if (canManageContent(user)) return user;
-  redirect("/admin/login");
-}
-
-export async function login(formData: FormData) {
-  const email = String(formData.get("email") || "")
-    .trim()
-    .toLowerCase();
-  const password = String(formData.get("password") || "");
-  const pin = String(formData.get("pin") || "");
-  const requestHeaders = await headers();
-  const addressRate = takeRateLimit(`login:${clientAddress(requestHeaders)}`, 8, 15 * 60 * 1_000);
-  const accountRate = takeRateLimit(`login-account:${email}`, 8, 15 * 60 * 1_000);
-  if (!addressRate.allowed || !accountRate.allowed) redirect("/admin/login?error=rate-limit");
-  const database = getDatabase();
-  if (!database) redirect("/admin/login?error=database");
-
-  let [user] = await database.select().from(users).where(eq(users.email, email));
-
-  const initialEmail = process.env.INITIAL_ADMIN_EMAIL?.trim().toLowerCase();
-  const initialPassword = process.env.INITIAL_ADMIN_PASSWORD;
-  if (!user && !pin && initialEmail === email && initialPassword === password) {
-    [user] = await database
-      .insert(users)
-      .values({ email, name: "Administrator", passwordHash: await hash(password, 12), role: "admin" })
-      .returning();
-  }
-
-  const authenticated = pin
-    ? Boolean(user?.pinHash) && (await compare(pin, user.pinHash!))
-    : Boolean(user) && (await compare(password, user!.passwordHash));
-  if (!user || !user.isActive || !authenticated) redirect("/admin/login?error=credentials");
-
-  await createSession({ id: user.id, name: user.name, email: user.email, role: user.role as SessionUser["role"] });
-  redirect("/admin");
-}
-
-export async function logout() {
-  await clearSession();
   redirect("/admin/login");
 }
 

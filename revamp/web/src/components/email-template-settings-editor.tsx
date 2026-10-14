@@ -1,9 +1,14 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RichEmailEditor } from "@/components/rich-email-editor";
-import { previewEmailTemplate, saveEmailTemplate } from "@/features/integrations/email-template-actions";
+import {
+  previewEmailTemplate,
+  saveEmailTemplate,
+  sendEmailTemplateTest,
+} from "@/features/integrations/email-template-actions";
 import type { EmailNode, TemplateKey } from "@/features/integrations/email-templates";
 import {
   defaultEmailShellConfig,
@@ -33,16 +38,19 @@ function shellError(value: EmailShellConfig) {
 }
 
 export function EmailTemplateSettingsEditor({
+  templateId,
   keyName,
   subject,
   initial,
   shellConfig = defaultEmailShellConfig,
 }: {
+  templateId?: string | null;
   keyName: TemplateKey;
   subject: string;
   initial: EmailNode;
   shellConfig?: EmailShellConfig;
 }) {
+  const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const previewRequest = useRef(0);
@@ -58,7 +66,11 @@ export function EmailTemplateSettingsEditor({
   const [previewError, setPreviewError] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [pending, setPending] = useState(false);
+  const [testPending, setTestPending] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [editorEpoch, setEditorEpoch] = useState(0);
+  const draftKey = `email-template-draft:v1:${templateId ?? keyName}`;
   const variables =
     keyName === "layout"
       ? ["message", "senderName"]
@@ -77,6 +89,57 @@ export function EmailTemplateSettingsEditor({
   const currentShellError = isLayout ? shellError(shell) : "";
   const currentError = currentSubjectError || currentShellError || previewError;
   const canActivate = hasChanges && previewState === "ready" && !currentError && !pending;
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      try {
+        const stored = window.sessionStorage.getItem(draftKey);
+        if (!stored) return;
+        const draft = JSON.parse(stored) as { subject?: unknown; content?: unknown; shell?: unknown };
+        if (typeof draft.subject === "string") setSubjectValue(draft.subject);
+        if (draft.content && typeof draft.content === "object") {
+          setContent(draft.content as EmailNode);
+          setEditorEpoch((value) => value + 1);
+        }
+        if (isLayout && draft.shell && typeof draft.shell === "object") setShell(draft.shell as EmailShellConfig);
+      } catch {
+        window.sessionStorage.removeItem(draftKey);
+      }
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [draftKey, isLayout]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (hasChanges)
+        window.sessionStorage.setItem(draftKey, JSON.stringify({ subject: subjectValue, content, shell }));
+      else window.sessionStorage.removeItem(draftKey);
+    }, 400);
+    return () => window.clearTimeout(timeout);
+  }, [content, draftKey, hasChanges, shell, subjectValue]);
+
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!hasChanges) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const guardLinks = (event: MouseEvent) => {
+      const link = (event.target as HTMLElement).closest<HTMLAnchorElement>("a[href]");
+      if (!link || link.target === "_blank" || !hasChanges) return;
+      const target = new URL(link.href, window.location.href);
+      if (target.origin !== window.location.origin) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setPendingHref(`${target.pathname}${target.search}${target.hash}`);
+    };
+    window.addEventListener("beforeunload", warn);
+    document.addEventListener("click", guardLinks, true);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      document.removeEventListener("click", guardLinks, true);
+    };
+  }, [hasChanges]);
 
   function updateShell(change: Partial<EmailShellConfig>) {
     setShell((previous) => ({ ...previous, ...change }));
@@ -125,10 +188,31 @@ export function EmailTemplateSettingsEditor({
       setSavedShell(currentShell);
       setSaveMessage("Versi baru langsung aktif. Email yang telah dikirim tidak berubah.");
       setConfirmOpen(false);
+      window.sessionStorage.removeItem(draftKey);
+      router.push(`/admin/settings/email-templates?kind=${encodeURIComponent(keyName)}&status=saved`);
+      router.refresh();
     } catch (error) {
       setSaveMessage(error instanceof Error ? error.message : "Perubahan tidak dapat disimpan.");
     } finally {
       setPending(false);
+    }
+  }
+
+  async function sendTest() {
+    if (!formRef.current || currentError) return;
+    setTestPending(true);
+    setSaveMessage("");
+    try {
+      const result = await sendEmailTemplateTest(new FormData(formRef.current));
+      setSaveMessage(
+        result.simulated
+          ? "Simulasi lokal selesai. Tidak ada email yang dikirim."
+          : "Email uji dikirim ke alamat akun Admin Anda.",
+      );
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Email uji belum dapat dikirim.");
+    } finally {
+      setTestPending(false);
     }
   }
 
@@ -145,6 +229,7 @@ export function EmailTemplateSettingsEditor({
         ref={formRef}
       >
         <input name="key" type="hidden" value={keyName} />
+        {templateId ? <input name="templateId" type="hidden" value={templateId} /> : null}
         {isLayout ? <input name="shellConfig" type="hidden" value={currentShell} /> : null}
         <div className="email-template-edit-form__head">
           <div>
@@ -283,7 +368,8 @@ export function EmailTemplateSettingsEditor({
         )}
         <RichEmailEditor
           canUpload
-          initial={initial}
+          initial={content}
+          key={`${templateId ?? keyName}-${editorEpoch}`}
           onChange={(next) => {
             setContent(next);
             setSaveMessage("");
@@ -293,6 +379,14 @@ export function EmailTemplateSettingsEditor({
           variables={variables}
         />
         <div className="email-template-actions">
+          <button
+            className="admin-secondary-button"
+            disabled={Boolean(currentError) || testPending}
+            onClick={() => void sendTest()}
+            type="button"
+          >
+            {testPending ? "Mengirim uji…" : "Kirim email uji"}
+          </button>
           <button
             className="admin-secondary-button"
             disabled={previewState === "pending"}
@@ -315,8 +409,8 @@ export function EmailTemplateSettingsEditor({
       <aside className="email-template-preview" aria-label="Pratinjau template">
         <div className="email-template-preview__head">
           <div>
-            <p className="eyebrow">Pratinjau aman</p>
-            <h2>Contoh email</h2>
+            <p className="eyebrow">Data transaksi nyata · hanya preview</p>
+            <h2>Pratinjau email</h2>
           </div>
           <div aria-label="Lebar pratinjau" className="email-template-preview__switch" role="group">
             <button aria-pressed={width === "desktop"} onClick={() => setWidth("desktop")} type="button">
@@ -381,6 +475,40 @@ export function EmailTemplateSettingsEditor({
                 type="button"
               >
                 {pending ? "Mengaktifkan…" : "Aktifkan versi baru"}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+      <Dialog.Root
+        open={Boolean(pendingHref)}
+        onOpenChange={(open) => {
+          if (!open) setPendingHref(null);
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="email-template-dialog__backdrop" />
+          <Dialog.Content className="email-template-dialog" aria-describedby="email-template-leave-description">
+            <p className="eyebrow">PERUBAHAN BELUM DISIMPAN</p>
+            <Dialog.Title>Tinggalkan editor?</Dialog.Title>
+            <Dialog.Description id="email-template-leave-description">
+              Draft tetap tersimpan selama sesi ini dan dapat dipulihkan saat Anda kembali.
+            </Dialog.Description>
+            <div className="email-template-dialog__actions">
+              <Dialog.Close asChild>
+                <button className="admin-secondary-button" type="button">
+                  Lanjut mengedit
+                </button>
+              </Dialog.Close>
+              <button
+                className="admin-primary-button"
+                onClick={() => {
+                  if (pendingHref) router.push(pendingHref);
+                  setPendingHref(null);
+                }}
+                type="button"
+              >
+                Tinggalkan editor
               </button>
             </div>
           </Dialog.Content>

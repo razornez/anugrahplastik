@@ -30,7 +30,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       size += value.length;
       if (size > maxUploadBytes) {
         await reader.cancel();
-        return NextResponse.json({ error: "Berkas melebihi 10 MB." }, { status: 413 });
+        return NextResponse.json({ error: "Berkas melebihi 15 MB." }, { status: 413 });
       }
       chunks.push(Buffer.from(value));
     }
@@ -59,6 +59,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
+        "X-Attachment-Scan-Status": file.scanStatus,
         "Content-Security-Policy": "sandbox",
       },
     });

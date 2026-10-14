@@ -1,53 +1,62 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useFormStatus } from "react-dom";
+import { PinInput } from "@/components/pin-input";
 
 type LoginFormProps = {
   action: (formData: FormData) => void | Promise<void>;
-  email?: string;
-  password?: string;
+  username?: string;
   message?: string | null;
+  status?: string | null;
 };
 
-export function AdminLoginForm({ action, email = "", password = "", message }: LoginFormProps) {
-  const [usePin, setUsePin] = useState(false);
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button aria-busy={pending} className="login-submit" disabled={pending} type="submit">
+      {pending ? "Memeriksa…" : "Masuk"}
+    </button>
+  );
+}
+
+export function AdminLoginForm({ action, username = "", message, status }: LoginFormProps) {
   return (
     <form action={action} className="login-form">
-      <label>
-        Email
-        <input name="email" type="email" autoComplete="email" defaultValue={email} required />
+      {status === "pin-updated" ? (
+        <p className="login-message login-message--success">PIN berhasil disimpan. Silakan masuk.</p>
+      ) : null}
+      <label htmlFor="username">Username</label>
+      <input
+        autoCapitalize="none"
+        autoComplete="username"
+        defaultValue={username}
+        id="username"
+        maxLength={24}
+        minLength={3}
+        name="username"
+        pattern="[a-z0-9.]{3,24}"
+        required
+        spellCheck={false}
+      />
+      <label htmlFor="login-pin">PIN</label>
+      <PinInput autoComplete="current-password" id="login-pin" />
+      <label className="login-private-device">
+        <input name="privateDevice" type="checkbox" value="yes" />
+        <span>
+          <strong>Perangkat pribadi</strong>
+          <small>Ingat username dan pertahankan sesi hingga 30 hari.</small>
+        </span>
       </label>
-      {usePin ? (
-        <label>
-          PIN enam digit
-          <input
-            name="pin"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]{6}"
-            minLength={6}
-            maxLength={6}
-            required
-            autoFocus
-          />
-        </label>
-      ) : (
-        <label>
-          Kata sandi
-          <input name="password" type="password" autoComplete="current-password" defaultValue={password} required />
-        </label>
-      )}
-      <button className="login-method" type="button" onClick={() => setUsePin((value) => !value)}>
-        {usePin ? "Masuk dengan kata sandi" : "Masuk dengan PIN"}
-      </button>
       {message ? (
         <p className="login-message" role="alert">
           {message}
         </p>
       ) : null}
-      <button className="login-submit" type="submit">
-        Masuk ke ruang kerja
-      </button>
+      <SubmitButton />
+      <Link className="login-help-link" href="/admin/forgot-pin">
+        Bantuan masuk
+      </Link>
     </form>
   );
 }

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export type EmailRecipients = { to: string[]; cc: string[]; bcc: string[] };
-export const maxUploadBytes = 10 * 1024 * 1024;
+export const maxUploadBytes = 15 * 1024 * 1024;
 
 export function parseRecipients(input: { to: string; cc?: string; bcc?: string }, complete = true): EmailRecipients {
   const seen = new Set<string>();
@@ -20,7 +20,7 @@ export function parseRecipients(input: { to: string; cc?: string; bcc?: string }
       });
   const result = { to: parse(input.to), cc: parse(input.cc), bcc: parse(input.bcc) };
   if (complete && !result.to.length) throw new Error("Isi minimal satu penerima To.");
-  if (seen.size > 20) throw new Error("Maksimal 20 penerima unik.");
+  if (seen.size > 10) throw new Error("Maksimal 10 penerima To dan CC.");
   return result;
 }
 
@@ -37,6 +37,8 @@ export function outgoingStatusLabel(status: string) {
     sent: "Diterima server email",
     partial: "Ditolak sebagian",
     failed: "Gagal sebelum diterima",
+    bounced: "Gagal diterima",
+    attachment_blocked: "Lampiran diblokir",
     uncertain: "Status belum pasti",
     simulated: "Uji lokal, tidak dikirim",
     stale: "Pratinjau perlu diperbarui",

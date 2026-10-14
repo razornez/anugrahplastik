@@ -184,8 +184,8 @@ export default async function IntegrationsPage({
         back={{ href: "/admin", label: "Kembali ke beranda" }}
         actions={
           canManage ? (
-            <Link className="admin-secondary-button" href="/admin/settings/invoice">
-              Pengaturan invoice
+            <Link className="admin-secondary-button" href="/admin/settings/documents">
+              Dokumen resmi
             </Link>
           ) : null
         }

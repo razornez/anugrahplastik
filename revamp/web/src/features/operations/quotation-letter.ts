@@ -29,8 +29,23 @@ export const quotationLetterSchema = z.object({
 
 export type QuotationLetter = z.infer<typeof quotationLetterSchema>;
 
-export function defaultQuotationLetter(title: string, address = ""): QuotationLetter {
-  const inSevenDays = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+export type QuotationTemplateDefaults = {
+  validityDays?: number;
+  freight?: string;
+  payment?: string;
+  leadTime?: string;
+  notes?: string;
+};
+
+export function defaultQuotationLetter(
+  title: string,
+  address = "",
+  defaults: QuotationTemplateDefaults = {},
+): QuotationLetter {
+  const validityDays = Number.isSafeInteger(defaults.validityDays)
+    ? Math.min(365, Math.max(1, defaults.validityDays!))
+    : 7;
+  const inSevenDays = new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000);
   const validUntil = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Jakarta",
     year: "numeric",
@@ -42,16 +57,22 @@ export function defaultQuotationLetter(title: string, address = ""): QuotationLe
     recipientPic: "",
     recipientAddress: address,
     validUntil,
-    freightTerms: "Harga belum termasuk ongkos kirim, kecuali disepakati lain.",
-    paymentTerms: "Uang muka 50%; pelunasan 50% setelah barang diterima.",
-    leadTime: "Pengerjaan dimulai setelah PO dan uang muka diterima. Jadwal sampel disepakati bersama.",
-    notes: "Drawing dan spesifikasi yang dilampirkan menjadi bagian dari penawaran ini.",
+    freightTerms: defaults.freight ?? "Harga belum termasuk ongkos kirim, kecuali disepakati lain.",
+    paymentTerms: defaults.payment ?? "Uang muka 50%; pelunasan 50% setelah barang diterima.",
+    leadTime:
+      defaults.leadTime ?? "Pengerjaan dimulai setelah PO dan uang muka diterima. Jadwal sampel disepakati bersama.",
+    notes: defaults.notes ?? "Drawing dan spesifikasi yang dilampirkan menjadi bagian dari penawaran ini.",
     attachmentIds: [],
   };
 }
 
-export function readQuotationLetter(value: unknown, title: string, address = ""): QuotationLetter {
-  const fallback = defaultQuotationLetter(title, address);
+export function readQuotationLetter(
+  value: unknown,
+  title: string,
+  address = "",
+  defaults: QuotationTemplateDefaults = {},
+): QuotationLetter {
+  const fallback = defaultQuotationLetter(title, address, defaults);
   const parsed = quotationLetterSchema.safeParse(value);
   return parsed.success ? parsed.data : fallback;
 }

@@ -1,9 +1,19 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { localQaRendererEnabled } from "./docgen-policy";
+import { compileDocumentTemplate, getActiveDocumentTemplate, type DocumentTemplateKind } from "./document-templates";
 
 export async function renderLocalQaPdf(templateId: string, data: Record<string, string | boolean>) {
   if (!localQaRendererEnabled()) throw new Error("Renderer QA tidak aktif.");
+  const kinds: Record<string, DocumentTemplateKind> = {
+    "local_qa:QUOTATION": "quotation",
+    "local_qa:INVOICE": "invoice",
+    "local_qa:DELIVERY": "delivery",
+    "local_qa:BAST": "handover",
+  };
+  const kind = kinds[templateId];
+  const active = kind ? await getActiveDocumentTemplate(kind) : null;
+  const templateHtml = kind && active ? (await compileDocumentTemplate(kind, active.config)).html : undefined;
   return new Promise<Buffer>((resolveResult, reject) => {
     // Do not pass DocGen/SMTP credentials to the isolated PDF worker.
     const child = spawn(process.execPath, [resolve("scripts/render-qa-pdf.mjs")], {
@@ -39,6 +49,6 @@ export async function renderLocalQaPdf(templateId: string, data: Record<string, 
         reject(new Error("Render PDF QA gagal; tidak ada dokumen resmi diterbitkan."));
       } else resolveResult(pdf);
     });
-    child.stdin.end(JSON.stringify({ templateId, data }));
+    child.stdin.end(JSON.stringify({ templateId, data, templateHtml }));
   });
 }

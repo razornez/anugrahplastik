@@ -7,9 +7,13 @@ import { TransactionQuoteEditor } from "@/components/transaction-quote-editor";
 import { TransactionShipmentForm } from "@/components/transaction-shipment-form";
 import { TransactionInvoiceForm } from "@/components/transaction-invoice-form";
 import { TransactionHandoverForm } from "@/components/transaction-handover-form";
-import { prepareTransactionDocumentEmail } from "@/features/integrations/actions";
-import { fillEmailSubject, fillEmailTemplate, getActiveTemplate } from "@/features/integrations/email-templates";
-import { EmailMessageComposer } from "@/components/email-message-composer";
+import {
+  fillEmailSubject,
+  fillEmailTemplate,
+  listActiveEmailTemplateOptions,
+} from "@/features/integrations/email-templates";
+import { TransactionEmailComposer } from "@/components/transaction-email-composer";
+import { getSession } from "@/lib/auth/session";
 import { requireOperationsAccess } from "@/features/operations/access";
 import { recordTransactionPayment, releaseProduction, verifyTransactionPayment } from "@/features/operations/actions";
 import { quotationTemplateReady } from "@/features/operations/docgen";
@@ -18,13 +22,13 @@ import {
   docGenDummyMode,
   docGenTemplateId,
   docGenTemplateReady,
-  localQaRendererEnabled,
 } from "@/features/operations/docgen-policy";
 import { getTransactionDetail } from "@/features/operations/service";
 import { transactionStepStates, workspaceMoney } from "@/features/operations/transaction-workspace";
 import { readDeliveryDetails, readShipmentLogistics } from "@/features/operations/delivery-note";
 import { acceptedAmount, committedAmount, handoverDetailsSchema } from "@/features/operations/handover-note";
-import { readQuotationLetter } from "@/features/operations/quotation-letter";
+import { readQuotationLetter, type QuotationTemplateDefaults } from "@/features/operations/quotation-letter";
+import { getActiveDocumentTemplate, type DocumentTemplateKind } from "@/features/operations/document-templates";
 import styles from "../transactions.module.css";
 import {
   invoiceCountsAsIssued,
@@ -199,10 +203,12 @@ async function DocumentList({
   canRetry?: boolean;
 }) {
   if (!documents.length) return <p className="transaction-flow-empty">Belum ada dokumen pada langkah ini.</p>;
-  const [quotationEmail, invoiceEmail, deliveryEmail] = await Promise.all([
-    getActiveTemplate("quotation"),
-    getActiveTemplate("invoice"),
-    getActiveTemplate("delivery"),
+  const [quotationTemplates, invoiceTemplates, deliveryTemplates, handoverTemplates, currentUser] = await Promise.all([
+    listActiveEmailTemplateOptions("quotation"),
+    listActiveEmailTemplateOptions("invoice"),
+    listActiveEmailTemplateOptions("delivery"),
+    listActiveEmailTemplateOptions("handover"),
+    getSession(),
   ]);
   return (
     <div className="transaction-flow-documents">
@@ -258,60 +264,70 @@ async function DocumentList({
           ) : null}
           {document.storagePath &&
           document.direction === "outbound" &&
-          document.type !== "bast" &&
           document.type !== "contract" &&
-          !document.sentMessageId &&
+          document.type !== "bast_signed" &&
           documentEmailAllowed(transaction, document) &&
-          !(document.payload as { sendState?: string } | null)?.sendState ? (
-            <details className="transaction-flow-send">
-              <summary>Kirim lewat email</summary>
-              {transaction.header.customerEmail ? (
-                <form action={prepareTransactionDocumentEmail}>
-                  <input name="transactionId" type="hidden" value={transaction.header.id} />
-                  <input name="documentId" type="hidden" value={document.id} />
-                  <input name="idempotencyKey" type="hidden" value={randomUUID()} />
-                  <label>
-                    Email pelanggan di Data master
-                    <input name="to" readOnly required type="email" value={transaction.header.customerEmail} />
-                  </label>
-                  <label>
-                    Subjek
-                    <input
-                      defaultValue={`${docGenDummyMode() || (document.payload as { isDummy?: boolean } | null)?.isDummy ? "[UJI] " : ""}${fillEmailSubject((document.type === "quotation" ? quotationEmail : document.type.startsWith("invoice") ? invoiceEmail : deliveryEmail).subject, { customerName: transaction.header.customerName, documentName: documentLabels[document.type] ?? "Dokumen", transactionNo: transaction.header.referenceNo, senderName: "Tim Anugrah Plastik" })}`}
-                      name="subject"
-                      required
-                    />
-                  </label>
-                  <div className="email-form__message">
-                    <strong>Pesan</strong>
-                    <EmailMessageComposer
-                      initial={fillEmailTemplate(
-                        (document.type === "quotation"
-                          ? quotationEmail
-                          : document.type.startsWith("invoice")
-                            ? invoiceEmail
-                            : deliveryEmail
-                        ).content,
-                        {
-                          customerName: transaction.header.customerName,
-                          transactionNo: transaction.header.referenceNo,
-                          documentName: documentLabels[document.type]?.toLowerCase() ?? "dokumen",
-                          senderName: "Tim Anugrah Plastik",
-                        },
-                      )}
-                    />
-                  </div>
-                  <label className="transaction-flow-send__confirm">
-                    <input name="confirmedTo" required type="checkbox" value={transaction.header.customerEmail} /> Saya
-                    sudah memeriksa alamat tujuan dan lampiran.
-                  </label>
-                  <p>Langkah ini hanya menyiapkan draf. Periksa pratinjau final di Email CS sebelum mengonfirmasi.</p>
-                  <button type="submit">Siapkan draf dan pratinjau</button>
-                </form>
-              ) : (
-                <p>Isi email pelanggan di Data master sebelum mengirim dokumen.</p>
+          !["pending", "uncertain"].includes((document.payload as { sendState?: string } | null)?.sendState ?? "") ? (
+            <TransactionEmailComposer
+              contacts={[
+                ...(transaction.header.customerEmail
+                  ? [
+                      {
+                        id: "primary",
+                        name: transaction.header.customerName,
+                        email: transaction.header.customerEmail,
+                        isPrimary: true,
+                      },
+                    ]
+                  : []),
+                ...transaction.contacts
+                  .filter((contact) => Boolean(contact.email) && contact.email !== transaction.header.customerEmail)
+                  .map((contact) => ({
+                    id: contact.id,
+                    name: contact.name,
+                    email: contact.email!,
+                    isPrimary: contact.isPrimary,
+                  })),
+              ]}
+              documentId={document.id}
+              documentLabel={documentLabels[document.type] ?? "Dokumen"}
+              lastSend={
+                document.sentMessageId
+                  ? {
+                      recipient: document.recipient,
+                      at: (document.payload as { lastEmailSentAt?: string } | null)?.lastEmailSentAt ?? null,
+                      by: (document.payload as { lastEmailSenderName?: string } | null)?.lastEmailSenderName ?? null,
+                    }
+                  : undefined
+              }
+              ownerName={transaction.header.ownerName}
+              requiresPicConfirmation={Boolean(
+                currentUser?.role === "sales" &&
+                transaction.header.ownerId &&
+                transaction.header.ownerId !== currentUser.id,
               )}
-            </details>
+              templates={(document.type === "quotation"
+                ? quotationTemplates
+                : document.type.startsWith("invoice")
+                  ? invoiceTemplates
+                  : document.type === "delivery_note"
+                    ? deliveryTemplates
+                    : handoverTemplates
+              ).map((template) => {
+                const variables = {
+                  customerName: transaction.header.customerName,
+                  transactionNo: transaction.header.referenceNo,
+                  documentName: documentLabels[document.type]?.toLowerCase() ?? "dokumen",
+                  senderName: currentUser?.name ?? "Tim Anugrah Plastik",
+                };
+                return {
+                  ...template,
+                  subject: `${docGenDummyMode() || (document.payload as { isDummy?: boolean } | null)?.isDummy ? "[UJI] " : ""}${fillEmailSubject(template.subject, variables)}`,
+                  content: fillEmailTemplate(template.content, variables),
+                };
+              })}
+              transactionId={transaction.header.id}
+            />
           ) : null}
           {(document.payload as { sendState?: string } | null)?.sendState === "uncertain" ? (
             <small>Pengiriman email perlu diperiksa di Email terkirim. Jangan kirim ulang sebelum dipastikan.</small>
@@ -319,7 +335,13 @@ async function DocumentList({
           {(document.payload as { sendState?: string } | null)?.sendState === "pending" ? (
             <small>Permintaan email sedang diproses. Periksa Email terkirim jika tidak berubah.</small>
           ) : null}
-          {document.sentMessageId ? <small>Sudah diserahkan ke server email untuk dikirim.</small> : null}
+          {(document.payload as { lastEmailState?: string } | null)?.lastEmailState === "bounced" ? (
+            <small className="transaction-flow-documents__email-error">
+              Gagal diterima. Periksa alamat penerima lalu kirim ulang.
+            </small>
+          ) : document.sentMessageId ? (
+            <small>Sudah diserahkan ke server email untuk dikirim.</small>
+          ) : null}
           {(document.payload as { lastEmailState?: string } | null)?.lastEmailState === "simulated" ? (
             <small>Simulasi selesai. Tidak ada email yang dikirim.</small>
           ) : null}
@@ -338,7 +360,17 @@ async function DocumentList({
   );
 }
 
-function QuoteStep({ transaction, isAdmin }: { transaction: Transaction; isAdmin: boolean }) {
+function QuoteStep({
+  transaction,
+  isAdmin,
+  templateReady,
+  templateConfig,
+}: {
+  transaction: Transaction;
+  isAdmin: boolean;
+  templateReady: boolean;
+  templateConfig?: Record<string, unknown>;
+}) {
   const quotationDocuments = transaction.documents.filter((document) => document.type === "quotation");
   const attachments = transaction.documents
     .filter((document) => document.type === "quotation_attachment" && document.status === "received")
@@ -414,6 +446,7 @@ function QuoteStep({ transaction, isAdmin }: { transaction: Transaction; isAdmin
                 transaction.header.quoteLetter,
                 transaction.header.title,
                 transaction.header.customerBillingAddress ?? "",
+                templateConfig as QuotationTemplateDefaults,
               )}
               canEditDiscount={isAdmin}
               initialLines={transaction.lines.map((line) => ({
@@ -462,7 +495,9 @@ function QuoteStep({ transaction, isAdmin }: { transaction: Transaction; isAdmin
           Nomor surat:{" "}
           <strong>
             {transaction.header.quotationNo ??
-              (transaction.header.dataClass === "test" ? `UJI-${transaction.header.referenceNo}` : "Belum diterbitkan")}
+              (transaction.header.dataClass === "test"
+                ? `UJI-${transaction.header.referenceNo}`
+                : "Nomor dibuat otomatis saat PDF diterbitkan")}
           </strong>
         </p>
         {!transaction.header.customerBillingAddress &&
@@ -473,17 +508,17 @@ function QuoteStep({ transaction, isAdmin }: { transaction: Transaction; isAdmin
         ) : null}
         {isAdmin ? (
           <p>
-            <Link href="/admin/settings/quotation">Periksa urutan nomor surat dan identitas penerbit</Link>
+            <Link href="/admin/settings/documents">Periksa kesiapan dokumen resmi</Link>
           </p>
         ) : null}
         {transaction.lines.length ? (
           <form action={generateQuotation} className="transaction-flow-inline-action">
             <input name="transactionId" type="hidden" value={transaction.header.id} />
-            <button disabled={!quotationTemplateReady() || !docGenAllowed(transaction)} type="submit">
-              Buat versi PDF baru
+            <button disabled={!templateReady || !docGenAllowed(transaction)} type="submit">
+              {quotationDocuments.length ? "Buat revisi PDF" : "Terbitkan PDF"}
             </button>
-            {!quotationTemplateReady() ? (
-              <small>Template surat baru belum terverifikasi di DocGen. Draf tetap tersimpan; PDF tidak dibuat.</small>
+            {!templateReady ? (
+              <small>Template Penawaran belum aktif. Selesaikan di Dokumen resmi; draf tetap tersimpan.</small>
             ) : null}
           </form>
         ) : null}
@@ -562,7 +597,17 @@ function OrderStep({ transaction, returnTo }: { transaction: Transaction; return
   );
 }
 
-function PaymentStep({ transaction, isAdmin }: { transaction: Transaction; isAdmin: boolean }) {
+function PaymentStep({
+  transaction,
+  isAdmin,
+  templateReady,
+  templateConfig,
+}: {
+  transaction: Transaction;
+  isAdmin: boolean;
+  templateReady: boolean;
+  templateConfig?: Record<string, unknown>;
+}) {
   const paymentProofs = transaction.documents.filter((item) => item.type === "payment_proof");
   const invoiceDocuments = transaction.documents.filter(
     (item) => item.type === "invoice_dp" || item.type === "invoice_final",
@@ -650,9 +695,10 @@ function PaymentStep({ transaction, isAdmin }: { transaction: Transaction; isAdm
           <details className="transaction-flow-details">
             <summary>Buat tagihan baru</summary>
             <TransactionInvoiceForm
-              canGenerate={Boolean(
-                docGenAllowed(transaction) && process.env.DOCGEN_API_KEY && docGenTemplateId("INVOICE"),
-              )}
+              canGenerate={Boolean(docGenAllowed(transaction) && templateReady)}
+              defaultPaymentTerms={
+                typeof templateConfig?.paymentTerms === "string" ? templateConfig.paymentTerms : undefined
+              }
               customerAddress={transaction.header.customerBillingAddress ?? ""}
               customerName={transaction.header.customerName}
               invoices={transaction.invoices
@@ -900,7 +946,15 @@ function ProductionStep({ transaction, isAdmin }: { transaction: Transaction; is
   );
 }
 
-function DeliveryStep({ transaction, isAdmin }: { transaction: Transaction; isAdmin: boolean }) {
+function DeliveryStep({
+  transaction,
+  isAdmin,
+  templateReady,
+}: {
+  transaction: Transaction;
+  isAdmin: boolean;
+  templateReady: boolean;
+}) {
   const shippedByLine = new Map<string, number>();
   transaction.shipmentItems.forEach((item) => {
     const shipment = transaction.shipments.find((entry) => entry.id === item.shipmentId)!;
@@ -944,7 +998,7 @@ function DeliveryStep({ transaction, isAdmin }: { transaction: Transaction; isAd
         </div>
         {isAdmin ? (
           <p>
-            <Link href="/admin/settings/delivery">Periksa urutan nomor surat jalan dan identitas penerbit</Link>
+            <Link href="/admin/settings/documents">Periksa kesiapan dokumen resmi</Link>
           </p>
         ) : null}
         {transaction.shipments.length ? (
@@ -1008,19 +1062,13 @@ function DeliveryStep({ transaction, isAdmin }: { transaction: Transaction; isAd
                 {shipment.status === "planned" && !document ? (
                   <form action={generateDeliveryNote}>
                     <input name="shipmentId" type="hidden" value={shipment.id} />
-                    <button
-                      disabled={
-                        !docGenAllowed(transaction) ||
-                        !process.env.DOCGEN_API_KEY ||
-                        !process.env.DOCGEN_TEMPLATE_DELIVERY_ID ||
-                        !docGenTemplateReady("DELIVERY")
-                      }
-                      type="submit"
-                    >
-                      {versions.length ? "Buat versi surat jalan baru" : "Buat surat jalan"}
+                    <button disabled={!docGenAllowed(transaction) || !templateReady} type="submit">
+                      {versions.length ? "Buat revisi PDF" : "Terbitkan PDF"}
                     </button>
-                    {!docGenTemplateReady("DELIVERY") ? (
-                      <small>Template baru belum terverifikasi di DocGen. Rencana tetap tersimpan.</small>
+                    {!templateReady ? (
+                      <small>
+                        Template Surat Jalan belum aktif. Selesaikan di Dokumen resmi; rencana tetap tersimpan.
+                      </small>
                     ) : null}
                   </form>
                 ) : null}
@@ -1042,7 +1090,15 @@ function DeliveryStep({ transaction, isAdmin }: { transaction: Transaction; isAd
   );
 }
 
-function HandoverStep({ transaction, isAdmin }: { transaction: Transaction; isAdmin: boolean }) {
+function HandoverStep({
+  transaction,
+  isAdmin,
+  templateReady,
+}: {
+  transaction: Transaction;
+  isAdmin: boolean;
+  templateReady: boolean;
+}) {
   const pending = transaction.shipments.filter(
     (shipment) => !["received", "received_partial"].includes(shipment.status) || !shipment.bastDocumentId,
   );
@@ -1090,7 +1146,7 @@ function HandoverStep({ transaction, isAdmin }: { transaction: Transaction; isAd
         </p>
         {isAdmin ? (
           <p>
-            <Link href="/admin/settings/handover">Periksa nomor STB resmi sebelum penerbitan</Link>
+            <Link href="/admin/settings/documents">Periksa kesiapan dokumen resmi</Link>
           </p>
         ) : null}
         {transaction.shipments.map((shipment) => {
@@ -1154,14 +1210,7 @@ function HandoverStep({ transaction, isAdmin }: { transaction: Transaction; isAd
                       latestNumber={latest?.documentNo ?? null}
                       hasProof={Boolean(shipment.bastDocumentId)}
                       isAdmin={isAdmin}
-                      enabled={
-                        docGenAllowed(transaction) &&
-                        Boolean(
-                          process.env.DOCGEN_API_KEY &&
-                          process.env.DOCGEN_TEMPLATE_BAST_ID &&
-                          docGenTemplateReady("BAST"),
-                        )
-                      }
+                      enabled={docGenAllowed(transaction) && templateReady}
                     />
                   ) : null}
                   {shipment.bastDocumentId ? (
@@ -1245,7 +1294,12 @@ export default async function TransactionDetailPage({
 }) {
   const user = await requireOperationsAccess();
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const transaction = await getTransactionDetail(id);
+  const [transaction, ...activeTemplates] = await Promise.all([
+    getTransactionDetail(id),
+    ...(["quotation", "invoice", "delivery", "handover"] as DocumentTemplateKind[]).map((kind) =>
+      getActiveDocumentTemplate(kind),
+    ),
+  ]);
   if (!transaction) notFound();
   const suggested = latestStep(transaction);
   const requested =
@@ -1265,6 +1319,12 @@ export default async function TransactionDetailPage({
   const recommended = transaction.workspace.pendingPayment ? "payment" : suggested;
   const recommendedLabel = steps.find((step) => step.id === recommended)!.label;
   const ContinueLink = active === recommended ? "a" : Link;
+  const templateReady = {
+    quotation: Boolean(activeTemplates[0]) || quotationTemplateReady(),
+    invoice: Boolean(activeTemplates[1]) || Boolean(docGenTemplateId("INVOICE")),
+    delivery: Boolean(activeTemplates[2]) || docGenTemplateReady("DELIVERY"),
+    handover: Boolean(activeTemplates[3]) || docGenTemplateReady("BAST"),
+  };
 
   const notices: Record<string, string> = {
     "draft-saved": "Rincian penawaran tersimpan. Periksa nilainya sebelum membuat PDF.",
@@ -1306,13 +1366,6 @@ export default async function TransactionDetailPage({
       />
       {transaction.header.dataClass !== "production" ? (
         <p className="transaction-flow-notice">Transaksi uji atau contoh, bukan pelanggan nyata.</p>
-      ) : null}
-      {docGenDummyMode() ? (
-        <p className="transaction-flow-notice" role="status">
-          {localQaRendererEnabled()
-            ? "Renderer QA lokal aktif. PDF pratinjau hanya untuk transaksi uji, disimpan privat, dan tidak dapat dikirim melalui email."
-            : `DocGen masih memakai template DRAF CONTOH. PDF hanya dapat dibuat pada transaksi uji dan dikirim ke ${DOCGEN_TEST_RECIPIENT}.`}
-        </p>
       ) : null}
       {query.notice && notices[query.notice] ? (
         <p className="transaction-flow-notice" role="status">
@@ -1448,17 +1501,39 @@ export default async function TransactionDetailPage({
               <p>{nextAction(active, transaction)}</p>
             </div>
             <fieldset className="transaction-flow-step-fields" disabled={readonly}>
-              {active === "quote" ? <QuoteStep transaction={transaction} isAdmin={user.role === "admin"} /> : null}
+              {active === "quote" ? (
+                <QuoteStep
+                  transaction={transaction}
+                  isAdmin={user.role === "admin"}
+                  templateConfig={(activeTemplates[0]?.config as Record<string, unknown> | null) ?? undefined}
+                  templateReady={templateReady.quotation}
+                />
+              ) : null}
               {active === "order" ? <OrderStep transaction={transaction} returnTo={returnTo} /> : null}
-              {active === "payment" ? <PaymentStep isAdmin={user.role === "admin"} transaction={transaction} /> : null}
+              {active === "payment" ? (
+                <PaymentStep
+                  isAdmin={user.role === "admin"}
+                  templateConfig={(activeTemplates[1]?.config as Record<string, unknown> | null) ?? undefined}
+                  templateReady={templateReady.invoice}
+                  transaction={transaction}
+                />
+              ) : null}
               {active === "production" ? (
                 <ProductionStep isAdmin={user.role === "admin"} transaction={transaction} />
               ) : null}
               {active === "delivery" ? (
-                <DeliveryStep isAdmin={user.role === "admin"} transaction={transaction} />
+                <DeliveryStep
+                  isAdmin={user.role === "admin"}
+                  templateReady={templateReady.delivery}
+                  transaction={transaction}
+                />
               ) : null}
               {active === "handover" ? (
-                <HandoverStep isAdmin={user.role === "admin"} transaction={transaction} />
+                <HandoverStep
+                  isAdmin={user.role === "admin"}
+                  templateReady={templateReady.handover}
+                  transaction={transaction}
+                />
               ) : null}
             </fieldset>
           </section>

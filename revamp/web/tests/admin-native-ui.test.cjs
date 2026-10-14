@@ -132,7 +132,7 @@ test("large 3D uploads expose real progress and prevent duplicate submits", () =
 });
 
 test("login and active sessions land on the back office home", () => {
-  const actions = read("src/features/content/admin-actions.ts");
+  const actions = read("src/features/auth/actions.ts");
   const loginPage = read("src/app/admin/login/page.tsx");
   const authSetup = read("tests/ui/auth.setup.ts");
 
@@ -142,6 +142,23 @@ test("login and active sessions land on the back office home", () => {
   assert.doesNotMatch(actions, /createSession[\s\S]{0,180}redirect\("\/admin\/content"\)/);
 });
 
+test("transaction email uses an adaptive in-context composer", () => {
+  const detail = read("src/app/admin/transactions/[id]/page.tsx");
+  const composer = read("src/components/transaction-email-composer.tsx");
+  const designCss = read("src/app/admin/admin-design.css");
+  assert.match(detail, /<TransactionEmailComposer/);
+  assert.match(composer, /createTransactionEmailDraft/);
+  assert.match(composer, /Periksa sebelum kirim/);
+  assert.match(composer, /Lihat di Email CS/);
+  assert.match(composer, /requiresPicConfirmation/);
+  assert.match(composer, /transaction-email-template-catalog/);
+  assert.match(composer, /Kirim ulang/);
+  assert.match(composer, /Izinkan pengiriman bila scanner lampiran sedang tidak tersedia/);
+  assert.doesNotMatch(composer, /window\.confirm|window\.alert/);
+  assert.match(designCss, /\.transaction-email-sheet/);
+  assert.match(designCss, /@media \(max-width: 720px\)[\s\S]*\.transaction-email-sheet[\s\S]*width:\s*100vw/);
+});
+
 test("production routes reuse one bounded database pool", () => {
   const source = read("src/lib/database/client.ts");
 
@@ -149,4 +166,15 @@ test("production routes reuse one bounded database pool", () => {
   assert.match(source, /globalForDatabase\.pool = pool/);
   assert.match(source, /max: resolvePoolLimit\(\)/);
   assert.doesNotMatch(source, /NODE_ENV !== ["']production["']/);
+});
+
+test("VPS release smoke blocks landing runtime errors before cutover", () => {
+  const smoke = read("scripts/release/smoke-release.sh");
+  const packager = read("scripts/release/package-linux.sh");
+  const runbook = read("docs/VPS-DEPLOYMENT.md");
+  assert.match(smoke, /Runtime Error\|Failed query\|DrizzleQueryError/);
+  assert.match(smoke, /\/api\/health/);
+  assert.match(smoke, /\/admin\/login/);
+  assert.match(packager, /smoke-release\.sh/);
+  assert.match(runbook, /Jangan mengubah symlink bila satu pemeriksaan gagal/);
 });

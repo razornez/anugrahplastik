@@ -173,7 +173,7 @@ export function TransactionHandoverForm({
         {!hasProof ? (
           <>
             <button disabled={!enabled} type="submit">
-              {latestReady ? "Buat revisi PDF STB" : "Buat PDF STB contoh"}
+              {latestReady ? "Buat revisi PDF" : "Terbitkan PDF"}
             </button>
             {!enabled ? (
               <small>Template STB contoh belum diverifikasi. Bukti dari luar aplikasi tetap bisa diunggah.</small>

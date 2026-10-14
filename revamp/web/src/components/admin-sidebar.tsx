@@ -153,7 +153,7 @@ export function AdminSidebar({ name, role, onLogout, initialTheme }: AdminSideba
       ? [{ href: "/admin/settings/integrations", label: "Koneksi layanan", icon: <SettingsIcon /> }]
       : []),
     ...(role === "admin"
-      ? [{ href: "/admin/settings/email-templates", label: "Template email", icon: <MailIcon /> }]
+      ? [{ href: "/admin/settings/templates?area=pdf", label: "Template", icon: <MailIcon /> }]
       : []),
   ];
   const mobilePriority =
@@ -185,7 +185,9 @@ export function AdminSidebar({ name, role, onLogout, initialTheme }: AdminSideba
               (item.href === "/admin/finance" && pathname.startsWith("/admin/finance")) ||
               (item.href === "/admin/remote-desktop" && pathname.startsWith("/admin/remote-desktop")) ||
               (item.href === "/admin/growth" &&
-                ["/admin/prospects", "/admin/marketing", "/admin/insights"].includes(pathname))
+                ["/admin/prospects", "/admin/marketing", "/admin/insights"].includes(pathname)) ||
+              (item.label === "Template" &&
+                ["/admin/settings/templates", "/admin/settings/email-templates"].includes(pathname))
                 ? "page"
                 : undefined
             }

@@ -22,10 +22,16 @@ for await (const chunk of process.stdin) {
 const input = JSON.parse(Buffer.concat(chunks).toString("utf8"));
 const template = templates[input.templateId];
 if (!template) throw new Error("Unknown QA template.");
+if (
+  input.templateHtml !== undefined &&
+  (typeof input.templateHtml !== "string" || input.templateHtml.length > 1_500_000)
+) {
+  throw new Error("Invalid QA template body.");
+}
 const { renderHtml, PdfRenderer } = await import(
   pathToFileURL(resolve("../../../docgen/packages/renderer/dist/index.js")).href
 );
-const html = renderHtml(await readFile(resolve("docs/templates", template), "utf8"), {
+const html = renderHtml(input.templateHtml || (await readFile(resolve("docs/templates", template), "utf8")), {
   ...input.data,
   isDummy: true,
   isPreview: true,

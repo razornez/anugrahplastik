@@ -35,6 +35,8 @@ mkdir -p "$release_root/app/$next_dist_dir"
 cp -a "$project_root/$next_dist_dir/static" "$release_root/app/$next_dist_dir/static"
 cp -a "$project_root/public" "$release_root/app/public"
 cp -a "$project_root/drizzle" "$release_root/app/drizzle"
+mkdir -p "$release_root/app/docs"
+cp -a "$project_root/docs/templates" "$release_root/app/docs/templates"
 # The standalone trace includes database modules needed by the web server, but
 # the independent migration runner is not traced by Next. Copy its two runtime
 # entry packages as real directories so the VPS never needs pnpm or a build.
@@ -42,6 +44,8 @@ mkdir -p "$release_root/app/node_modules"
 cp -aL "$project_root/node_modules/drizzle-orm" "$release_root/app/node_modules/drizzle-orm"
 cp -aL "$project_root/node_modules/pg" "$release_root/app/node_modules/pg"
 install -D -m 0755 "$project_root/scripts/release/migrate-production.mjs" "$release_root/app/scripts/release/migrate-production.mjs"
+install -D -m 0755 "$project_root/scripts/release/publish-document-templates.mjs" "$release_root/app/scripts/release/publish-document-templates.mjs"
+install -D -m 0755 "$project_root/scripts/release/smoke-release.sh" "$release_root/app/scripts/release/smoke-release.sh"
 install -D -m 0755 "$project_root/scripts/reconcile-landing-assets.mjs" "$release_root/app/scripts/reconcile-landing-assets.mjs"
 install -D -m 0755 "$project_root/scripts/import-legacy-portfolio.mjs" "$release_root/app/scripts/import-legacy-portfolio.mjs"
 install -D -m 0755 "$project_root/scripts/analytics-worker.cjs" "$release_root/app/scripts/analytics-worker.cjs"

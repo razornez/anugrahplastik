@@ -10,6 +10,9 @@ const allowedTechnicalMatches = new Set([
   "features/content/landing-content.ts",
   "features/finance/finance-report.ts",
   "components/design-list-thumbnail.tsx",
+  "components/transaction-email-composer.tsx",
+  "features/integrations/email-template-actions.ts",
+  "features/integrations/email-templates.ts",
 ]);
 
 function sourceFiles(directory) {
@@ -57,4 +60,22 @@ test("editor landing menolak copy dengan strip pemisah tetapi menerima kalimat b
     humanizeLegacyLandingCopy("Part sulit dicari—serta perlu dibuat ulang."),
     "Part sulit dicari. Kami juga perlu dibuat ulang.",
   );
+});
+
+test("landing publik memakai konten bawaan ketika database tidak tersedia", async () => {
+  const { readPublicContentOrFallback } = loadTypeScript("features/content/public-content-fallback.ts");
+  const fallback = { title: "Konten bawaan" };
+  assert.deepEqual(
+    await readPublicContentOrFallback(
+      async () => {
+        throw new Error("database offline");
+      },
+      fallback,
+      "landing.page",
+    ),
+    fallback,
+  );
+  assert.deepEqual(await readPublicContentOrFallback(async () => ({ title: "Database" }), fallback, "landing.page"), {
+    title: "Database",
+  });
 });

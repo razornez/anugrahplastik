@@ -16,10 +16,16 @@ import {
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
+  username: varchar("username", { length: 24 }).notNull().unique(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   name: varchar("name", { length: 120 }).notNull(),
-  passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+  passwordHash: varchar("password_hash", { length: 255 }),
   pinHash: varchar("pin_hash", { length: 255 }),
+  temporaryPin: boolean("temporary_pin").notNull().default(false),
+  pinChangedAt: timestamp("pin_changed_at", { withTimezone: true }),
+  failedLoginCount: integer("failed_login_count").notNull().default(0),
+  failedLoginWindowStartedAt: timestamp("failed_login_window_started_at", { withTimezone: true }),
+  lockedUntil: timestamp("locked_until", { withTimezone: true }),
   role: varchar("role", { length: 20 }).notNull().default("content"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -32,9 +38,44 @@ export const sessions = pgTable("sessions", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  absoluteExpiresAt: timestamp("absolute_expires_at", { withTimezone: true }).notNull(),
+  lastActiveAt: timestamp("last_active_at", { withTimezone: true }).defaultNow().notNull(),
+  remembered: boolean("remembered").notNull().default(false),
+  deviceLabel: varchar("device_label", { length: 160 }),
+  locationLabel: varchar("location_label", { length: 120 }),
+  ipHash: varchar("ip_hash", { length: 64 }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const authTokens = pgTable(
+  "auth_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    purpose: varchar("purpose", { length: 24 }).notNull(),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("auth_tokens_user_purpose_idx").on(table.userId, table.purpose, table.createdAt)],
+);
+
+export const authRateLimits = pgTable(
+  "auth_rate_limits",
+  {
+    keyHash: varchar("key_hash", { length: 64 }).primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    attempts: integer("attempts").notNull().default(0),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true }).defaultNow().notNull(),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("auth_rate_limits_user_idx").on(table.userId)],
+);
 
 export const contentBlocks = pgTable("content_blocks", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -257,16 +298,41 @@ export const csEmailDraftFiles = pgTable(
     size: integer("size").notNull(),
     sha256: varchar("sha256", { length: 64 }).notNull(),
     contentCiphertext: text("content_ciphertext").notNull(),
+    scanStatus: varchar("scan_status", { length: 24 }).notNull().default("pending"),
+    scanDetail: varchar("scan_detail", { length: 160 }),
+    scannedAt: timestamp("scanned_at", { withTimezone: true }),
     removedAt: timestamp("removed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("cs_email_draft_files_draft_idx").on(table.draftId)],
 );
 
+export const emailTemplates = pgTable(
+  "email_templates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    templateKey: varchar("template_key", { length: 32 }).notNull(),
+    name: varchar("name", { length: 120 }).notNull(),
+    language: varchar("language", { length: 10 }).notNull().default("id"),
+    isDefault: boolean("is_default").notNull().default(false),
+    isArchived: boolean("is_archived").notNull().default(false),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("email_templates_key_language_name_unique").on(table.templateKey, table.language, table.name),
+    index("email_templates_key_language_idx").on(table.templateKey, table.language, table.isArchived),
+  ],
+);
+
 export const emailTemplateVersions = pgTable(
   "email_template_versions",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    templateId: uuid("template_id")
+      .notNull()
+      .references(() => emailTemplates.id, { onDelete: "cascade" }),
     templateKey: varchar("template_key", { length: 32 }).notNull(),
     version: integer("version").notNull(),
     subject: varchar("subject", { length: 998 }).notNull(),
@@ -276,7 +342,77 @@ export const emailTemplateVersions = pgTable(
     restoredFromId: uuid("restored_from_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [unique("email_template_key_version_unique").on(table.templateKey, table.version)],
+  (table) => [unique("email_template_id_version_unique").on(table.templateId, table.version)],
+);
+
+export const documentTemplateCatalogs = pgTable("document_template_catalogs", {
+  kind: varchar("kind", { length: 24 }).primaryKey(),
+  activeVersionId: uuid("active_version_id").references((): AnyPgColumn => documentTemplateVersions.id, {
+    onDelete: "set null",
+  }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const documentTemplateVersions = pgTable(
+  "document_template_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    kind: varchar("kind", { length: 24 })
+      .notNull()
+      .references(() => documentTemplateCatalogs.kind, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    config: jsonb("config").notNull(),
+    compiledChecksum: varchar("compiled_checksum", { length: 64 }).notNull(),
+    providerTemplateId: varchar("provider_template_id", { length: 160 }),
+    status: varchar("status", { length: 24 }).notNull().default("publishing"),
+    failureCode: varchar("failure_code", { length: 80 }),
+    restoredFromId: uuid("restored_from_id"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
+  },
+  (table) => [
+    unique("document_template_kind_version_unique").on(table.kind, table.version),
+    index("document_template_kind_status_idx").on(table.kind, table.status, table.createdAt),
+  ],
+);
+
+export const emailTemplateAttachments = pgTable(
+  "email_template_attachments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    templateId: uuid("template_id")
+      .notNull()
+      .references(() => emailTemplates.id, { onDelete: "cascade" }),
+    storagePath: varchar("storage_path", { length: 500 }).notNull(),
+    filename: varchar("filename", { length: 180 }).notNull(),
+    mimeType: varchar("mime_type", { length: 160 }).notNull(),
+    size: integer("size").notNull(),
+    sha256: varchar("sha256", { length: 64 }).notNull(),
+    scanStatus: varchar("scan_status", { length: 24 }).notNull().default("pending"),
+    scanDetail: varchar("scan_detail", { length: 120 }),
+    uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("email_template_attachments_template_idx").on(table.templateId, table.createdAt)],
+);
+
+export const privateDownloadTokens = pgTable(
+  "private_download_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => transactionDocuments.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    downloadCount: integer("download_count").notNull().default(0),
+    lastDownloadedAt: timestamp("last_downloaded_at", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("private_download_tokens_document_idx").on(table.documentId, table.createdAt)],
 );
 
 export const emailTemplateMedia = pgTable("email_template_media", {
@@ -343,6 +479,23 @@ export const auditLogs = pgTable(
     index("audit_logs_created_at_idx").on(table.createdAt),
     index("audit_logs_entity_created_at_idx").on(table.entityType, table.entityId, table.createdAt),
   ],
+);
+
+export const userNotifications = pgTable(
+  "user_notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 40 }).notNull(),
+    title: varchar("title", { length: 160 }).notNull(),
+    body: text("body").notNull(),
+    href: varchar("href", { length: 500 }),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("user_notifications_user_read_idx").on(table.userId, table.readAt, table.createdAt)],
 );
 
 /**

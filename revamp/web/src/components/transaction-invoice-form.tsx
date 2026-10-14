@@ -38,12 +38,14 @@ export function TransactionInvoiceForm(props: {
   customerAddress: string;
   poNumber: string;
   canGenerate: boolean;
+  defaultPaymentTerms?: string;
 }) {
   const [kind, setKind] = useState<"dp" | "final">("dp");
   const [amount, setAmount] = useState("");
   const [shipmentId, setShipmentId] = useState("");
   const [dpApplied, setDpApplied] = useState("0");
-  const [terms, setTerms] = useState(dpTerms);
+  const configuredTerms = props.defaultPaymentTerms?.trim() || dpTerms;
+  const [terms, setTerms] = useState(configuredTerms);
   const preview = useMemo(() => {
     try {
       if (props.lines.some((line) => line.taxMethod === "legacy")) {
@@ -91,7 +93,11 @@ export function TransactionInvoiceForm(props: {
             const next = event.target.value as "dp" | "final";
             setKind(next);
             setTerms((current) =>
-              current === dpTerms || current === finalTerms ? (next === "dp" ? dpTerms : finalTerms) : current,
+              current === configuredTerms || current === dpTerms || current === finalTerms
+                ? next === "dp"
+                  ? configuredTerms
+                  : props.defaultPaymentTerms?.trim() || finalTerms
+                : current,
             );
           }}
           value={kind}
@@ -220,7 +226,7 @@ export function TransactionInvoiceForm(props: {
         data pelanggan, dan jumlah tagihan.
       </label>
       <button disabled={!props.canGenerate || !ready} type="submit">
-        Buat invoice PDF
+        Terbitkan PDF
       </button>
       {!props.canGenerate ? (
         <p className="transaction-flow-warning">

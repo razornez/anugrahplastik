@@ -5,7 +5,15 @@ import nodemailer from "nodemailer";
 import { simpleParser } from "mailparser";
 import { mailThreadKey } from "./email-workspace-model";
 import { getDatabase } from "@/lib/database/client";
-import { csEmailOutbox, csEmails, integrations } from "@/lib/database/schema";
+import {
+  auditLogs,
+  businessTransactions,
+  csEmailOutbox,
+  csEmails,
+  integrations,
+  transactionDocuments,
+  userNotifications,
+} from "@/lib/database/schema";
 import { decryptSecret, encryptSecret } from "./secrets";
 import { decodeTimeCursor, encodeTimeCursor } from "@/lib/pagination/cursor";
 import { getCsMailboxServerConfig } from "./mailbox-config";
@@ -345,6 +353,67 @@ async function syncMailboxUnlocked() {
               })
               .onConflictDoNothing()
               .returning({ id: csEmails.id });
+            if (inserted[0] && folder === "inbox" && rootKey) {
+              const isBounce =
+                /^(mailer-daemon|postmaster)@/i.test(address?.address ?? "") ||
+                /(delivery status notification|mail delivery failed|undeliver|returned mail|failure notice)/i.test(
+                  message.envelope?.subject ?? "",
+                );
+              const matches = await database
+                .select({
+                  id: csEmailOutbox.id,
+                  transactionId: csEmailOutbox.linkedTransactionId,
+                  sentBy: csEmailOutbox.sentBy,
+                })
+                .from(csEmailOutbox)
+                .where(and(eq(csEmailOutbox.messageId, rootKey), isNotNull(csEmailOutbox.linkedTransactionId)))
+                .limit(2);
+              if (matches.length === 1 && matches[0].transactionId) {
+                const transactionId = matches[0].transactionId;
+                await database.transaction(async (tx) => {
+                  await tx
+                    .update(csEmails)
+                    .set({ linkedTransactionId: transactionId })
+                    .where(eq(csEmails.id, inserted[0].id));
+                  if (isBounce) {
+                    await tx
+                      .update(csEmailOutbox)
+                      .set({ status: "bounced" })
+                      .where(eq(csEmailOutbox.id, matches[0].id));
+                    await tx
+                      .update(transactionDocuments)
+                      .set({
+                        payload: sql`coalesce(${transactionDocuments.payload}, '{}'::jsonb) || '{"lastEmailState":"bounced"}'::jsonb`,
+                      })
+                      .where(eq(transactionDocuments.sentMessageId, rootKey));
+                    const [transaction] = await tx
+                      .select({ ownerId: businessTransactions.ownerId })
+                      .from(businessTransactions)
+                      .where(eq(businessTransactions.id, transactionId))
+                      .limit(1);
+                    const recipients = new Set(
+                      [matches[0].sentBy, transaction?.ownerId].filter((id): id is string => Boolean(id)),
+                    );
+                    if (recipients.size)
+                      await tx.insert(userNotifications).values(
+                        [...recipients].map((userId) => ({
+                          userId,
+                          kind: "email_bounce",
+                          title: "Email gagal diterima",
+                          body: "Periksa alamat penerima lalu kirim ulang dokumen bila sudah diperbaiki.",
+                          href: `/admin/transactions/${transactionId}`,
+                        })),
+                      );
+                  }
+                  await tx.insert(auditLogs).values({
+                    action: isBounce ? "transaction.email_bounced" : "transaction.email_reply_linked",
+                    entityType: "transaction",
+                    entityId: transactionId,
+                    metadata: { emailId: inserted[0].id, method: "message_id" },
+                  });
+                });
+              }
+            }
             synced += inserted.length;
           }
         }

@@ -300,7 +300,7 @@ test("admin workspaces share the compact page-header primitive", () => {
     "app/admin/masters/[kind]/page.tsx",
     "app/admin/masters/designs/[id]/page.tsx",
     "app/admin/prospects/page.tsx",
-    "app/admin/settings/invoice/page.tsx",
+    "app/admin/settings/documents/page.tsx",
     "app/admin/team/page.tsx",
     "app/admin/transactions/page.tsx",
     "app/admin/transactions/[id]/page.tsx",

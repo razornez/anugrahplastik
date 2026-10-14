@@ -1,11 +1,11 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import createDOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { getDatabase } from "@/lib/database/client";
-import { emailTemplateMedia, emailTemplateVersions } from "@/lib/database/schema";
+import { emailTemplateMedia, emailTemplates, emailTemplateVersions } from "@/lib/database/schema";
 import { privateFilePath } from "@/features/operations/private-storage";
 import { defaultEmailShellConfig, parseEmailShellConfig, type EmailShellConfig } from "./email-template-shell";
 
@@ -18,7 +18,7 @@ export {
   type EmailShellConfig,
 } from "./email-template-shell";
 
-export const templateKeys = ["layout", "new", "reply", "quotation", "invoice", "delivery"] as const;
+export const templateKeys = ["layout", "new", "reply", "quotation", "invoice", "delivery", "handover"] as const;
 export type TemplateKey = (typeof templateKeys)[number];
 export type EmailNode = {
   type: string;
@@ -34,6 +34,7 @@ export const templateLabels: Record<TemplateKey, string> = {
   quotation: "Surat penawaran",
   invoice: "Invoice",
   delivery: "Surat jalan",
+  handover: "STB",
 };
 
 const tokenNames = [
@@ -51,6 +52,7 @@ const tokensByTemplate: Record<TemplateKey, readonly string[]> = {
   quotation: ["customerName", "transactionNo", "documentName", "senderName"],
   invoice: ["customerName", "transactionNo", "documentName", "senderName"],
   delivery: ["customerName", "transactionNo", "documentName", "senderName"],
+  handover: ["customerName", "transactionNo", "documentName", "senderName"],
 };
 const purifier = createDOMPurify(new JSDOM("").window);
 const brandLogoCid = "brand-logo@anugrahplastik.com";
@@ -108,6 +110,7 @@ export function validateEmailDoc(input: unknown, key: TemplateKey): EmailNode {
     "paragraph",
     "heading",
     "text",
+    "emailVariable",
     "hardBreak",
     "bulletList",
     "orderedList",
@@ -135,6 +138,12 @@ export function validateEmailDoc(input: unknown, key: TemplateKey): EmailNode {
       if (/{{|}}/.test(node.text.replace(/{{([^{}]+)}}/g, "")))
         throw new Error("Penulisan variabel email belum lengkap.");
     }
+    if (node.type === "emailVariable") {
+      const token = String(node.attrs?.token ?? "");
+      if (!tokenNames.includes(token as (typeof tokenNames)[number]) || !tokensByTemplate[key].includes(token))
+        throw new Error(`Variabel {{${token}}} tidak tersedia.`);
+      return { type: "emailVariable", attrs: { token } };
+    }
     if (node.type === "image") {
       if (++images > 5) throw new Error("Maksimal lima gambar per email.");
       if (!/^\/api\/admin\/email-template-media\/[0-9a-f-]{36}$/.test(String(node.attrs?.src ?? "")))
@@ -156,37 +165,80 @@ export function validateEmailDoc(input: unknown, key: TemplateKey): EmailNode {
   }
   const result = visit(input, 0);
   if (result.type !== "doc" || !result.content?.length) throw new Error("Isi template tidak boleh kosong.");
-  if (
-    key === "layout" &&
-    (!result.content?.some(
-      (part) =>
-        part.type === "paragraph" &&
-        part.content?.length === 1 &&
-        part.content[0].type === "text" &&
-        part.content[0].text === "{{message}}" &&
-        !part.content[0].marks?.length,
-    ) ||
-      JSON.stringify(result).split("{{message}}").length !== 2)
-  )
-    throw new Error("Sisipkan {{message}} satu kali pada satu paragraf tersendiri tanpa format tambahan.");
+  if (key === "layout") {
+    const isMessage = (node: EmailNode) =>
+      (node.type === "text" && node.text === "{{message}}" && !node.marks?.length) ||
+      (node.type === "emailVariable" && node.attrs?.token === "message");
+    const validSlot = result.content?.some(
+      (part) => part.type === "paragraph" && part.content?.length === 1 && isMessage(part.content[0]),
+    );
+    let count = 0;
+    const countSlots = (node: EmailNode) => {
+      if (node.type === "text") count += node.text?.match(/{{message}}/g)?.length ?? 0;
+      if (node.type === "emailVariable" && node.attrs?.token === "message") count += 1;
+      node.content?.forEach(countSlots);
+    };
+    countSlots(result);
+    if (!validSlot || count !== 1)
+      throw new Error("Sisipkan {{message}} satu kali pada satu paragraf tersendiri tanpa format tambahan.");
+  }
   return result;
 }
 
-export async function getActiveTemplate(key: TemplateKey) {
+export async function getActiveTemplate(key: TemplateKey, language = "id", requestedTemplateId?: string) {
   const database = getDatabase();
-  const [row] = database
+  const rows = database
     ? await database
-        .select()
+        .select({ version: emailTemplateVersions, template: emailTemplates })
         .from(emailTemplateVersions)
-        .where(eq(emailTemplateVersions.templateKey, key))
+        .innerJoin(emailTemplates, eq(emailTemplates.id, emailTemplateVersions.templateId))
+        .where(
+          and(
+            eq(emailTemplates.templateKey, key),
+            eq(emailTemplates.isArchived, false),
+            requestedTemplateId ? eq(emailTemplates.id, requestedTemplateId) : eq(emailTemplates.isDefault, true),
+            requestedTemplateId ? undefined : eq(emailTemplates.language, language),
+          ),
+        )
         .orderBy(desc(emailTemplateVersions.version))
         .limit(1)
     : [];
+  let [row] = rows;
+  let fallbackLanguage = false;
+  if (!row && database && !requestedTemplateId && language !== "id") {
+    [row] = await database
+      .select({ version: emailTemplateVersions, template: emailTemplates })
+      .from(emailTemplateVersions)
+      .innerJoin(emailTemplates, eq(emailTemplates.id, emailTemplateVersions.templateId))
+      .where(
+        and(
+          eq(emailTemplates.templateKey, key),
+          eq(emailTemplates.language, "id"),
+          eq(emailTemplates.isDefault, true),
+          eq(emailTemplates.isArchived, false),
+        ),
+      )
+      .orderBy(desc(emailTemplateVersions.version))
+      .limit(1);
+    fallbackLanguage = Boolean(row);
+  }
   return row
-    ? { ...row, content: row.content as EmailNode, shellConfig: parseEmailShellConfig(row.shellConfig) }
+    ? {
+        ...row.version,
+        templateId: row.template.id,
+        templateName: row.template.name,
+        language: row.template.language,
+        fallbackLanguage,
+        content: row.version.content as EmailNode,
+        shellConfig: parseEmailShellConfig(row.version.shellConfig),
+      }
     : {
         ...defaultTemplate(key),
         templateKey: key,
+        templateId: null,
+        templateName: templateLabels[key],
+        language: "id",
+        fallbackLanguage: language !== "id",
         version: 0,
         id: null,
         createdAt: null,
@@ -194,11 +246,49 @@ export async function getActiveTemplate(key: TemplateKey) {
       };
 }
 
+export async function listEmailTemplates(key?: TemplateKey, search = "") {
+  const database = getDatabase();
+  if (!database) return [];
+  const rows = await database
+    .select()
+    .from(emailTemplates)
+    .where(
+      key
+        ? and(eq(emailTemplates.templateKey, key), eq(emailTemplates.isArchived, false))
+        : eq(emailTemplates.isArchived, false),
+    )
+    .orderBy(emailTemplates.templateKey, emailTemplates.language, emailTemplates.name);
+  const term = search.trim().toLocaleLowerCase("id-ID");
+  return term ? rows.filter((row) => `${row.name} ${row.language}`.toLocaleLowerCase("id-ID").includes(term)) : rows;
+}
+
+export async function listActiveEmailTemplateOptions(key: TemplateKey) {
+  const catalog = await listEmailTemplates(key);
+  return Promise.all(
+    catalog.map(async (entry) => {
+      const active = await getActiveTemplate(key, entry.language, entry.id);
+      return {
+        id: entry.id,
+        name: entry.name,
+        language: entry.language,
+        isDefault: entry.isDefault,
+        version: active.version,
+        subject: active.subject,
+        content: active.content,
+      };
+    }),
+  );
+}
+
 export function fillEmailTemplate(content: EmailNode, variables: Record<string, string>): EmailNode {
+  if (content.type === "emailVariable") {
+    const token = String(content.attrs?.token ?? "");
+    return { type: "text", text: variables[token] || "—" };
+  }
   return {
     ...content,
     ...(content.type === "text"
-      ? { text: (content.text ?? "").replace(/{{([^{}]+)}}/g, (_, token: string) => variables[token] ?? "") }
+      ? { text: (content.text ?? "").replace(/{{([^{}]+)}}/g, (_, token: string) => variables[token] || "—") }
       : {}),
     ...(content.content ? { content: content.content.map((child) => fillEmailTemplate(child, variables)) } : {}),
   };
@@ -206,13 +296,14 @@ export function fillEmailTemplate(content: EmailNode, variables: Record<string, 
 
 export function fillEmailSubject(subject: string, variables: Record<string, string>) {
   return subject
-    .replace(/{{([^{}]+)}}/g, (_, token: string) => variables[token] ?? "")
+    .replace(/{{([^{}]+)}}/g, (_, token: string) => variables[token] || "—")
     .replace(/[\r\n]/g, " ")
     .slice(0, 998);
 }
 
 function plainText(node: EmailNode): string {
   if (node.type === "text") return node.text ?? "";
+  if (node.type === "emailVariable") return `{{${String(node.attrs?.token ?? "")}}}`;
   if (node.type === "hardBreak") return "\n";
   if (node.type === "tableRow") return `${(node.content ?? []).map(plainText).join("\t")}\n`;
   if (node.type === "listItem") return `• ${(node.content ?? []).map(plainText).join("").trim()}\n`;
@@ -225,7 +316,7 @@ export async function renderEmailDocument(content: EmailNode, variables: Record<
   const attachments: EmailAttachment[] = [];
   const imageCache = new Map<string, string>();
   function expand(value: string) {
-    return value.replace(/{{([^{}]+)}}/g, (_, token: string) => variables[token] ?? "");
+    return value.replace(/{{([^{}]+)}}/g, (_, token: string) => variables[token] || "—");
   }
   async function render(node: EmailNode): Promise<string> {
     const children = (await Promise.all((node.content ?? []).map(render))).join("");
@@ -242,6 +333,10 @@ export async function renderEmailDocument(content: EmailNode, variables: Record<
         }
       }
       return value;
+    }
+    if (node.type === "emailVariable") {
+      const token = String(node.attrs?.token ?? "");
+      return escapeEmailText(variables[token] || "—");
     }
     if (node.type === "image") {
       const id =

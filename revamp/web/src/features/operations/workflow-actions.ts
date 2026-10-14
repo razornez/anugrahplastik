@@ -54,6 +54,7 @@ import {
   docGenTemplateReady,
   localQaRendererEnabled,
 } from "./docgen-policy";
+import { resolveDocumentProviderTemplateId } from "./document-templates";
 import {
   deliveryDetailsSchema,
   deliveryRenderData,
@@ -263,7 +264,7 @@ export async function generateQuotation(formData: FormData) {
   const user = await operationsUser();
   const transactionId = z.string().uuid().parse(field(formData, "transactionId"));
   const database = getDatabase();
-  const templateId = docGenTemplateId("QUOTATION");
+  const templateId = await resolveDocumentProviderTemplateId("quotation", docGenTemplateId("QUOTATION"));
   if (!database) throw new Error("Database belum terhubung.");
   if (!quotationTemplateReady() || !templateId) redirect(transactionPath(transactionId, "quote", "docgen-unavailable"));
   await assertDocGenTestTransaction(transactionId);
@@ -495,7 +496,7 @@ export async function createTransactionInvoice(formData: FormData) {
       paymentTerms: field(formData, "paymentTerms"),
       taxConfirmed: field(formData, "taxConfirmed"),
     });
-  const templateId = docGenTemplateId("INVOICE");
+  const templateId = await resolveDocumentProviderTemplateId("invoice", docGenTemplateId("INVOICE"));
   if (!docGenProviderReady("INVOICE") || !templateId) {
     redirect(transactionPath(input.transactionId, "payment", "invoice-template-unavailable"));
   }
@@ -1090,7 +1091,7 @@ export async function updatePlannedShipment(formData: FormData) {
 export async function generateDeliveryNote(formData: FormData) {
   const user = await operationsUser();
   const shipmentId = z.string().uuid().parse(field(formData, "shipmentId"));
-  const templateId = docGenTemplateId("DELIVERY");
+  const templateId = await resolveDocumentProviderTemplateId("delivery", docGenTemplateId("DELIVERY"));
   const database = getDatabase();
   if (!database) throw new Error("Database belum terhubung.");
   const [shipment] = await database
@@ -1430,7 +1431,7 @@ export async function generateHandoverNote(formData: FormData) {
   const user = await operationsUser();
   const shipmentId = z.string().uuid().parse(field(formData, "shipmentId"));
   const details = handoverDetailsSchema.parse(JSON.parse(z.string().max(20_000).parse(field(formData, "details"))));
-  const templateId = docGenTemplateId("BAST");
+  const templateId = await resolveDocumentProviderTemplateId("handover", docGenTemplateId("BAST"));
   const database = getDatabase();
   if (!database) throw new Error("Database belum terhubung.");
   const [target] = await database

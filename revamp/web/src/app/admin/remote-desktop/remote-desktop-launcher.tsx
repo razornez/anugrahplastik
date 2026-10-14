@@ -40,9 +40,9 @@ export function RemoteDesktopLauncher({ configured }: { configured: boolean }) {
               <DesktopIcon />
             </div>
             <div>
-              <Dialog.Title>Verifikasi sebelum membuka komputer rumah</Dialog.Title>
+              <Dialog.Title>Buka komputer rumah?</Dialog.Title>
               <Dialog.Description id="remote-desktop-confirmation">
-                Masukkan kata sandi akun admin Anda. File koneksi berlaku satu kali selama dua menit.
+                File koneksi berlaku satu kali selama dua menit dan hanya tersedia untuk sesi Admin aktif.
               </Dialog.Description>
             </div>
             <Dialog.Close className={styles.close} aria-label="Tutup verifikasi Remote Desktop" type="button">
@@ -50,10 +50,6 @@ export function RemoteDesktopLauncher({ configured }: { configured: boolean }) {
             </Dialog.Close>
           </div>
           <form action={action} className={styles.launchForm}>
-            <label>
-              Kata sandi admin
-              <input name="password" type="password" autoComplete="current-password" required autoFocus />
-            </label>
             {state.error ? (
               <p className={styles.formError} role="alert">
                 {state.error}
@@ -62,7 +58,7 @@ export function RemoteDesktopLauncher({ configured }: { configured: boolean }) {
             <div className={styles.dialogActions}>
               <Dialog.Close type="button">Batal</Dialog.Close>
               <button type="submit" disabled={pending}>
-                {pending ? "Memverifikasi…" : "Unduh koneksi RDP"}
+                {pending ? "Menyiapkan…" : "Unduh koneksi RDP"}
               </button>
             </div>
           </form>

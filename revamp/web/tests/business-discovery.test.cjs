@@ -164,7 +164,7 @@ test("Postgres lokal: konkurensi kuota, cache, deduplikasi, riwayat, penugasan d
     const actor = randomUUID();
     const content = randomUUID();
     await pool.query(
-      "INSERT INTO users (id,name,email,password_hash,role,is_active) VALUES ($1,'Test admin','admin@example.invalid','not-a-login','admin',true),($2,'Test content','content@example.invalid','not-a-login','content',true)",
+      "INSERT INTO users (id,username,name,email,password_hash,role,is_active) VALUES ($1,'test.admin','Test admin','admin@example.invalid','not-a-login','admin',true),($2,'test.content','Test content','content@example.invalid','not-a-login','content',true)",
       [actor, content],
     );
     const now = new Date("2026-10-02T00:00:00Z");

@@ -31,7 +31,7 @@ async function cookieFor(role) {
   assert(rows[0], `Active ${role} required`);
   const user = rows[0];
   const session = await pool.query(
-    "insert into sessions (user_id, expires_at) values ($1, now() + interval '10 minutes') returning id",
+    "insert into sessions (user_id, expires_at, absolute_expires_at) values ($1, now() + interval '10 minutes', now() + interval '10 minutes') returning id",
     [user.id],
   );
   temporarySessions.push(session.rows[0].id);
@@ -80,9 +80,10 @@ async function denied(label, action, salesCookie) {
 
 try {
   const salesEmail = `qa-sales-stb-${randomUUID()}@local.invalid`;
+  const salesUsername = `qa.sales.${randomUUID().replaceAll("-", "").slice(0, 12)}`;
   const salesFixture = await pool.query(
-    "insert into users (email,name,password_hash,role,is_active) values ($1,'QA Sales (temporary)','!no-login','sales',true) returning id",
-    [salesEmail],
+    "insert into users (username,email,name,password_hash,role,is_active) values ($1,$2,'QA Sales (temporary)','!no-login','sales',true) returning id",
+    [salesUsername, salesEmail],
   );
   createdSalesId = salesFixture.rows[0]?.id;
   const { rows } = await pool.query("select data_class, fulfilment_status from business_transactions where id=$1", [

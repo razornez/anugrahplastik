@@ -26,6 +26,8 @@ const routes = [
   "/admin/settings/handover",
   "/admin/settings/integrations",
   "/admin/settings/email-templates",
+  "/admin/settings/documents",
+  "/admin/settings/templates?area=pdf&kind=quotation",
   "/admin/team",
   "/admin/profile",
 ] as const;
@@ -68,6 +70,17 @@ async function expectStableAdminLayout(page: import("@playwright/test").Page, re
   expect(result.brokenWords).toEqual([]);
   expect(result.smallInputs).toEqual([]);
   expect(result.maxSurfaceDepth).toBeLessThanOrEqual(2);
+}
+
+async function prepareAnonymousVisualState(page: import("@playwright/test").Page) {
+  await page.evaluate(() => {
+    document.querySelectorAll(".admin-security-banner").forEach((element) => element.remove());
+    const profile = document.querySelector<HTMLAnchorElement>('.admin-sidebar a[href="/admin/profile"]');
+    const name = profile?.querySelector("strong");
+    const role = profile?.querySelector("small");
+    if (name) name.textContent = "Admin Contoh";
+    if (role) role.textContent = "Back Office";
+  });
 }
 
 async function expectTransactionGutters(page: import("@playwright/test").Page) {
@@ -175,6 +188,7 @@ test("dashboard compact titles stay on one line at iPhone 12 mini width", async 
     });
     expect(lines, title).toBe(1);
   }
+  await prepareAnonymousVisualState(page);
   await expect(page).toHaveScreenshot("dashboard-iphone-12-mini.png", { fullPage: true });
 });
 
@@ -193,6 +207,55 @@ test("mobile shell uses the compact safe-area gutter", async ({ page }, testInfo
   expect(gutter.left).toBe(8);
   expect(gutter.right).toBe(8);
   expect(Math.abs(gutter.shellWidth - gutter.viewportWidth)).toBeLessThanOrEqual(1);
+});
+
+test("document center and PDF template editor stay flat and readable", async ({ page }, testInfo) => {
+  test.skip(
+    !["iphone-12-mini", "desktop"].includes(testInfo.project.name),
+    "Visual document regression runs at the primary mobile and desktop sizes.",
+  );
+
+  await page.goto("/admin/settings/documents", { waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { name: "Dokumen resmi" })).toBeVisible();
+  await expect(page.getByText(/pengaturan belum selesai|Siap menerbitkan dokumen/)).toBeVisible();
+  await expectStableAdminLayout(page, testInfo.project.name !== "desktop");
+  const anonymousIdentity: Record<string, string> = {
+    legalName: "CV Anugrah Plastik Contoh",
+    address: "Jl. Industri Contoh No. 10, Bandung",
+    phone: "022 0000 0000",
+    email: "admin.contoh@example.com",
+    website: "https://example.com",
+    taxId: "",
+    bankName: "Bank Contoh",
+    bankAccountNo: "0000000000",
+    bankAccountName: "Perusahaan Contoh",
+    signerName: "Admin Contoh",
+    signerTitle: "Administrator",
+  };
+  for (const [name, value] of Object.entries(anonymousIdentity)) {
+    await page.locator(`[name="${name}"]`).fill(value);
+  }
+  await prepareAnonymousVisualState(page);
+  await expect(page).toHaveScreenshot(`document-center-${testInfo.project.name}.png`, {
+    fullPage: true,
+    mask: [page.locator("time"), page.locator('.admin-sidebar a[href="/admin/profile"]')],
+  });
+
+  await page.goto("/admin/settings/templates?area=pdf&kind=quotation", { waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { name: "Penawaran", exact: true })).toBeVisible();
+  await expect(page.getByText("Struktur dokumen dilindungi", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Simpan dan aktifkan" })).toBeVisible();
+  await expectStableAdminLayout(page, testInfo.project.name !== "desktop");
+  const kindList = await page.locator(".document-template-kind-list").evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(kindList.scrollWidth - kindList.clientWidth).toBeLessThanOrEqual(1);
+  await prepareAnonymousVisualState(page);
+  await expect(page).toHaveScreenshot(`document-template-${testInfo.project.name}.png`, {
+    fullPage: true,
+    mask: [page.locator('.admin-sidebar a[href="/admin/profile"]')],
+  });
 });
 
 test("transaction navigator keeps number, title, and status in aligned rows", async ({ page }, testInfo) => {
@@ -228,6 +291,7 @@ test("ranking details remain readable without nested cards", async ({ page }, te
     await expect(firstRow.locator(".seo-score-row__keyword")).toBeVisible();
   }
   await expectStableAdminLayout(page);
+  await prepareAnonymousVisualState(page);
   await expect(page).toHaveScreenshot("ranking-details-iphone-12-mini.png", { fullPage: true });
 });
 
@@ -265,6 +329,7 @@ test("growth ranking keeps help inline and card content inset", async ({ page },
   expect(geometry.paddingLeft).toBeGreaterThanOrEqual(12);
   expect(geometry.contentInset).toBeGreaterThanOrEqual(50);
   expect(geometry.identityIsStacked).toBe(true);
+  await prepareAnonymousVisualState(page);
   await expect(page).toHaveScreenshot("growth-ranking-summary-iphone-12-mini.png", { fullPage: true });
 });
 
@@ -280,6 +345,13 @@ test.describe("transaction steps", () => {
       await expectStableAdminLayout(page, testInfo.project.name !== "desktop");
       await expectTransactionGutters(page);
       if (testInfo.project.name === "iphone-12-mini") {
+        if (step === "quote") {
+          const quoteDetails = page.locator("details.transaction-flow-details").filter({
+            has: page.locator(".transaction-quote-editor"),
+          });
+          if (!(await quoteDetails.getAttribute("open"))) await quoteDetails.locator("summary").click();
+        }
+        await prepareAnonymousVisualState(page);
         await expect(page).toHaveScreenshot(`transaction-${step}-iphone-12-mini.png`, { fullPage: true });
       }
     });
@@ -294,7 +366,9 @@ test("quote editor is compact without shrinking form controls", async ({ page },
   const detailPath = detailHref!.split("?")[0];
   await page.goto(`${detailPath}?step=quote`, { waitUntil: "networkidle" });
 
-  const details = page.locator(".transaction-flow-details").filter({ hasText: "Isi rincian penawaran" });
+  const details = page.locator("details.transaction-flow-details").filter({
+    has: page.locator(".transaction-quote-editor"),
+  });
   if (!(await details.getAttribute("open"))) await details.locator("summary").click();
 
   const density = await page.locator(".transaction-quote-editor").evaluate((form) => {
@@ -335,6 +409,7 @@ for (const [name, route] of [
     test.skip(testInfo.project.name !== "iphone-12-mini", "Visual regression targets the 375 px contract.");
     await page.goto(route, { waitUntil: "networkidle" });
     await expectStableAdminLayout(page);
+    await prepareAnonymousVisualState(page);
     await expect(page).toHaveScreenshot(`${name}-iphone-12-mini.png`, {
       fullPage: true,
       mask: [page.locator("time")],

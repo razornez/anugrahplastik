@@ -152,9 +152,9 @@ test("Recipient validation includes CC/BCC, accepts separators, rejects duplicat
   assert.deepEqual(parseRecipients({ to: "" }, false), { to: [], cc: [], bcc: [] });
 });
 test("The recipient limit covers all three fields", () => {
-  const addresses = Array.from({ length: 20 }, (_, i) => `user${i}@example.com`).join(",");
-  assert.equal(parseRecipients({ to: addresses }).to.length, 20);
-  assert.throws(() => parseRecipients({ to: addresses, cc: "extra@example.com" }), /20/);
+  const addresses = Array.from({ length: 10 }, (_, i) => `user${i}@example.com`).join(",");
+  assert.equal(parseRecipients({ to: addresses }).to.length, 10);
+  assert.throws(() => parseRecipients({ to: addresses, cc: "extra@example.com" }), /10/);
 });
 test("Threads use reference IDs, never subject similarity", () => {
   assert.equal(
@@ -309,23 +309,27 @@ test("Local database: draft ownership, revisions, frozen preview, SMTP outcomes 
         };
         const draft = await workspace.createDraft(payload, 1);
         actor = { ...owner, id: "00000000-0000-4000-8000-000000000099", role: "sales" };
-        await assert.rejects(workspace.readDraft(draft.id), /akses ditolak/);
+        await assert.rejects(workspace.readDraft(draft.id), /akses ditolak/, "foreign owner must be rejected");
         actor = { ...owner, role: "content" };
-        await assert.rejects(workspace.readDraft(draft.id), /ditolak/);
+        await assert.rejects(workspace.readDraft(draft.id), /ditolak/, "content role must be rejected");
         actor = { ...owner, role: "sales" };
         const saved = await workspace.saveDraft(draft.id, 1, payload);
         assert.equal(saved.revision, 2);
-        await assert.rejects(workspace.saveDraft(draft.id, 1, payload), /tab lain/);
+        await assert.rejects(workspace.saveDraft(draft.id, 1, payload), /tab lain/, "stale revision must be rejected");
         const preview = await workspace.prepareDraft(draft.id, 2);
         assert.equal(preview.text, "TEST ONLY");
         await workspace.saveDraft(draft.id, 2, { ...payload, subject: "CHANGED" });
-        await assert.rejects(workspace.sendPreparedDraft(preview.attemptId), /berubah/);
+        await assert.rejects(
+          workspace.sendPreparedDraft(preview.attemptId),
+          /berubah/,
+          "changed draft preview must be rejected",
+        );
         const frozen = await workspace.prepareDraft(draft.id, 3);
         assert.equal((await workspace.sendPreparedDraft(frozen.attemptId)).status, "sent");
         assert.equal(envelope.subject, "CHANGED");
         assert.equal(envelope.text, frozen.text);
         assert.equal(calls, 1);
-        await assert.rejects(workspace.sendPreparedDraft(frozen.attemptId));
+        await assert.rejects(workspace.sendPreparedDraft(frozen.attemptId), "a completed attempt must not send twice");
         assert.equal(calls, 1);
         for (const [failure, expected] of [
           ["partial", "partial"],
@@ -345,7 +349,12 @@ test("Local database: draft ownership, revisions, frozen preview, SMTP outcomes 
             assert.equal(retry.payload.cc, "copy@example.invalid");
             assert(!JSON.stringify(retry.payload).includes("qa@example.invalid"));
           }
-          if (expected !== "failed") await assert.rejects(workspace.saveDraft(another.id, 1, payload), /diproses/);
+          if (expected !== "failed")
+            await assert.rejects(
+              workspace.saveDraft(another.id, 1, payload),
+              /diproses/,
+              `${expected} delivery must keep its draft immutable`,
+            );
         }
         const conversations = compile(resolve(__dirname, "../src/features/integrations/email-conversations.ts"), stubs);
         let imapConnections = 0;
@@ -431,16 +440,18 @@ test("Local database: draft ownership, revisions, frozen preview, SMTP outcomes 
         const { PDFDocument } = require("pdf-lib");
         const sharp = require("sharp");
         let imageDraft = await workspace.createDraft(payload, 1);
-        await assert.rejects(
-          workspace.uploadDraftFile(
-            imageDraft.id,
-            1,
-            "unsafe.svg",
-            Buffer.from(
-              '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2"/></svg>',
-            ),
+        imageDraft = await workspace.uploadDraftFile(
+          imageDraft.id,
+          1,
+          "attachment.svg",
+          Buffer.from(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2"/></svg>',
           ),
-          /PDF, JPG, PNG, atau WebP/,
+        );
+        assert.equal(
+          imageDraft.files.find((file) => file.filename === "attachment.svg").contentType,
+          "application/octet-stream",
+          "unknown formats remain download-only attachments and rely on malware scanning",
         );
         for (const format of ["jpeg", "png", "webp"]) {
           const image = await sharp({ create: { width: 2, height: 2, channels: 3, background: "#7744aa" } })
@@ -460,8 +471,8 @@ test("Local database: draft ownership, revisions, frozen preview, SMTP outcomes 
           workspace.uploadDraftFile(attachmentDraft.id, 1, "broken.pdf", Buffer.from("%PDF-broken")),
         );
         await assert.rejects(
-          workspace.uploadDraftFile(attachmentDraft.id, 1, "oversized.pdf", Buffer.alloc(10 * 1024 * 1024 + 1)),
-          /10 MB/,
+          workspace.uploadDraftFile(attachmentDraft.id, 1, "oversized.pdf", Buffer.alloc(15 * 1024 * 1024 + 1)),
+          /15 MB/,
         );
         for (let i = 0; i < 5; i++)
           attachmentDraft = await workspace.uploadDraftFile(
@@ -484,7 +495,11 @@ test("Local database: draft ownership, revisions, frozen preview, SMTP outcomes 
         assert.equal(attachmentDraft.files.length, 4);
         await assert.rejects(workspace.downloadDraftFile(attachmentDraft.id, removedId), /ditemukan/);
         outcome = "sent";
-        const attachmentPreview = await workspace.prepareDraft(attachmentDraft.id, attachmentDraft.revision);
+        await assert.rejects(
+          workspace.prepareDraft(attachmentDraft.id, attachmentDraft.revision),
+          /Pemindai lampiran belum tersedia/,
+        );
+        const attachmentPreview = await workspace.prepareDraft(attachmentDraft.id, attachmentDraft.revision, true);
         await workspace.sendPreparedDraft(attachmentPreview.attemptId);
         assert.deepEqual((await workspace.downloadOutboxFile(attachmentPreview.attemptId, 0)).bytes, bytes);
         assert.equal(envelope.attachments.length, 4);
@@ -507,7 +522,7 @@ test("Local database: draft ownership, revisions, frozen preview, SMTP outcomes 
             docGenDummyMode: () => true,
             assertDocGenEmailAllowed: (kind, recipient) => {
               assert.equal(kind, "test");
-              assert.equal(recipient, "qa@example.invalid");
+              assert(["qa@example.invalid", "other@example.invalid"].includes(recipient));
             },
           },
         });
@@ -611,14 +626,17 @@ test("Local database: draft ownership, revisions, frozen preview, SMTP outcomes 
           (await policy.validateDocumentEmailSource(tx, documentSource, recipients, "[UJI] penawaran")).bytes.length,
           bytes.length,
         );
-        await assert.rejects(
-          policy.validateDocumentEmailSource(
-            tx,
-            documentSource,
-            { ...recipients, cc: ["other@example.invalid"] },
-            "[UJI]",
-          ),
-          /CC\/BCC/,
+        assert.equal(
+          (
+            await policy.validateDocumentEmailSource(
+              tx,
+              documentSource,
+              { ...recipients, cc: ["other@example.invalid"] },
+              "[UJI]",
+            )
+          ).bytes.length,
+          bytes.length,
+          "transaction documents support the reviewed CC recipient",
         );
         await tx
           .update(schema.transactionLines)
@@ -684,9 +702,12 @@ test("Local database: draft ownership, revisions, frozen preview, SMTP outcomes 
           .where(eq(schema.transactionLines.id, line.id));
         await tx
           .update(schema.transactionDocuments)
-          .set({ type: "bast" })
+          .set({ type: "bast_signed" })
           .where(eq(schema.transactionDocuments.id, document.id));
-        await assert.rejects(policy.validateDocumentEmailSource(tx, documentSource, recipients, "[UJI]"), /STB/);
+        await assert.rejects(
+          policy.validateDocumentEmailSource(tx, documentSource, recipients, "[UJI]"),
+          /tidak dapat dikirim/,
+        );
         await tx
           .update(schema.transactionDocuments)
           .set({ type: "quotation" })
@@ -781,7 +802,10 @@ test("Local database: draft ownership, revisions, frozen preview, SMTP outcomes 
         assert(timings[9] < 1000, "cached metadata p95 must remain below one second");
         throw rollback;
       }),
-      (error) => error === rollback,
+      (error) => {
+        if (error !== rollback) context.diagnostic(String(error?.stack ?? error));
+        return error === rollback;
+      },
     );
   } finally {
     for (const [key, value] of Object.entries({

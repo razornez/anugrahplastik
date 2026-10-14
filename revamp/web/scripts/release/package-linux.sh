@@ -33,7 +33,8 @@ mkdir -p "$release_root/app/.next" "$release_root/ops"
 cp -a "$project_root/$next_dist_dir/standalone/." "$release_root/app/"
 mkdir -p "$release_root/app/$next_dist_dir"
 cp -a "$project_root/$next_dist_dir/static" "$release_root/app/$next_dist_dir/static"
-cp -a "$project_root/public" "$release_root/app/public"
+mkdir -p "$release_root/app/public"
+cp -a "$project_root/public/." "$release_root/app/public/"
 cp -a "$project_root/drizzle" "$release_root/app/drizzle"
 mkdir -p "$release_root/app/docs"
 mkdir -p "$release_root/app/docs/templates"
@@ -83,6 +84,10 @@ mkdir -p "$(dirname "$output_path")"
 tar -C "$stage_root" --sort=name --owner=0 --group=0 --numeric-owner -czf "$output_path" anugrahplastik-release
 tar -tzf "$output_path" | grep -E '(^|/)(\.env($|\.)|app/(storage|tmp|output)/)' && {
   echo "Release archive contains forbidden local files." >&2
+  exit 1
+} || true
+tar -tzf "$output_path" | grep -E '^anugrahplastik-release/app/public/public/' && {
+  echo "Release archive contains a duplicated public directory." >&2
   exit 1
 } || true
 echo "Release artifact created: $output_path"

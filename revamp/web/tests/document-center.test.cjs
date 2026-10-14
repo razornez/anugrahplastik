@@ -73,6 +73,7 @@ test("VPS artifact carries official sources and uses an all-or-nothing initial p
   const packager = read("scripts/release/package-linux.sh");
   const publisher = read("scripts/release/publish-document-templates.mjs");
   assert.match(packager, /docs\/templates/);
+  assert.match(packager, /docs\/templates\/\." "\$release_root\/app\/docs\/templates\//);
   assert.match(packager, /publish-document-templates\.mjs/);
   assert.match(publisher, /publish-official-v1/);
   assert.match(publisher, /Smoke PDF/);

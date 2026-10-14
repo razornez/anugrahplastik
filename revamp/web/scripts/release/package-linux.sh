@@ -36,7 +36,8 @@ cp -a "$project_root/$next_dist_dir/static" "$release_root/app/$next_dist_dir/st
 cp -a "$project_root/public" "$release_root/app/public"
 cp -a "$project_root/drizzle" "$release_root/app/drizzle"
 mkdir -p "$release_root/app/docs"
-cp -a "$project_root/docs/templates" "$release_root/app/docs/templates"
+mkdir -p "$release_root/app/docs/templates"
+cp -a "$project_root/docs/templates/." "$release_root/app/docs/templates/"
 # The standalone trace includes database modules needed by the web server, but
 # the independent migration runner is not traced by Next. Copy its two runtime
 # entry packages as real directories so the VPS never needs pnpm or a build.

@@ -61,6 +61,18 @@ test("transaction page avoids a global draft-provider banner", () => {
   assert.match(page, /Buat revisi PDF/);
 });
 
+test("document center returns every transaction step to its exact internal origin", () => {
+  const transaction = read("src/app/admin/transactions/[id]/page.tsx");
+  const center = read("src/app/admin/settings/documents/page.tsx");
+  const returnGuard = read("src/features/operations/document-return.ts");
+  assert.match(transaction, /documentsHref=\{documentsHref\}/);
+  assert.doesNotMatch(transaction, /href="\/admin\/settings\/documents"/);
+  assert.match(center, /safeDocumentReturnTo/);
+  assert.match(center, /href: returnTo \?\? "\/admin\/transactions"/);
+  assert.match(returnGuard, /transactionDetailPattern\.test\(url\.pathname\)/);
+  assert.match(returnGuard, /url\.origin !== "https:\/\/admin\.local"/);
+});
+
 test("local PDF renderer uses the active structured template", () => {
   const renderer = read("src/features/operations/local-qa-renderer.ts");
   const worker = read("scripts/render-qa-pdf.mjs");

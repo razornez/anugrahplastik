@@ -14,20 +14,24 @@ function policy(mode = "dummy", extra = {}) {
   return exports;
 }
 
-test("local QA is explicit, loopback-only, test-only and cannot send email", () => {
+test("local renderer follows the local database, supports the production workflow, and cannot send email", () => {
   const extra = { DOCGEN_RENDER_MODE: "local_qa", NODE_ENV: "development", DATABASE_URL: "postgres://qa@127.0.0.1/qa" };
   const guard = policy("approved", extra);
   assert.equal(guard.docGenTemplateId("INVOICE"), "local_qa:INVOICE");
   assert.equal(guard.docGenTemplateReady("BAST"), true);
   assert.equal(guard.docGenProviderReady("INVOICE"), true);
-  assert.throws(() => guard.assertDocGenTransactionAllowed("production"));
-  assert.throws(() => guard.assertDocGenTransactionAllowed("demo"));
+  assert.doesNotThrow(() => guard.assertDocGenTransactionAllowed("production"));
+  assert.doesNotThrow(() => guard.assertDocGenTransactionAllowed("demo"));
   assert.doesNotThrow(() => guard.assertDocGenTransactionAllowed("test"));
   assert.throws(() => guard.assertDocGenEmailAllowed("test", "razornez@gmail.com", true));
   assert.equal(guard.docGenPayload({}).renderSource, "local_qa");
-  assert.throws(() => policy("dummy", { ...extra, NODE_ENV: "production" }).docGenDummyMode());
-  assert.throws(() => policy("dummy", { ...extra, DATABASE_URL: "postgres://qa@example.com/qa" }).docGenDummyMode());
-  assert.throws(() => policy("dummy", { ...extra, DATABASE_URL: "not-a-url" }).docGenDummyMode());
+  assert.equal(policy("dummy", { ...extra, NODE_ENV: "production" }).localQaRendererEnabled(), true);
+  assert.equal(
+    policy("dummy", { ...extra, DATABASE_URL: "postgres://qa@example.com/qa" }).localQaRendererEnabled(),
+    false,
+  );
+  assert.equal(policy("dummy", { ...extra, DATABASE_URL: "not-a-url" }).localQaRendererEnabled(), false);
+  assert.equal(policy("dummy", { ...extra, DOCGEN_RENDER_MODE: "provider" }).localQaRendererEnabled(), false);
 });
 
 test("template contoh hanya merender transaksi uji", () => {

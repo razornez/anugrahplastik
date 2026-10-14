@@ -245,6 +245,20 @@ test("document center and PDF template editor stay flat and readable", async ({ 
   await expect(page.getByRole("heading", { name: "Penawaran", exact: true })).toBeVisible();
   await expect(page.getByText("Struktur dokumen dilindungi", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Simpan dan aktifkan" })).toBeVisible();
+  await expect(page.locator('.document-template-preview-frame iframe[title*="Penawaran"]')).toBeVisible();
+  const previewFrame = page.frameLocator(".document-template-preview-frame iframe");
+  await expect(previewFrame.locator("header")).toBeVisible();
+  const previewMargins = await previewFrame.locator("body").evaluate((body) => {
+    const style = getComputedStyle(body);
+    return {
+      left: Number.parseFloat(style.paddingLeft),
+      right: Number.parseFloat(style.paddingRight),
+    };
+  });
+  expect(previewMargins.left).toBeGreaterThanOrEqual(18);
+  expect(previewMargins.left).toBeLessThanOrEqual(21);
+  expect(previewMargins.right).toBeGreaterThanOrEqual(18);
+  expect(previewMargins.right).toBeLessThanOrEqual(21);
   await expectStableAdminLayout(page, testInfo.project.name !== "desktop");
   const kindList = await page.locator(".document-template-kind-list").evaluate((element) => ({
     clientWidth: element.clientWidth,
@@ -256,6 +270,220 @@ test("document center and PDF template editor stay flat and readable", async ({ 
     fullPage: true,
     mask: [page.locator('.admin-sidebar a[href="/admin/profile"]')],
   });
+});
+
+test("customer profile uses a full mobile workspace and a bounded desktop drawer", async ({ page }, testInfo) => {
+  test.skip(
+    !["iphone-12-mini", "desktop"].includes(testInfo.project.name),
+    "Customer profile is visually verified at the primary mobile and desktop sizes.",
+  );
+
+  await page.goto("/admin/masters/customers", { waitUntil: "networkidle" });
+  const createButton = page.getByRole("button", { name: "Tambah pelanggan", exact: true });
+  await expect(createButton).toHaveCSS("background-color", "rgb(119, 55, 195)");
+  await expect(createButton).toHaveScreenshot(`customer-create-button-${testInfo.project.name}.png`);
+  await createButton.click();
+  const dialog = page.getByRole("dialog", { name: "Tambah pelanggan" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel("Nama pelanggan")).toBeFocused();
+  await expect(dialog.getByRole("heading", { name: "Kontak / PIC" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Alamat penagihan" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Alamat pengiriman" })).toBeVisible();
+  await expect(dialog.getByLabel("Provinsi")).toBeVisible();
+  const saveButton = dialog.getByRole("button", { name: "Simpan pelanggan" });
+  await expect(saveButton).toHaveCSS("background-color", "rgb(113, 53, 181)");
+
+  const geometry = await dialog.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      top: rect.top,
+      right: document.documentElement.clientWidth - rect.right,
+      bottom: document.documentElement.clientHeight - rect.bottom,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+      viewportWidth: document.documentElement.clientWidth,
+      viewportHeight: document.documentElement.clientHeight,
+      overflow: element.scrollWidth - element.clientWidth,
+    };
+  });
+  expect(geometry.overflow).toBeLessThanOrEqual(1);
+  if (testInfo.project.name === "iphone-12-mini") {
+    expect(Math.abs(geometry.top)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.right)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.bottom)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.left)).toBeLessThanOrEqual(1);
+    expect(geometry.width).toBe(geometry.viewportWidth);
+    expect(geometry.height).toBe(geometry.viewportHeight);
+  } else {
+    expect(geometry.right).toBe(12);
+    expect(geometry.width).toBeLessThanOrEqual(820);
+    expect(geometry.height).toBeLessThan(geometry.viewportHeight);
+  }
+
+  const province = dialog.getByLabel("Provinsi");
+  const regency = dialog.getByLabel("Kabupaten / kota");
+  await expect.poll(() => province.locator("option").count()).toBeGreaterThan(1);
+  await prepareAnonymousVisualState(page);
+  await expect(page).toHaveScreenshot(`customer-profile-${testInfo.project.name}.png`, {
+    mask: [page.locator('.admin-sidebar a[href="/admin/profile"]')],
+  });
+
+  await province.selectOption({ index: 1 });
+  await expect(regency).toBeEnabled();
+  await expect.poll(() => regency.locator("option").count()).toBeGreaterThan(1);
+  await regency.selectOption({ index: 1 });
+  const district = dialog.getByLabel("Kecamatan");
+  await expect.poll(() => district.locator("option").count()).toBeGreaterThan(1);
+  await district.selectOption({ index: 1 });
+  const village = dialog.getByLabel("Kelurahan / desa");
+  await expect.poll(() => village.locator("option").count()).toBeGreaterThan(1);
+});
+
+test("customer validation keeps edits and links each missing field", async ({ page }, testInfo) => {
+  test.skip(!["iphone-12-mini", "desktop"].includes(testInfo.project.name));
+  await page.goto("/admin/masters/customers", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Tambah pelanggan", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Tambah pelanggan" });
+  await dialog.getByLabel("Nama pelanggan").fill("Pelanggan Percobaan");
+  await dialog.getByRole("button", { name: "Simpan pelanggan" }).click();
+  const summary = dialog.locator(".customer-profile-error-summary");
+  await expect(summary).toBeFocused();
+  await expect(summary.getByRole("link", { name: "Nama PIC wajib diisi." })).toBeVisible();
+  await expect(summary.getByRole("link", { name: "Alamat jalan wajib diisi." })).toBeVisible();
+  await expect(dialog.getByLabel("Nama pelanggan")).toHaveValue("Pelanggan Percobaan");
+  await summary.getByRole("link", { name: "Nama PIC wajib diisi." }).click();
+  await expect(dialog.getByLabel("Nama PIC")).toBeInViewport();
+});
+
+test("customer deletion requires a named confirmation", async ({ page }, testInfo) => {
+  test.skip(!["iphone-12-mini", "desktop"].includes(testInfo.project.name));
+  await page.goto("/admin/masters/customers", { waitUntil: "networkidle" });
+  const customer = page
+    .locator(".directory-list article")
+    .filter({ has: page.getByRole("button", { name: "Kelola" }) })
+    .first();
+  test.skip(!(await customer.count()), "No local customer is available.");
+  const name = (await customer.locator("strong").first().innerText()).trim();
+  await customer.getByRole("button", { name: "Kelola" }).click();
+  const dialog = page.getByRole("dialog", { name: `Kelola ${name}` });
+  await dialog.getByRole("button", { name: "Hapus pelanggan", exact: true }).click();
+  await expect(dialog.getByText(`Yakin ingin menghapus ${name}?`, { exact: false })).toBeVisible();
+  const confirm = dialog.getByRole("button", { name: "Ya, hapus pelanggan" });
+  const box = await confirm.boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+});
+
+test("delivery address delete action is clear and removes only the unsaved address", async ({ page }, testInfo) => {
+  test.skip(!["mobile-320", "iphone-12-mini", "desktop"].includes(testInfo.project.name));
+  await page.goto("/admin/masters/customers", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Tambah pelanggan", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Tambah pelanggan" });
+  await dialog.getByRole("button", { name: /Tambah alamat/ }).click();
+  const remove = dialog.getByRole("button", { name: "Hapus alamat pengiriman Lokasi 1" });
+  await expect(remove).toBeVisible();
+  const geometry = await remove.evaluate((button) => {
+    const rect = button.getBoundingClientRect();
+    const style = getComputedStyle(button);
+    return { width: rect.width, height: rect.height, border: style.borderStyle, background: style.backgroundColor };
+  });
+  expect(geometry.width).toBeGreaterThanOrEqual(44);
+  expect(geometry.height).toBeGreaterThanOrEqual(44);
+  expect(geometry.border).toBe("solid");
+  expect(geometry.background).not.toBe("rgba(0, 0, 0, 0)");
+  await expect(remove.locator("..")).toHaveScreenshot(`customer-address-actions-${testInfo.project.name}.png`);
+  await page.locator(".admin-shell:not(.admin-shell--portal)").evaluate((shell) => {
+    (shell as HTMLElement).dataset.theme = "dark";
+  });
+  await expect(page.locator(".admin-shell--portal")).toHaveAttribute("data-theme", "dark");
+  await expect
+    .poll(() => remove.evaluate((button) => getComputedStyle(button).backgroundColor))
+    .not.toBe(geometry.background);
+  await remove.click();
+  await expect(dialog.getByText("Belum ada alamat pengiriman")).toBeVisible();
+});
+
+test("add email template opens an isolated responsive dialog", async ({ page }, testInfo) => {
+  test.skip(
+    !["iphone-12-mini", "desktop"].includes(testInfo.project.name),
+    "The create-template overlay is visually verified at the primary mobile and desktop sizes.",
+  );
+
+  await page.goto("/admin/settings/email-templates", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Tambah template", exact: true }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Tambah template email" });
+  const nameInput = dialog.getByLabel("Nama template");
+  await expect(dialog).toBeVisible();
+  await expect(nameInput).toBeFocused();
+  await expect(dialog.getByLabel("Bahasa")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Batal" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Buat dan buka editor" })).toBeVisible();
+
+  const geometry = await dialog.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    const close = element.querySelector<HTMLElement>('button[aria-label="Tutup form tambah template"]');
+    const closeRect = close?.getBoundingClientRect();
+    return {
+      background: style.backgroundColor,
+      left: rect.left,
+      right: document.documentElement.clientWidth - rect.right,
+      bottom: document.documentElement.clientHeight - rect.bottom,
+      width: rect.width,
+      height: rect.height,
+      viewportWidth: document.documentElement.clientWidth,
+      viewportHeight: document.documentElement.clientHeight,
+      closeWidth: closeRect?.width ?? 0,
+      closeHeight: closeRect?.height ?? 0,
+    };
+  });
+  expect(geometry.background).not.toBe("rgba(0, 0, 0, 0)");
+  expect(geometry.width).toBeLessThanOrEqual(geometry.viewportWidth);
+  expect(geometry.height).toBeLessThanOrEqual(geometry.viewportHeight);
+  expect(geometry.closeWidth).toBeGreaterThanOrEqual(44);
+  expect(geometry.closeHeight).toBeGreaterThanOrEqual(44);
+  if (testInfo.project.name === "iphone-12-mini") {
+    expect(Math.abs(geometry.left - geometry.right)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.bottom)).toBeLessThanOrEqual(1);
+  } else {
+    expect(Math.abs(geometry.left - geometry.right)).toBeLessThanOrEqual(2);
+    expect(geometry.bottom).toBeGreaterThan(16);
+  }
+
+  await prepareAnonymousVisualState(page);
+  await expect(page).toHaveScreenshot(`email-template-create-${testInfo.project.name}.png`, {
+    mask: [page.locator('.admin-sidebar a[href="/admin/profile"]')],
+  });
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+
+  await page.locator(".admin-shell:not(.admin-shell--portal)").evaluate((shell) => {
+    (shell as HTMLElement).dataset.theme = "dark";
+  });
+  await page.getByRole("button", { name: "Tambah template", exact: true }).click();
+  await expect(page.locator(".admin-shell--portal")).toHaveAttribute("data-theme", "dark");
+  const darkBackground = await dialog.evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(darkBackground).not.toBe(geometry.background);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
+
+test("fixed email attachment picker explains file and total limit", async ({ page }, testInfo) => {
+  test.skip(!["iphone-12-mini", "desktop"].includes(testInfo.project.name));
+  await page.goto("/admin/settings/email-templates?kind=quotation", { waitUntil: "networkidle" });
+  const attachments = page.locator(".email-template-attachments");
+  await expect(attachments.getByRole("heading", { name: "Lampiran tetap" })).toBeVisible();
+  await expect(attachments.getByText("Maksimal empat file dan total 15 MB.", { exact: false })).toBeVisible();
+  await expect(attachments.getByText("Belum ada file dipilih")).toBeVisible();
+  await attachments.locator('input[type="file"]').setInputFiles({
+    name: "contoh-terlalu-besar.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.alloc(16 * 1024 * 1024),
+  });
+  await expect(attachments.getByText("contoh-terlalu-besar.pdf", { exact: false })).toBeVisible();
+  await expect(attachments.getByRole("alert")).toContainText("melebihi 15 MB");
+  await expect(attachments.getByRole("button", { name: "Unggah" })).toBeDisabled();
 });
 
 test("transaction navigator keeps number, title, and status in aligned rows", async ({ page }, testInfo) => {
@@ -361,10 +589,20 @@ test.describe("transaction steps", () => {
 test("quote editor is compact without shrinking form controls", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "iphone-12-mini", "Density contract targets the 375 px viewport.");
   await page.goto("/admin/transactions", { waitUntil: "networkidle" });
-  const detailHref = await page.locator('a[href*="/admin/transactions/"]').first().getAttribute("href");
-  test.skip(!detailHref, "No local transaction is available for the quote density regression.");
-  const detailPath = detailHref!.split("?")[0];
-  await page.goto(`${detailPath}?step=quote`, { waitUntil: "networkidle" });
+  const detailHrefs = await page
+    .locator('article a[href^="/admin/transactions/"]')
+    .evaluateAll((links) => links.map((link) => (link as HTMLAnchorElement).getAttribute("href")!.split("?")[0]));
+  test.skip(!detailHrefs.length, "No local transaction is available for the quote density regression.");
+
+  let editorFound = false;
+  for (const detailPath of detailHrefs.slice(0, 12)) {
+    await page.goto(`${detailPath}?step=quote`, { waitUntil: "networkidle" });
+    if (await page.locator(".transaction-quote-editor").count()) {
+      editorFound = true;
+      break;
+    }
+  }
+  test.skip(!editorFound, "No local transaction has an editable quotation form.");
 
   const details = page.locator("details.transaction-flow-details").filter({
     has: page.locator(".transaction-quote-editor"),

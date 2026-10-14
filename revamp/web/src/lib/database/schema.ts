@@ -798,8 +798,73 @@ export const customerContacts = pgTable(
     phone: varchar("phone", { length: 32 }),
     isPrimary: boolean("is_primary").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [index("customer_contacts_customer_idx").on(table.customerId)],
+  (table) => [
+    index("customer_contacts_customer_idx").on(table.customerId),
+    index("customer_contacts_customer_primary_idx").on(table.customerId, table.isPrimary),
+  ],
+);
+
+export const indonesiaRegions = pgTable(
+  "indonesia_regions",
+  {
+    code: varchar("code", { length: 20 }).primaryKey(),
+    parentCode: varchar("parent_code", { length: 20 }).references((): AnyPgColumn => indonesiaRegions.code, {
+      onDelete: "cascade",
+    }),
+    level: varchar("level", { length: 16 }).notNull(),
+    name: varchar("name", { length: 180 }).notNull(),
+    postalCode: varchar("postal_code", { length: 8 }),
+    sourceVersion: varchar("source_version", { length: 80 }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("indonesia_regions_parent_name_idx").on(table.parentCode, table.name),
+    index("indonesia_regions_level_name_idx").on(table.level, table.name),
+    index("indonesia_regions_postal_code_idx").on(table.postalCode),
+  ],
+);
+
+export const regionCatalogMetadata = pgTable("region_catalog_metadata", {
+  id: integer("id").primaryKey(),
+  sourceRepository: varchar("source_repository", { length: 255 }).notNull(),
+  sourceCommit: varchar("source_commit", { length: 64 }).notNull(),
+  sourceUpdatedAt: date("source_updated_at"),
+  importedAt: timestamp("imported_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const customerAddresses = pgTable(
+  "customer_addresses",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 16 }).notNull(),
+    label: varchar("label", { length: 100 }).notNull(),
+    countryCode: varchar("country_code", { length: 2 }).notNull().default("ID"),
+    countryName: varchar("country_name", { length: 120 }).notNull().default("Indonesia"),
+    addressLine: text("address_line").notNull(),
+    provinceCode: varchar("province_code", { length: 20 }),
+    provinceName: varchar("province_name", { length: 180 }),
+    regencyCode: varchar("regency_code", { length: 20 }),
+    regencyName: varchar("regency_name", { length: 180 }),
+    districtCode: varchar("district_code", { length: 20 }),
+    districtName: varchar("district_name", { length: 180 }),
+    villageCode: varchar("village_code", { length: 20 }),
+    villageName: varchar("village_name", { length: 180 }),
+    postalCode: varchar("postal_code", { length: 12 }),
+    isDefault: boolean("is_default").notNull().default(false),
+    isStructured: boolean("is_structured").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("customer_addresses_customer_kind_idx").on(table.customerId, table.kind),
+    index("customer_addresses_country_province_idx").on(table.countryCode, table.provinceCode),
+    index("customer_addresses_regency_idx").on(table.regencyCode),
+  ],
 );
 
 export const suppliers = pgTable(
@@ -922,6 +987,7 @@ export const businessTransactions = pgTable(
     customerId: uuid("customer_id")
       .notNull()
       .references(() => customers.id, { onDelete: "restrict" }),
+    customerSnapshot: jsonb("customer_snapshot"),
     ownerId: uuid("owner_id").references(() => users.id, { onDelete: "set null" }),
     title: varchar("title", { length: 220 }).notNull(),
     dataClass: varchar("data_class", { length: 16 }).notNull().default("production"),

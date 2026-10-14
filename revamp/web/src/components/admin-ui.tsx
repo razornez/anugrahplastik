@@ -2,6 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import Link from "next/link";
+import { AdminDialogPortalFrame } from "@/components/admin-dialog-portal-frame";
 import {
   createContext,
   forwardRef,
@@ -208,33 +209,37 @@ export function AdminSheet({
   onOpenChange,
   title,
   description,
+  className,
   children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: string;
+  className?: string;
   children: ReactNode;
 }) {
   return (
     <Dialog.Root onOpenChange={onOpenChange} open={open}>
       <Dialog.Portal>
-        <Dialog.Overlay className="admin-sheet__overlay" />
-        <Dialog.Content className="admin-sheet">
-          <span className="admin-sheet__handle" aria-hidden="true" />
-          <header className="admin-sheet__header">
-            <span>
-              <Dialog.Title>{title}</Dialog.Title>
-              {description ? <Dialog.Description>{description}</Dialog.Description> : null}
-            </span>
-            <Dialog.Close aria-label="Tutup panel" className="admin-sheet__close">
-              <svg aria-hidden="true" viewBox="0 0 24 24">
-                <path d="m6 6 12 12M18 6 6 18" />
-              </svg>
-            </Dialog.Close>
-          </header>
-          <div className="admin-sheet__body">{children}</div>
-        </Dialog.Content>
+        <AdminDialogPortalFrame>
+          <Dialog.Overlay className="admin-sheet__overlay" />
+          <Dialog.Content className={["admin-sheet", className].filter(Boolean).join(" ")}>
+            <span className="admin-sheet__handle" aria-hidden="true" />
+            <header className="admin-sheet__header">
+              <span>
+                <Dialog.Title>{title}</Dialog.Title>
+                {description ? <Dialog.Description>{description}</Dialog.Description> : null}
+              </span>
+              <Dialog.Close aria-label="Tutup panel" className="admin-sheet__close">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="m6 6 12 12M18 6 6 18" />
+                </svg>
+              </Dialog.Close>
+            </header>
+            <div className="admin-sheet__body">{children}</div>
+          </Dialog.Content>
+        </AdminDialogPortalFrame>
       </Dialog.Portal>
     </Dialog.Root>
   );

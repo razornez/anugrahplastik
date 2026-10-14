@@ -439,7 +439,7 @@ async function brandedEmailShell({
   let logo = "";
   let brandAttachment: EmailAttachment | null = null;
   try {
-    const content = await readFile(resolve(process.cwd(), "public", "brand", "quotation-logo.png"));
+    const content = await readFile(resolve(process.cwd(), "public", shell.logoPath.slice(1)));
     logo = `<img src="cid:${brandLogoCid}" alt="Anugrah Plastik" width="52" height="52" style="display:block;width:52px;height:52px;border:0;outline:none;text-decoration:none">`;
     brandAttachment = { filename: "anugrah-plastik.png", content, cid: brandLogoCid };
   } catch {

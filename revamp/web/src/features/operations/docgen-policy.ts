@@ -3,13 +3,24 @@ export const DOCGEN_TEST_RECIPIENT = "razornez@gmail.com";
 export type DocGenTemplateKind = "QUOTATION" | "INVOICE" | "DELIVERY" | "BAST";
 const templateKinds: DocGenTemplateKind[] = ["QUOTATION", "INVOICE", "DELIVERY", "BAST"];
 
-// Explicit opt-in for a separate local QA process, never a production fallback.
+function databaseIsLocal() {
+  try {
+    const databaseUrl = new URL(process.env.DATABASE_URL ?? "");
+    return ["localhost", "127.0.0.1", "[::1]"].includes(databaseUrl.hostname);
+  } catch {
+    return false;
+  }
+}
+
+// A local database is the trust boundary. NODE_ENV may be "production" when the
+// developer runs `next start`, so it must not be used to identify production data.
 export function localQaRendererEnabled() {
-  if (process.env.DOCGEN_RENDER_MODE !== "local_qa") return false;
-  const databaseUrl = new URL(process.env.DATABASE_URL ?? "");
-  if (process.env.NODE_ENV !== "development" || !["localhost", "127.0.0.1", "[::1]"].includes(databaseUrl.hostname))
-    throw new Error("Renderer QA hanya tersedia pada proses development dengan database lokal.");
-  return true;
+  if (process.env.DOCGEN_RENDER_MODE === "provider") return false;
+  return databaseIsLocal();
+}
+
+export function officialDocumentFlowEnabled() {
+  return localQaRendererEnabled() || !docGenDummyMode();
 }
 
 export function docGenProviderReady(kind: DocGenTemplateKind) {
@@ -51,6 +62,7 @@ export function docGenTemplateId(kind: DocGenTemplateKind): string | undefined {
 }
 
 export function assertDocGenTransactionAllowed(dataClass: string) {
+  if (localQaRendererEnabled()) return;
   if (docGenDummyMode() && dataClass !== "test") {
     throw new Error("Template DocGen masih berupa contoh dan hanya boleh dipakai pada transaksi uji.");
   }

@@ -17,6 +17,7 @@ import {
   invoiceNumberCounters,
   quotationNumberCounters,
 } from "@/lib/database/schema";
+import { safeDocumentReturnTo } from "@/features/operations/document-return";
 
 export const instant = false;
 
@@ -50,7 +51,14 @@ const counterLabels = {
 export default async function DocumentSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ section?: string; status?: string; error?: string; field?: string; kind?: string }>;
+  searchParams: Promise<{
+    section?: string;
+    status?: string;
+    error?: string;
+    field?: string;
+    kind?: string;
+    returnTo?: string;
+  }>;
 }) {
   const user = await getSession();
   if (!user || user.role !== "admin") redirect("/admin");
@@ -67,6 +75,7 @@ export default async function DocumentSettingsPage({
     ...documentTemplateKinds.map((kind) => getDocumentTemplateState(kind)),
   ]);
   const query = await searchParams;
+  const returnTo = safeDocumentReturnTo(query.returnTo);
   const counters = {
     quotation: quoteRows.find((row) => row.referenceYear === year),
     invoice: invoiceRows.find((row) => row.referenceYear === year),
@@ -95,7 +104,7 @@ export default async function DocumentSettingsPage({
       <AdminPageHeader
         title="Dokumen resmi"
         description="Kelola identitas, nomor urut, dan kesiapan dokumen dari satu tempat."
-        back={{ href: "/admin/transactions", label: "Kembali ke transaksi" }}
+        back={{ href: returnTo ?? "/admin/transactions", label: "Kembali ke transaksi" }}
       />
       <div className="document-readiness-summary" data-ready={unfinished === 0 ? "true" : undefined} role="status">
         <strong>{unfinished === 0 ? "Siap menerbitkan dokumen" : `${unfinished} pengaturan belum selesai`}</strong>
@@ -122,6 +131,7 @@ export default async function DocumentSettingsPage({
         </header>
         <p>Dipakai bersama pada Penawaran, Invoice, Surat Jalan, dan STB.</p>
         <form action={saveAndActivateIssuer} className="document-identity-form">
+          {returnTo ? <input name="returnTo" type="hidden" value={returnTo} /> : null}
           <div className="document-form-grid">
             {fields.map(([name, label]) => (
               <label className={name === "address" ? "is-wide" : undefined} key={name}>
@@ -197,6 +207,7 @@ export default async function DocumentSettingsPage({
                   </div>
                 ) : (
                   <form action={initializeDocumentCounter}>
+                    {returnTo ? <input name="returnTo" type="hidden" value={returnTo} /> : null}
                     <input name="kind" type="hidden" value={kind} />
                     <input name="year" type="hidden" value={year} />
                     <label>

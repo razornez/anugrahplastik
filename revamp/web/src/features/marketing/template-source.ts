@@ -213,6 +213,39 @@ function renderPortfolioCards(markup: string, content: LandingContent) {
   return replaceContainerChildren(markup, "ap-gallery", cards.join(""));
 }
 
+function renderPartnerMarquees(markup: string, content: LandingContent) {
+  return replaceEditorialValuesInSection(markup, "ap-trust", (originalSection) => {
+    let section = originalSection.replace(
+      /(<div[^>]*>\s*Sebagian klien &amp; mitra produksi\s*<\/div>)/i,
+      '$1<button class="ap-marquee-toggle" type="button" aria-pressed="false">Jeda animasi logo</button>',
+    );
+    const perRow = Math.ceil(content.trust.partners.length / 3);
+    const marquee = /<div\b[^>]*class="[^"]*\bap-mq\b[^"]*"[^>]*>/i;
+    let cursor = 0;
+    for (let row = 0; row < 3; row += 1) {
+      const match = marquee.exec(section.slice(cursor));
+      if (!match) throw new Error("Baris logo pada template landing tidak lengkap.");
+      const start = cursor + match.index;
+      const end = closingTagIndex(section, start, "div");
+      if (end < 0) throw new Error("Baris logo pada template landing tidak tertutup.");
+      const partners = content.trust.partners.slice(row * perRow, (row + 1) * perRow);
+      const cards = partners
+        .map(
+          (partner) =>
+            `<div class="ap-logo ap-client-logo"><img loading="lazy" decoding="async" src="${escapeHtml(partner.imagePath)}" alt="${escapeHtml(partner.altText)}" width="154" height="76"></div>`,
+        )
+        .join("");
+      const track = `<div class="ap-partner-track">${cards}</div>`;
+      const duplicate = `<div class="ap-partner-track" aria-hidden="true">${cards}</div>`;
+      const opening = match[0].replace(/apMarquee \d+s/, `apMarquee ${Math.max(34, partners.length * 6)}s`);
+      const replacement = `${opening}${track}${duplicate}</div>`;
+      section = `${section.slice(0, start)}${replacement}${section.slice(end)}`;
+      cursor = start + replacement.length;
+    }
+    return section;
+  });
+}
+
 function extractTemplate() {
   const component = source.match(/<x-dc\b[^>]*>([\s\S]*?)<\/x-dc>/)?.[1];
   if (!component) throw new Error("Template landing tidak dapat dibaca.");
@@ -358,6 +391,7 @@ export function renderLandingTemplate(content: LandingContent) {
   // values are substituted here.
   markup = renderMaterialCards(markup, content);
   markup = renderPortfolioCards(markup, content);
+  markup = renderPartnerMarquees(markup, content);
   markup = renderApprovedEditorialSlots(markup, content);
 
   markup = markup.replace(/<footer/, `${editorialBlocks(content)}<footer`);

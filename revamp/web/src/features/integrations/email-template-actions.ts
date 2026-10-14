@@ -5,6 +5,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import sharp from "sharp";
 import nodemailer from "nodemailer";
 import { z } from "zod";
@@ -32,6 +33,7 @@ import {
 } from "./email-templates";
 import { parseEmailShellConfig, validateEmailShellConfig } from "./email-template-shell";
 import { getMailboxSettings } from "./mail-service";
+import { republishActiveDocumentTemplates } from "@/features/operations/document-templates";
 
 async function requireAdmin() {
   const user = await getSession();
@@ -204,7 +206,7 @@ export async function saveEmailTemplate(formData: FormData) {
         )
         .limit(1);
   if (!catalog) throw new Error("Katalog template belum tersedia. Jalankan migrasi database lalu muat ulang.");
-  await database.transaction(async (tx) => {
+  const activation = await database.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`email-template-${catalog.id}`}))`);
     const [previous] = await tx
       .select()
@@ -231,7 +233,38 @@ export async function saveEmailTemplate(formData: FormData) {
       entityId: saved.id,
       metadata: { key, templateId: catalog.id, version: saved.version, previousVersion: previous?.version ?? 0 },
     });
+    return { previous, saved };
   });
+  if (key === "layout") {
+    try {
+      await republishActiveDocumentTemplates(user.id);
+    } catch (error) {
+      if (activation.previous) {
+        await database.transaction(async (tx) => {
+          await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`email-template-${catalog.id}`}))`);
+          const [latest] = await tx
+            .select({ id: emailTemplateVersions.id, version: emailTemplateVersions.version })
+            .from(emailTemplateVersions)
+            .where(eq(emailTemplateVersions.templateId, catalog.id))
+            .orderBy(desc(emailTemplateVersions.version))
+            .limit(1);
+          if (latest?.id === activation.saved.id) {
+            await tx.insert(emailTemplateVersions).values({
+              templateId: catalog.id,
+              templateKey: key,
+              version: latest.version + 1,
+              subject: activation.previous.subject,
+              content: activation.previous.content,
+              shellConfig: activation.previous.shellConfig,
+              createdBy: user.id,
+              restoredFromId: activation.previous.id,
+            });
+          }
+        });
+      }
+      throw error;
+    }
+  }
   revalidatePath("/admin/settings/email-templates");
   revalidatePath("/admin/email");
 }
@@ -313,6 +346,14 @@ export async function createEmailTemplate(formData: FormData) {
         ),
       )
       .limit(1);
+    const [sourceVersion] = existing
+      ? await tx
+          .select()
+          .from(emailTemplateVersions)
+          .where(eq(emailTemplateVersions.templateId, existing.id))
+          .orderBy(desc(emailTemplateVersions.version))
+          .limit(1)
+      : [];
     const [created] = await tx
       .insert(emailTemplates)
       .values({ templateKey: key, name, language, isDefault: !existing, createdBy: user.id })
@@ -321,8 +362,9 @@ export async function createEmailTemplate(formData: FormData) {
       templateId: created.id,
       templateKey: key,
       version: 1,
-      subject: defaults.subject,
-      content: defaults.content,
+      subject: sourceVersion?.subject ?? defaults.subject,
+      content: sourceVersion?.content ?? defaults.content,
+      shellConfig: sourceVersion?.shellConfig ?? null,
       createdBy: user.id,
     });
     await tx.insert(auditLogs).values({
@@ -335,7 +377,13 @@ export async function createEmailTemplate(formData: FormData) {
     return [created];
   });
   revalidatePath("/admin/settings/email-templates");
-  void template;
+  redirect(
+    "/admin/settings/email-templates?kind=" +
+      encodeURIComponent(key) +
+      "&template=" +
+      encodeURIComponent(template.id) +
+      "&status=created",
+  );
 }
 
 export async function duplicateEmailTemplate(formData: FormData) {

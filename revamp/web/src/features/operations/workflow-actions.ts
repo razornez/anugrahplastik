@@ -1,7 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -27,6 +27,7 @@ import {
   quotationNumberCounters,
 } from "@/lib/database/schema";
 import { calculateQuote, centsText, type QuoteLineInput } from "./quote-math";
+import { formatCustomerAddress, type TransactionCustomerSnapshot } from "./customer-profile";
 import {
   formatQuotationNumber,
   jakartaYear,
@@ -45,16 +46,17 @@ import { invoiceRenderData } from "./invoice-render-data";
 import { invoiceIssuerIsReady } from "./invoice-settings";
 import { readInvoiceLogo } from "./invoice-logo";
 import { appendQuotationAttachments, type QuotationAttachment } from "./quotation-attachments";
-import { assertDocGenTestTransaction, quotationTemplateReady, renderDocGenPdf } from "./docgen";
+import { assertDocGenTestTransaction, renderDocGenPdf } from "./docgen";
 import {
   docGenDummyMode,
   docGenPayload,
   docGenTemplateId,
-  docGenProviderReady,
-  docGenTemplateReady,
   localQaRendererEnabled,
+  officialDocumentFlowEnabled,
 } from "./docgen-policy";
 import { resolveDocumentProviderTemplateId } from "./document-templates";
+import { classifyDocumentFailure, documentRecoveryBlocker, documentRevisionBlocker } from "./document-review";
+import { quotationDocumentReadiness } from "./document-readiness";
 import {
   deliveryDetailsSchema,
   deliveryRenderData,
@@ -71,6 +73,22 @@ import {
   handoverRenderData,
   validateHandoverDetails,
 } from "./handover-note";
+
+function customerSnapshotView(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const snapshot = value as TransactionCustomerSnapshot;
+  const primary = snapshot.contacts?.find((contact) => contact.isPrimary) ?? snapshot.contacts?.[0];
+  const delivery =
+    snapshot.deliveryAddresses?.find((address) => address.id === snapshot.selectedDeliveryAddressId) ??
+    snapshot.deliveryAddresses?.find((address) => address.isDefault);
+  return {
+    name: snapshot.name,
+    billingAddress: formatCustomerAddress(snapshot.billingAddress),
+    deliveryAddress: formatCustomerAddress(delivery),
+    taxId: snapshot.taxId,
+    email: primary?.email ?? "",
+  };
+}
 
 const lineSchema = z.object({
   description: z.string().trim().min(2).max(500),
@@ -134,6 +152,24 @@ function transactionPath(id: string, step: string, notice?: string) {
   const query = new URLSearchParams({ step });
   if (notice) query.set("notice", notice);
   return `/admin/transactions/${id}?${query.toString()}`;
+}
+
+async function markDocumentForReview(documentId: string, error: unknown) {
+  const database = getDatabase();
+  if (!database) return;
+  const [document] = await database
+    .select({ payload: transactionDocuments.payload })
+    .from(transactionDocuments)
+    .where(eq(transactionDocuments.id, documentId))
+    .limit(1);
+  const payload = document?.payload && typeof document.payload === "object" ? document.payload : {};
+  await database
+    .update(transactionDocuments)
+    .set({
+      status: "needs_review",
+      payload: { ...payload, generationReview: classifyDocumentFailure(error, localQaRendererEnabled()) },
+    })
+    .where(eq(transactionDocuments.id, documentId));
 }
 
 export async function saveQuoteDraft(formData: FormData) {
@@ -260,22 +296,64 @@ export async function saveQuoteDraft(formData: FormData) {
   redirect(transactionPath(transactionId, "quote", "draft-saved"));
 }
 
+export async function saveProductionTargetDate(formData: FormData) {
+  const user = await operationsUser();
+  const transactionId = z.string().uuid().safeParse(field(formData, "transactionId"));
+  if (!transactionId.success) redirect("/admin/transactions");
+
+  const rawDate = field(formData, "targetDate");
+  const targetDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? new Date(`${rawDate}T12:00:00+07:00`) : null;
+  if (!targetDate || Number.isNaN(targetDate.valueOf()) || targetDate.toISOString().slice(0, 10) !== rawDate) {
+    redirect(transactionPath(transactionId.data, "production", "target-invalid"));
+  }
+
+  const database = getDatabase();
+  if (!database) redirect(transactionPath(transactionId.data, "production", "target-unavailable"));
+  const updated = await database.transaction(async (tx) => {
+    const [record] = await tx
+      .update(businessTransactions)
+      .set({ dueAt: targetDate, updatedAt: new Date() })
+      .where(
+        and(
+          eq(businessTransactions.id, transactionId.data),
+          isNull(businessTransactions.dueAt),
+          isNull(businessTransactions.cancelledAt),
+          ne(businessTransactions.fulfilmentStatus, "completed"),
+        ),
+      )
+      .returning({ id: businessTransactions.id });
+    if (!record) return false;
+    await tx.insert(auditLogs).values({
+      actorId: user.id,
+      action: "transaction.production_target_set",
+      entityType: "transaction",
+      entityId: transactionId.data,
+      metadata: { targetDate: rawDate },
+    });
+    return true;
+  });
+  revalidatePath(`/admin/transactions/${transactionId.data}`);
+  redirect(transactionPath(transactionId.data, "production", updated ? "target-saved" : "target-unavailable"));
+}
+
 export async function generateQuotation(formData: FormData) {
   const user = await operationsUser();
   const transactionId = z.string().uuid().parse(field(formData, "transactionId"));
+  const readiness = await quotationDocumentReadiness(transactionId);
+  if (!readiness.ready) redirect(transactionPath(transactionId, "quote", "quote-not-ready"));
   const database = getDatabase();
   const templateId = await resolveDocumentProviderTemplateId("quotation", docGenTemplateId("QUOTATION"));
   if (!database) throw new Error("Database belum terhubung.");
-  if (!quotationTemplateReady() || !templateId) redirect(transactionPath(transactionId, "quote", "docgen-unavailable"));
+  if (!templateId) redirect(transactionPath(transactionId, "quote", "docgen-unavailable"));
   await assertDocGenTestTransaction(transactionId);
   const [issuerSettings] = await database.select().from(invoiceIssuerSettings).limit(1);
-  if (!docGenDummyMode() && !invoiceIssuerIsReady(issuerSettings ?? null)) {
+  if (officialDocumentFlowEnabled() && !invoiceIssuerIsReady(issuerSettings ?? null)) {
     throw new Error("Identitas penerbit belum disetujui administrator.");
   }
 
   const prepared = await database.transaction(async (tx) => {
     await tx.execute(sql`select id from business_transactions where id = ${transactionId} for update`);
-    const [header] = await tx
+    const [rawHeader] = await tx
       .select({
         id: businessTransactions.id,
         referenceNo: businessTransactions.referenceNo,
@@ -286,6 +364,7 @@ export async function generateQuotation(formData: FormData) {
         cancelledAt: businessTransactions.cancelledAt,
         fulfilmentStatus: businessTransactions.fulfilmentStatus,
         dataClass: businessTransactions.dataClass,
+        customerSnapshot: businessTransactions.customerSnapshot,
         customerName: customers.displayName,
         customerAddress: customers.billingAddress,
         customerTaxId: customers.taxId,
@@ -294,6 +373,16 @@ export async function generateQuotation(formData: FormData) {
       .from(businessTransactions)
       .innerJoin(customers, eq(customers.id, businessTransactions.customerId))
       .where(eq(businessTransactions.id, transactionId));
+    const snapshot = customerSnapshotView(rawHeader?.customerSnapshot);
+    const header = rawHeader
+      ? {
+          ...rawHeader,
+          customerName: snapshot?.name || rawHeader.customerName,
+          customerAddress: snapshot?.billingAddress || rawHeader.customerAddress,
+          customerTaxId: snapshot?.taxId || rawHeader.customerTaxId,
+          customerEmail: snapshot?.email || rawHeader.customerEmail,
+        }
+      : null;
     if (!header || header.cancelledAt || header.fulfilmentStatus === "completed")
       throw new Error("Transaksi tidak tersedia atau sudah ditutup.");
     const lines = await tx
@@ -315,7 +404,7 @@ export async function generateQuotation(formData: FormData) {
     const quote = calculateQuote(lines);
     if (!header.quoteLetter) throw new Error("Simpan isi surat dan rincian penawaran sebelum membuat PDF.");
     const letter = readQuotationLetter(header.quoteLetter, header.title, header.customerAddress ?? "");
-    if (!docGenDummyMode() && !letter.recipientAddress)
+    if (officialDocumentFlowEnabled() && !letter.recipientAddress)
       throw new Error("Alamat penerima harus dilengkapi sebelum membuat penawaran resmi.");
     if (letter.validUntil && new Date(`${letter.validUntil}T23:59:59+07:00`).getTime() < Date.now())
       throw new Error("Masa berlaku penawaran sudah lewat. Simpan tanggal baru sebelum membuat PDF.");
@@ -353,12 +442,12 @@ export async function generateQuotation(formData: FormData) {
       .where(and(eq(transactionDocuments.transactionId, transactionId), eq(transactionDocuments.type, "quotation")))
       .orderBy(desc(transactionDocuments.version))
       .limit(1);
-    if (latest && (latest.status === "generating" || latest.status === "needs_review")) {
-      throw new Error("Periksa penawaran yang belum selesai sebelum membuat versi baru.");
+    if (documentRevisionBlocker(latest?.status)) {
+      return null;
     }
     const version = (latest?.version ?? 0) + 1;
     let quotationNo = header.quotationNo;
-    if (!quotationNo && !docGenDummyMode()) {
+    if (!quotationNo && officialDocumentFlowEnabled()) {
       const issuedAt = new Date();
       const year = jakartaYear(issuedAt);
       const [counter] = await tx
@@ -401,6 +490,11 @@ export async function generateQuotation(formData: FormData) {
     });
     return { header, quote, letter, attachments, documentNo, documentId: document.id, version, operationKey };
   });
+
+  if (!prepared) {
+    revalidatePath(`/admin/transactions/${transactionId}`);
+    redirect(transactionPath(transactionId, "quote", "pdf-pending-review"));
+  }
 
   const { header, quote, letter, attachments, documentNo, documentId, version, operationKey } = prepared;
   try {
@@ -458,11 +552,8 @@ export async function generateQuotation(formData: FormData) {
         metadata: { documentId, version },
       });
     });
-  } catch {
-    await database
-      .update(transactionDocuments)
-      .set({ status: "needs_review" })
-      .where(eq(transactionDocuments.id, documentId));
+  } catch (error) {
+    await markDocumentForReview(documentId, error);
     revalidatePath(`/admin/transactions/${transactionId}`);
     redirect(transactionPath(transactionId, "quote", "pdf-check"));
   }
@@ -497,7 +588,7 @@ export async function createTransactionInvoice(formData: FormData) {
       taxConfirmed: field(formData, "taxConfirmed"),
     });
   const templateId = await resolveDocumentProviderTemplateId("invoice", docGenTemplateId("INVOICE"));
-  if (!docGenProviderReady("INVOICE") || !templateId) {
+  if (!templateId) {
     redirect(transactionPath(input.transactionId, "payment", "invoice-template-unavailable"));
   }
   const dueAt = new Date(`${input.dueDate}T12:00:00+07:00`);
@@ -510,19 +601,20 @@ export async function createTransactionInvoice(formData: FormData) {
   if (!database) throw new Error("Database belum terhubung.");
   await assertDocGenTestTransaction(input.transactionId);
   const [issuer] = await database.select().from(invoiceIssuerSettings).where(eq(invoiceIssuerSettings.id, 1));
-  if (!docGenDummyMode() && !invoiceIssuerIsReady(issuer ?? null)) {
+  if (officialDocumentFlowEnabled() && !invoiceIssuerIsReady(issuer ?? null)) {
     throw new Error("Identitas, rekening, logo, dan penanda tangan invoice belum disetujui administrator.");
   }
   const logoDataUrl = issuer?.logoPath && issuer.approvedAt ? await readInvoiceLogo(issuer.logoPath) : undefined;
   const prepared = await database.transaction(async (tx) => {
     await tx.execute(sql`select id from business_transactions where id = ${input.transactionId} for update`);
-    const [header] = await tx
+    const [rawHeader] = await tx
       .select({
         id: businessTransactions.id,
         referenceNo: businessTransactions.referenceNo,
         title: businessTransactions.title,
         cancelledAt: businessTransactions.cancelledAt,
         fulfilmentStatus: businessTransactions.fulfilmentStatus,
+        customerSnapshot: businessTransactions.customerSnapshot,
         customerName: customers.displayName,
         customerAddress: customers.billingAddress,
         customerTaxId: customers.taxId,
@@ -531,8 +623,19 @@ export async function createTransactionInvoice(formData: FormData) {
       .from(businessTransactions)
       .innerJoin(customers, eq(customers.id, businessTransactions.customerId))
       .where(eq(businessTransactions.id, input.transactionId));
+    const snapshot = customerSnapshotView(rawHeader?.customerSnapshot);
+    const header = rawHeader
+      ? {
+          ...rawHeader,
+          customerName: snapshot?.name || rawHeader.customerName,
+          customerAddress: snapshot?.billingAddress || rawHeader.customerAddress,
+          customerTaxId: snapshot?.taxId || rawHeader.customerTaxId,
+        }
+      : null;
     if (!header || header.cancelledAt || header.fulfilmentStatus === "completed")
       throw new Error("Transaksi tidak tersedia atau sudah ditutup.");
+    if (officialDocumentFlowEnabled() && !header.customerAddress?.trim())
+      throw new Error("Alamat penagihan pelanggan harus dilengkapi sebelum membuat invoice.");
     const [po] = await tx
       .select({ id: transactionDocuments.id, documentNo: transactionDocuments.documentNo })
       .from(transactionDocuments)
@@ -545,7 +648,8 @@ export async function createTransactionInvoice(formData: FormData) {
       .orderBy(desc(transactionDocuments.createdAt))
       .limit(1);
     if (!po) throw new Error("Simpan PO pelanggan sebelum membuat invoice.");
-    if (!po.documentNo && !docGenDummyMode()) throw new Error("Nomor PO pelanggan harus diisi sebelum invoice resmi.");
+    if (!po.documentNo && officialDocumentFlowEnabled())
+      throw new Error("Nomor PO pelanggan harus diisi sebelum invoice resmi.");
     const lines = await tx
       .select({
         id: transactionLines.id,
@@ -770,11 +874,8 @@ export async function createTransactionInvoice(formData: FormData) {
         metadata: { invoiceId: prepared.invoiceId, documentId: prepared.documentId, amount: prepared.amount },
       });
     });
-  } catch {
-    await database
-      .update(transactionDocuments)
-      .set({ status: "needs_review" })
-      .where(eq(transactionDocuments.id, prepared.documentId));
+  } catch (error) {
+    await markDocumentForReview(prepared.documentId, error);
     revalidatePath(`/admin/transactions/${input.transactionId}`);
     redirect(transactionPath(input.transactionId, "payment", "invoice-check"));
   }
@@ -1099,18 +1200,18 @@ export async function generateDeliveryNote(formData: FormData) {
     .from(shipments)
     .where(eq(shipments.id, shipmentId));
   if (!shipment) throw new Error("Pengiriman tidak ditemukan.");
-  if (!docGenTemplateReady("DELIVERY") || !templateId) {
+  if (!templateId) {
     redirect(transactionPath(shipment.transactionId, "delivery", "delivery-template-unavailable"));
   }
   await assertDocGenTestTransaction(shipment.transactionId);
   const [issuerSettings] = await database.select().from(invoiceIssuerSettings).limit(1);
-  if (!docGenDummyMode() && !invoiceIssuerIsReady(issuerSettings ?? null)) {
+  if (officialDocumentFlowEnabled() && !invoiceIssuerIsReady(issuerSettings ?? null)) {
     throw new Error("Identitas penerbit belum disetujui administrator.");
   }
   const issuedAt = new Date();
   const prepared = await database.transaction(async (tx) => {
     await tx.execute(sql`select id from business_transactions where id = ${shipment.transactionId} for update`);
-    const [detail] = await tx
+    const [rawDetail] = await tx
       .select({
         shipmentNo: shipments.shipmentNo,
         deliveryNo: shipments.deliveryNo,
@@ -1120,12 +1221,15 @@ export async function generateDeliveryNote(formData: FormData) {
         recipientName: shipments.recipientName,
         deliveryAddress: shipments.deliveryAddress,
         deliveryDocumentId: shipments.deliveryDocumentId,
+        customerSnapshot: businessTransactions.customerSnapshot,
         customerName: customers.displayName,
       })
       .from(shipments)
       .innerJoin(businessTransactions, eq(businessTransactions.id, shipments.transactionId))
       .innerJoin(customers, eq(customers.id, businessTransactions.customerId))
       .where(eq(shipments.id, shipmentId));
+    const detailSnapshot = customerSnapshotView(rawDetail?.customerSnapshot);
+    const detail = rawDetail ? { ...rawDetail, customerName: detailSnapshot?.name || rawDetail.customerName } : null;
     if (!detail || detail.status !== "planned" || detail.deliveryDocumentId)
       throw new Error("Surat jalan sudah tersedia atau pengiriman tidak dapat diubah.");
     const items = await tx
@@ -1162,11 +1266,10 @@ export async function generateDeliveryNote(formData: FormData) {
       )
       .orderBy(desc(transactionDocuments.version))
       .limit(1);
-    if (latest && latest.status !== "ready")
-      throw new Error("Periksa PDF surat jalan sebelumnya sebelum membuat versi baru.");
+    if (latest && latest.status !== "ready") return null;
     const version = (latest?.version ?? 0) + 1;
     let deliveryNo = detail.deliveryNo;
-    if (!deliveryNo && !docGenDummyMode()) {
+    if (!deliveryNo && officialDocumentFlowEnabled()) {
       const year = jakartaYear(issuedAt);
       const [counter] = await tx
         .update(deliveryNumberCounters)
@@ -1198,6 +1301,7 @@ export async function generateDeliveryNote(formData: FormData) {
     await tx.update(shipments).set({ deliveryDocumentId: document.id }).where(eq(shipments.id, shipmentId));
     return { detail, items, documentNo, version, poNo: po?.documentNo ?? "", documentId: document.id, operationKey };
   });
+  if (!prepared) redirect(transactionPath(shipment.transactionId, "delivery", "delivery-pending-review"));
   try {
     const approvedIssuer = invoiceIssuerIsReady(issuerSettings ?? null) ? issuerSettings : null;
     const logoDataUri = approvedIssuer?.logoPath
@@ -1261,11 +1365,8 @@ export async function generateDeliveryNote(formData: FormData) {
         },
       });
     });
-  } catch {
-    await database
-      .update(transactionDocuments)
-      .set({ status: "needs_review" })
-      .where(eq(transactionDocuments.id, prepared.documentId));
+  } catch (error) {
+    await markDocumentForReview(prepared.documentId, error);
     revalidatePath(`/admin/transactions/${prepared.detail.transactionId}`);
     redirect(transactionPath(prepared.detail.transactionId, "delivery", "delivery-check"));
   }
@@ -1439,16 +1540,15 @@ export async function generateHandoverNote(formData: FormData) {
     .from(shipments)
     .where(eq(shipments.id, shipmentId));
   if (!target) throw new Error("Pengiriman tidak ditemukan.");
-  if (!docGenTemplateReady("BAST") || !templateId)
-    redirect(transactionPath(target.transactionId, "handover", "template-unavailable"));
+  if (!templateId) redirect(transactionPath(target.transactionId, "handover", "template-unavailable"));
   await assertDocGenTestTransaction(target.transactionId);
   const [issuerSettings] = await database.select().from(invoiceIssuerSettings).limit(1);
-  if (!docGenDummyMode() && !invoiceIssuerIsReady(issuerSettings ?? null))
+  if (officialDocumentFlowEnabled() && !invoiceIssuerIsReady(issuerSettings ?? null))
     throw new Error("Identitas penerbit belum disetujui administrator.");
   const issuedAt = new Date();
   const prepared = await database.transaction(async (tx) => {
     await tx.execute(sql`select id from business_transactions where id = ${target.transactionId} for update`);
-    const [shipment] = await tx
+    const [rawShipment] = await tx
       .select({
         id: shipments.id,
         shipmentNo: shipments.shipmentNo,
@@ -1457,6 +1557,7 @@ export async function generateHandoverNote(formData: FormData) {
         bastDocumentId: shipments.bastDocumentId,
         deliveryNo: shipments.deliveryNo,
         deliveryDetails: shipments.deliveryDetails,
+        customerSnapshot: businessTransactions.customerSnapshot,
         customerName: customers.displayName,
         transactionId: shipments.transactionId,
       })
@@ -1464,6 +1565,10 @@ export async function generateHandoverNote(formData: FormData) {
       .innerJoin(businessTransactions, eq(businessTransactions.id, shipments.transactionId))
       .innerJoin(customers, eq(customers.id, businessTransactions.customerId))
       .where(eq(shipments.id, shipmentId));
+    const shipmentSnapshot = customerSnapshotView(rawShipment?.customerSnapshot);
+    const shipment = rawShipment
+      ? { ...rawShipment, customerName: shipmentSnapshot?.name || rawShipment.customerName }
+      : null;
     if (!shipment || shipment.status !== "shipped" || shipment.bastDocumentId)
       throw new Error("STB hanya dapat dibuat untuk kiriman yang sudah dikirim dan belum memiliki bukti penerimaan.");
     const lines = await tx
@@ -1490,10 +1595,10 @@ export async function generateHandoverNote(formData: FormData) {
       )
       .orderBy(desc(transactionDocuments.version))
       .limit(1);
-    if (latest && latest.status !== "ready") throw new Error("Periksa render STB sebelumnya sebelum membuat revisi.");
+    if (latest && latest.status !== "ready") return null;
     const version = (latest?.version ?? 0) + 1;
     let handoverNo = shipment.handoverNo;
-    if (!handoverNo && !docGenDummyMode()) {
+    if (!handoverNo && officialDocumentFlowEnabled()) {
       const year = jakartaYear(issuedAt);
       const [counter] = await tx
         .update(handoverNumberCounters)
@@ -1535,6 +1640,7 @@ export async function generateHandoverNote(formData: FormData) {
       .returning({ id: transactionDocuments.id });
     return { shipment, lines, poNo: po?.documentNo ?? "", documentNo, version, documentId: document.id, operationKey };
   });
+  if (!prepared) redirect(transactionPath(target.transactionId, "handover", "handover-pending-review"));
   try {
     const approvedIssuer = invoiceIssuerIsReady(issuerSettings ?? null) ? issuerSettings : null;
     const logoDataUri = approvedIssuer?.logoPath
@@ -1601,11 +1707,8 @@ export async function generateHandoverNote(formData: FormData) {
         },
       });
     });
-  } catch {
-    await database
-      .update(transactionDocuments)
-      .set({ status: "needs_review" })
-      .where(eq(transactionDocuments.id, prepared.documentId));
+  } catch (error) {
+    await markDocumentForReview(prepared.documentId, error);
     revalidatePath(`/admin/transactions/${prepared.shipment.transactionId}`);
     redirect(transactionPath(prepared.shipment.transactionId, "handover", "document-check"));
   }
@@ -1620,22 +1723,35 @@ export async function retryDocumentGeneration(formData: FormData) {
   const database = getDatabase();
   if (!database) throw new Error("Database belum terhubung.");
   const [document] = await database.select().from(transactionDocuments).where(eq(transactionDocuments.id, documentId));
-  if (!document || document.status !== "needs_review" || !document.operationKey || !document.templateId) {
-    throw new Error("Dokumen ini tidak dapat dicoba ulang.");
-  }
+  if (!document) redirect("/admin/transactions");
+  const step =
+    document.type === "quotation"
+      ? "quote"
+      : document.type === "invoice_dp" || document.type === "invoice_final"
+        ? "payment"
+        : document.type === "delivery_note"
+          ? "delivery"
+          : "handover";
+  const recoveryIssue = documentRecoveryBlocker({
+    status: document.status,
+    operationKey: document.operationKey,
+    templateId: document.templateId,
+    providerDocumentId: document.providerDocumentId,
+    hasRenderData: Boolean((document.payload as { renderData?: unknown } | null)?.renderData),
+    createdAt: document.createdAt,
+    local: localQaRendererEnabled(),
+  });
+  if (recoveryIssue) redirect(transactionPath(document.transactionId, step, "document-check"));
+  if (!document.operationKey || !document.templateId)
+    redirect(transactionPath(document.transactionId, step, "document-check"));
   if (document.type === "contract") {
-    throw new Error("Kontrak lama hanya tersedia sebagai arsip dan tidak dapat dibuat ulang.");
-  }
-  if (!document.providerDocumentId?.startsWith("batch_")) {
-    throw new Error(
-      "Nomor batch DocGen belum tercatat. Periksa DocGen secara manual agar tidak membuat dokumen ganda.",
-    );
+    redirect(transactionPath(document.transactionId, step, "document-check"));
   }
   await assertDocGenTestTransaction(document.transactionId);
   const renderData = z
     .record(z.string(), z.string())
     .safeParse((document.payload as { renderData?: unknown })?.renderData);
-  if (!renderData.success) throw new Error("Data dokumen belum cukup untuk percobaan ulang yang aman.");
+  if (!renderData.success) redirect(transactionPath(document.transactionId, step, "document-check"));
   const quotationAttachments =
     document.type === "quotation"
       ? z
@@ -1652,26 +1768,16 @@ export async function retryDocumentGeneration(formData: FormData) {
           .safeParse((document.payload as { attachments?: unknown })?.attachments)
       : null;
   if (quotationAttachments && !quotationAttachments.success) {
-    throw new Error("Snapshot lampiran penawaran tidak lengkap. Periksa dokumen secara manual.");
+    redirect(transactionPath(document.transactionId, step, "document-check"));
   }
-  if (Date.now() - document.createdAt.getTime() > 20 * 60 * 60 * 1000) {
-    throw new Error("Batas kunci aman DocGen sudah lewat. Periksa dokumen secara manual sebelum membuat versi baru.");
-  }
-  if (!localQaRendererEnabled() && !process.env.DOCGEN_API_KEY) throw new Error("DocGen belum dikonfigurasi.");
-  const step =
-    document.type === "quotation"
-      ? "quote"
-      : document.type === "invoice_dp" || document.type === "invoice_final"
-        ? "payment"
-        : document.type === "delivery_note"
-          ? "delivery"
-          : "handover";
+  if (!localQaRendererEnabled() && !process.env.DOCGEN_API_KEY)
+    redirect(transactionPath(document.transactionId, step, "document-check"));
   const [claimed] = await database
     .update(transactionDocuments)
     .set({ status: "generating" })
     .where(and(eq(transactionDocuments.id, documentId), eq(transactionDocuments.status, "needs_review")))
     .returning({ id: transactionDocuments.id });
-  if (!claimed) throw new Error("Dokumen sedang diperiksa oleh pengguna lain.");
+  if (!claimed) redirect(transactionPath(document.transactionId, step, "document-check"));
   try {
     const pdf = await renderDocGenPdf({
       templateId: document.templateId,
@@ -1716,11 +1822,8 @@ export async function retryDocumentGeneration(formData: FormData) {
         metadata: { documentId, invoiceId: document.invoiceId, type: document.type },
       });
     });
-  } catch {
-    await database
-      .update(transactionDocuments)
-      .set({ status: "needs_review" })
-      .where(eq(transactionDocuments.id, documentId));
+  } catch (error) {
+    await markDocumentForReview(documentId, error);
     revalidatePath(`/admin/transactions/${document.transactionId}`);
     redirect(transactionPath(document.transactionId, step, "document-check"));
   }

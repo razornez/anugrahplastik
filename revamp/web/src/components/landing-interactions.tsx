@@ -43,6 +43,16 @@ export function LandingInteractions() {
     sections.forEach((section) => navigationObserver.observe(section));
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const trustSection = root.querySelector<HTMLElement>("#ap-trust");
+    const marqueeToggle = trustSection?.querySelector<HTMLButtonElement>(".ap-marquee-toggle");
+    const toggleMarquee = () => {
+      if (!trustSection || !marqueeToggle) return;
+      const paused = trustSection.dataset.paused !== "true";
+      trustSection.dataset.paused = String(paused);
+      marqueeToggle.setAttribute("aria-pressed", String(paused));
+      marqueeToggle.textContent = paused ? "Lanjutkan animasi logo" : "Jeda animasi logo";
+    };
+    marqueeToggle?.addEventListener("click", toggleMarquee);
     const revealItems = Array.from(root.querySelectorAll<HTMLElement>("[data-reveal]"));
     let revealObserver: IntersectionObserver | null = null;
     if (!reducedMotion) {
@@ -277,6 +287,7 @@ export function LandingInteractions() {
       window.removeEventListener("keydown", closeOnEscape);
       navigationObserver.disconnect();
       revealObserver?.disconnect();
+      marqueeToggle?.removeEventListener("click", toggleMarquee);
       faqHandlers.forEach(({ question, handler }) => question.removeEventListener("click", handler));
       form?.removeEventListener("submit", submitForm);
     };

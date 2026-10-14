@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Node's built-in test runner loads this isolated CommonJS regression test. */
 const assert = require("node:assert/strict");
 const { readdirSync, readFileSync } = require("node:fs");
+const { createRequire } = require("node:module");
 const { join } = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
@@ -29,7 +30,11 @@ function loadTypeScript(relative) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
   }).outputText;
   const instance = { exports: {} };
-  new Function("module", "exports", "require", compiled)(instance, instance.exports, require);
+  new Function("module", "exports", "require", compiled)(
+    instance,
+    instance.exports,
+    createRequire(join(sourceRoot, relative)),
+  );
   return instance.exports;
 }
 

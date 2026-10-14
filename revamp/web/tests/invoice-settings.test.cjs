@@ -10,8 +10,10 @@ const page = readFileSync(join(__dirname, "../src/app/admin/settings/documents/p
 test("invoice settings return validation errors instead of throwing Zod runtime errors", () => {
   assert.match(actions, /profileSchema\.safeParse/);
   assert.doesNotMatch(actions, /profileSchema\.parse/);
-  assert.match(actions, /error=validation/);
-  assert.match(actions, /error=counter-validation/);
+  assert.match(actions, /error: "identity-validation"/);
+  assert.match(actions, /error: "counter-validation"/);
+  assert.match(actions, /safeDocumentReturnTo/);
+  assert.match(actions, /documentSettingsUrl/);
   assert.match(page, /integration-error/);
 });
 

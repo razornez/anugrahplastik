@@ -22,6 +22,7 @@ import {
   type DocumentTemplateKind,
 } from "./document-templates";
 import { readInvoiceLogo } from "./invoice-logo";
+import { documentSettingsUrl, safeDocumentReturnTo } from "./document-return";
 
 const text = (form: FormData, name: string) => String(form.get(name) ?? "").trim();
 
@@ -63,20 +64,21 @@ const profileSchema = z.object({
 
 export async function saveAndActivateIssuer(formData: FormData) {
   const user = await admin();
+  const returnTo = safeDocumentReturnTo(text(formData, "returnTo"));
   const parsed = profileSchema.safeParse(
     Object.fromEntries(Object.keys(profileSchema.shape).map((name) => [name, text(formData, name)])),
   );
   if (!parsed.success) {
     const field = String(parsed.error.issues[0]?.path[0] ?? "form");
-    redirect(`/admin/settings/documents?section=identity&error=identity-validation&field=${encodeURIComponent(field)}`);
+    redirect(documentSettingsUrl({ section: "identity", error: "identity-validation", field }, returnTo));
   }
   try {
     await readInvoiceLogo(parsed.data.logoPath);
   } catch {
-    redirect("/admin/settings/documents?section=identity&error=logo");
+    redirect(documentSettingsUrl({ section: "identity", error: "logo" }, returnTo));
   }
   const database = getDatabase();
-  if (!database) redirect("/admin/settings/documents?section=identity&error=database");
+  if (!database) redirect(documentSettingsUrl({ section: "identity", error: "database" }, returnTo));
   try {
     await database.transaction(async (tx) => {
       await tx
@@ -95,10 +97,10 @@ export async function saveAndActivateIssuer(formData: FormData) {
       });
     });
   } catch {
-    redirect("/admin/settings/documents?section=identity&error=save");
+    redirect(documentSettingsUrl({ section: "identity", error: "save" }, returnTo));
   }
   refreshDocumentRoutes();
-  redirect("/admin/settings/documents?section=identity&status=identity-saved");
+  redirect(documentSettingsUrl({ section: "identity", status: "identity-saved" }, returnTo));
 }
 
 const counterSchema = z.object({
@@ -109,14 +111,15 @@ const counterSchema = z.object({
 
 export async function initializeDocumentCounter(formData: FormData) {
   const user = await admin();
+  const returnTo = safeDocumentReturnTo(text(formData, "returnTo"));
   const parsed = counterSchema.safeParse({
     kind: text(formData, "kind"),
     year: text(formData, "year"),
     lastValue: text(formData, "lastValue"),
   });
-  if (!parsed.success) redirect("/admin/settings/documents?section=numbers&error=counter-validation");
+  if (!parsed.success) redirect(documentSettingsUrl({ section: "numbers", error: "counter-validation" }, returnTo));
   const database = getDatabase();
-  if (!database) redirect("/admin/settings/documents?section=numbers&error=database");
+  if (!database) redirect(documentSettingsUrl({ section: "numbers", error: "database" }, returnTo));
   const tables = {
     quotation: quotationNumberCounters,
     invoice: invoiceNumberCounters,
@@ -145,10 +148,10 @@ export async function initializeDocumentCounter(formData: FormData) {
       });
     });
   } catch {
-    redirect("/admin/settings/documents?section=numbers&error=counter-exists");
+    redirect(documentSettingsUrl({ section: "numbers", error: "counter-exists" }, returnTo));
   }
   refreshDocumentRoutes();
-  redirect(`/admin/settings/documents?section=numbers&status=counter-saved&kind=${parsed.data.kind}`);
+  redirect(documentSettingsUrl({ section: "numbers", status: "counter-saved", kind: parsed.data.kind }, returnTo));
 }
 
 export async function saveDocumentTemplate(formData: FormData) {

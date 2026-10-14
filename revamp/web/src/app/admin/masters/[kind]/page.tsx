@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AdminPageHeader } from "@/components/admin-page-header";
+import { CustomerProfileDialog } from "@/components/customer-profile-dialog";
 import { MasterCreateDialog } from "@/components/master-create-dialog";
 import { MasterRecordDialog } from "@/components/master-record-dialog";
 import { DesignListThumbnail } from "@/components/design-list-thumbnail";
@@ -8,7 +9,6 @@ import { DesignDirectoryToolbar } from "@/components/design-directory-toolbar";
 import { DesignUploadForm } from "@/components/design-upload-form";
 import { DesignFileActions } from "@/components/design-file-manage-dialog";
 import {
-  createCustomer,
   createMaterial,
   createMould,
   createProduct,
@@ -23,6 +23,8 @@ import {
   type DirectoryQuery,
   type MasterKind,
 } from "@/features/operations/service";
+import { getCustomerProfiles } from "@/features/operations/customer-profile-service";
+import { customerProfileComplete } from "@/features/operations/customer-profile";
 import { getSession } from "@/lib/auth/session";
 
 export const instant = false;
@@ -60,23 +62,7 @@ function linkFor(kind: MasterKind, params: Record<string, string | undefined>) {
 }
 
 function CreateAction({ kind }: { kind: MasterKind }) {
-  if (kind === "customers")
-    return (
-      <MasterCreateDialog label="Tambah pelanggan" action={createCustomer}>
-        <label>
-          Nama pelanggan
-          <input name="name" required autoFocus />
-        </label>
-        <label>
-          Email
-          <input name="email" type="email" />
-        </label>
-        <label>
-          WhatsApp
-          <input name="phone" inputMode="tel" />
-        </label>
-      </MasterCreateDialog>
-    );
+  if (kind === "customers") return <CustomerProfileDialog triggerLabel="Tambah pelanggan" />;
   if (kind === "suppliers")
     return (
       <MasterCreateDialog label="Tambah pemasok" action={createSupplier}>
@@ -142,7 +128,13 @@ export default async function MasterDirectoryPage({
   const { kind: rawKind } = await params;
   if (!isKind(rawKind)) notFound();
   const user = await getSession();
-  if (!user || (user.role !== "admin" && !(user.role === "sales" && rawKind === "designs"))) redirect("/admin");
+  if (
+    !user ||
+    (user.role !== "admin" &&
+      !(user.role === "sales" && rawKind === "designs") &&
+      !(user.role === "sales" && rawKind === "customers"))
+  )
+    redirect("/admin");
   const query = await searchParams;
   const filters: DirectoryQuery = {
     query: query.q,
@@ -154,6 +146,10 @@ export default async function MasterDirectoryPage({
     materialId: query.material,
   };
   const result = await getMasterDirectoryPage(rawKind, filters);
+  const customerProfiles =
+    rawKind === "customers" && result?.rows.length
+      ? await getCustomerProfiles(result.rows.map((row) => row.id))
+      : new Map();
   const designOptions = rawKind === "designs" ? await getDesignUploadOptions() : null;
   const label = labels[rawKind];
   return (
@@ -238,7 +234,11 @@ export default async function MasterDirectoryPage({
                         .filter(Boolean)
                         .join(" · ") ||
                       "Belum ada deskripsi atau relasi kerja."
-                    : row.detail}
+                    : rawKind === "customers" && customerProfiles.get(row.id)
+                      ? customerProfileComplete(customerProfiles.get(row.id)!)
+                        ? row.detail
+                        : `${row.detail} · Lengkapi data`
+                      : row.detail}
                 </small>
               </div>
               {rawKind === "designs" ? (
@@ -273,14 +273,23 @@ export default async function MasterDirectoryPage({
                   <em className={`directory-status directory-status--${row.status}`}>
                     {row.status === "active" ? "Aktif" : row.status}
                   </em>
-                  <MasterRecordDialog
-                    id={row.id}
-                    kind={rawKind}
-                    title={row.title}
-                    status={row.status}
-                    updateAction={updateMasterRecord}
-                    deleteAction={deleteMasterRecord}
-                  />
+                  {rawKind === "customers" && customerProfiles.get(row.id) ? (
+                    <CustomerProfileDialog
+                      canDelete={user.role === "admin"}
+                      deleteAction={deleteMasterRecord}
+                      profile={customerProfiles.get(row.id)}
+                      triggerLabel="Kelola"
+                    />
+                  ) : (
+                    <MasterRecordDialog
+                      id={row.id}
+                      kind={rawKind}
+                      title={row.title}
+                      status={row.status}
+                      updateAction={updateMasterRecord}
+                      deleteAction={deleteMasterRecord}
+                    />
+                  )}
                 </>
               )}
             </article>

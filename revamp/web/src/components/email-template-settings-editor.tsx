@@ -1,6 +1,7 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
+import { AdminDialogPortalFrame } from "@/components/admin-dialog-portal-frame";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RichEmailEditor } from "@/components/rich-email-editor";
@@ -70,6 +71,8 @@ export function EmailTemplateSettingsEditor({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [editorEpoch, setEditorEpoch] = useState(0);
+  const [workspaceMode, setWorkspaceMode] = useState<"edit" | "preview">("edit");
+  const previewPanelRef = useRef<HTMLElement>(null);
   const draftKey = `email-template-draft:v1:${templateId ?? keyName}`;
   const variables =
     keyName === "layout"
@@ -218,8 +221,16 @@ export function EmailTemplateSettingsEditor({
 
   return (
     <div className="email-template-workspace">
+      <div className="email-template-workspace__segments" aria-label="Mode editor" role="group">
+        <button aria-pressed={workspaceMode === "edit"} onClick={() => setWorkspaceMode("edit")} type="button">
+          Edit
+        </button>
+        <button aria-pressed={workspaceMode === "preview"} onClick={() => setWorkspaceMode("preview")} type="button">
+          Preview
+        </button>
+      </div>
       <form
-        className="email-template-edit-form"
+        className={"email-template-edit-form" + (workspaceMode === "edit" ? "" : " is-workspace-hidden")}
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
@@ -406,7 +417,11 @@ export function EmailTemplateSettingsEditor({
         ) : null}
       </form>
 
-      <aside className="email-template-preview" aria-label="Pratinjau template">
+      <aside
+        className={"email-template-preview" + (workspaceMode === "preview" ? "" : " is-workspace-hidden")}
+        aria-label="Pratinjau template"
+        ref={previewPanelRef}
+      >
         <div className="email-template-preview__head">
           <div>
             <p className="eyebrow">Data transaksi nyata · hanya preview</p>
@@ -420,6 +435,13 @@ export function EmailTemplateSettingsEditor({
               Ponsel
             </button>
           </div>
+          <button
+            className="admin-secondary-button email-template-preview__fullscreen"
+            onClick={() => void previewPanelRef.current?.requestFullscreen()}
+            type="button"
+          >
+            Layar penuh
+          </button>
         </div>
         <p>Pratinjau aman dipakai hanya untuk pemeriksaan visual dan tidak pernah dikirim.</p>
         {preview ? (
@@ -444,40 +466,42 @@ export function EmailTemplateSettingsEditor({
 
       <Dialog.Root onOpenChange={setConfirmOpen} open={confirmOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="email-template-dialog__backdrop" />
-          <Dialog.Content className="email-template-dialog" aria-describedby="email-template-activate-description">
-            <p className="eyebrow">Konfirmasi aktivasi</p>
-            <Dialog.Title>Aktifkan versi baru sekarang?</Dialog.Title>
-            <Dialog.Description id="email-template-activate-description">
-              Email berikutnya akan memakai template ini. Email yang sudah terkirim tidak berubah dan versi lama tetap
-              dapat dipulihkan.
-            </Dialog.Description>
-            <dl>
-              <div>
-                <dt>Template</dt>
-                <dd>{keyName === "layout" ? "Tata letak bersama untuk seluruh email" : "Email operasional"}</dd>
-              </div>
-              <div>
-                <dt>Subjek</dt>
-                <dd>{subjectValue.trim() || "Nama tata letak bersama"}</dd>
-              </div>
-            </dl>
-            <div className="email-template-dialog__actions">
-              <Dialog.Close asChild>
-                <button className="admin-secondary-button" type="button">
-                  Kembali
+          <AdminDialogPortalFrame>
+            <Dialog.Overlay className="email-template-dialog__backdrop" />
+            <Dialog.Content className="email-template-dialog" aria-describedby="email-template-activate-description">
+              <p className="eyebrow">Konfirmasi aktivasi</p>
+              <Dialog.Title>Aktifkan versi baru sekarang?</Dialog.Title>
+              <Dialog.Description id="email-template-activate-description">
+                Email berikutnya akan memakai template ini. Email yang sudah terkirim tidak berubah dan versi lama tetap
+                dapat dipulihkan.
+              </Dialog.Description>
+              <dl>
+                <div>
+                  <dt>Template</dt>
+                  <dd>{keyName === "layout" ? "Tata letak bersama untuk seluruh email" : "Email operasional"}</dd>
+                </div>
+                <div>
+                  <dt>Subjek</dt>
+                  <dd>{subjectValue.trim() || "Nama tata letak bersama"}</dd>
+                </div>
+              </dl>
+              <div className="email-template-dialog__actions">
+                <Dialog.Close asChild>
+                  <button className="admin-secondary-button" type="button">
+                    Kembali
+                  </button>
+                </Dialog.Close>
+                <button
+                  className="admin-primary-button"
+                  disabled={!canActivate}
+                  onClick={() => void activate()}
+                  type="button"
+                >
+                  {pending ? "Mengaktifkan…" : "Aktifkan versi baru"}
                 </button>
-              </Dialog.Close>
-              <button
-                className="admin-primary-button"
-                disabled={!canActivate}
-                onClick={() => void activate()}
-                type="button"
-              >
-                {pending ? "Mengaktifkan…" : "Aktifkan versi baru"}
-              </button>
-            </div>
-          </Dialog.Content>
+              </div>
+            </Dialog.Content>
+          </AdminDialogPortalFrame>
         </Dialog.Portal>
       </Dialog.Root>
       <Dialog.Root
@@ -487,31 +511,33 @@ export function EmailTemplateSettingsEditor({
         }}
       >
         <Dialog.Portal>
-          <Dialog.Overlay className="email-template-dialog__backdrop" />
-          <Dialog.Content className="email-template-dialog" aria-describedby="email-template-leave-description">
-            <p className="eyebrow">PERUBAHAN BELUM DISIMPAN</p>
-            <Dialog.Title>Tinggalkan editor?</Dialog.Title>
-            <Dialog.Description id="email-template-leave-description">
-              Draft tetap tersimpan selama sesi ini dan dapat dipulihkan saat Anda kembali.
-            </Dialog.Description>
-            <div className="email-template-dialog__actions">
-              <Dialog.Close asChild>
-                <button className="admin-secondary-button" type="button">
-                  Lanjut mengedit
+          <AdminDialogPortalFrame>
+            <Dialog.Overlay className="email-template-dialog__backdrop" />
+            <Dialog.Content className="email-template-dialog" aria-describedby="email-template-leave-description">
+              <p className="eyebrow">PERUBAHAN BELUM DISIMPAN</p>
+              <Dialog.Title>Tinggalkan editor?</Dialog.Title>
+              <Dialog.Description id="email-template-leave-description">
+                Draft tetap tersimpan selama sesi ini dan dapat dipulihkan saat Anda kembali.
+              </Dialog.Description>
+              <div className="email-template-dialog__actions">
+                <Dialog.Close asChild>
+                  <button className="admin-secondary-button" type="button">
+                    Lanjut mengedit
+                  </button>
+                </Dialog.Close>
+                <button
+                  className="admin-primary-button"
+                  onClick={() => {
+                    if (pendingHref) router.push(pendingHref);
+                    setPendingHref(null);
+                  }}
+                  type="button"
+                >
+                  Tinggalkan editor
                 </button>
-              </Dialog.Close>
-              <button
-                className="admin-primary-button"
-                onClick={() => {
-                  if (pendingHref) router.push(pendingHref);
-                  setPendingHref(null);
-                }}
-                type="button"
-              >
-                Tinggalkan editor
-              </button>
-            </div>
-          </Dialog.Content>
+              </div>
+            </Dialog.Content>
+          </AdminDialogPortalFrame>
         </Dialog.Portal>
       </Dialog.Root>
     </div>

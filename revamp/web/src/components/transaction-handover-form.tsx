@@ -14,6 +14,7 @@ export function TransactionHandoverForm({
   lines,
   initial,
   latestReady,
+  latestNeedsReview,
   latestNumber,
   hasProof,
   isAdmin,
@@ -24,6 +25,7 @@ export function TransactionHandoverForm({
   lines: Line[];
   initial: HandoverDetails;
   latestReady: boolean;
+  latestNeedsReview: boolean;
   latestNumber: string | null;
   hasProof: boolean;
   isAdmin: boolean;
@@ -170,7 +172,12 @@ export function TransactionHandoverForm({
         </label>
         <input name="shipmentId" type="hidden" value={shipmentId} />
         <input name="details" type="hidden" value={JSON.stringify(details)} />
-        {!hasProof ? (
+        {!hasProof && latestNeedsReview ? (
+          <p className="transaction-document-blocker" role="status">
+            PDF STB sebelumnya belum selesai. <a href={`#handover-documents-${shipmentId}`}>Periksa PDF</a> sebelum
+            membuat revisi.
+          </p>
+        ) : !hasProof ? (
           <>
             <button disabled={!enabled} type="submit">
               {latestReady ? "Buat revisi PDF" : "Terbitkan PDF"}

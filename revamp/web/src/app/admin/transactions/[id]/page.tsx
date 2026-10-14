@@ -7,6 +7,8 @@ import { TransactionQuoteEditor } from "@/components/transaction-quote-editor";
 import { TransactionShipmentForm } from "@/components/transaction-shipment-form";
 import { TransactionInvoiceForm } from "@/components/transaction-invoice-form";
 import { TransactionHandoverForm } from "@/components/transaction-handover-form";
+import { CustomerDocumentProfileSheet } from "@/components/customer-document-profile-sheet";
+import { TransactionPaymentAttention } from "./transaction-payment-attention";
 import {
   fillEmailSubject,
   fillEmailTemplate,
@@ -22,6 +24,7 @@ import {
   docGenDummyMode,
   docGenTemplateId,
   docGenTemplateReady,
+  localQaRendererEnabled,
 } from "@/features/operations/docgen-policy";
 import { getTransactionDetail } from "@/features/operations/service";
 import { transactionStepStates, workspaceMoney } from "@/features/operations/transaction-workspace";
@@ -29,6 +32,12 @@ import { readDeliveryDetails, readShipmentLogistics } from "@/features/operation
 import { acceptedAmount, committedAmount, handoverDetailsSchema } from "@/features/operations/handover-note";
 import { readQuotationLetter, type QuotationTemplateDefaults } from "@/features/operations/quotation-letter";
 import { getActiveDocumentTemplate, type DocumentTemplateKind } from "@/features/operations/document-templates";
+import {
+  documentRecoveryBlocker,
+  documentRevisionBlocker,
+  readDocumentReview,
+} from "@/features/operations/document-review";
+import { quotationDocumentReadiness, type DocumentReadinessResult } from "@/features/operations/document-readiness";
 import styles from "../transactions.module.css";
 import {
   invoiceCountsAsIssued,
@@ -44,6 +53,7 @@ import {
   linkTransactionEmail,
   markShipmentSent,
   retryDocumentGeneration,
+  saveProductionTargetDate,
 } from "@/features/operations/workflow-actions";
 
 export const instant = false;
@@ -51,10 +61,6 @@ export const instant = false;
 type Transaction = NonNullable<Awaited<ReturnType<typeof getTransactionDetail>>>;
 type Document = Transaction["documents"][number];
 type Step = "quote" | "order" | "payment" | "production" | "delivery" | "handover";
-
-function docGenAllowed(transaction: Transaction) {
-  return !docGenDummyMode() || transaction.header.dataClass === "test";
-}
 
 function documentEmailAllowed(transaction: Transaction, document: Document) {
   if ((document.payload as { renderSource?: string } | null)?.renderSource === "local_qa") return false;
@@ -210,6 +216,16 @@ async function DocumentList({
     listActiveEmailTemplateOptions("handover"),
     getSession(),
   ]);
+  const recoveryBlocker = (document: Document) =>
+    documentRecoveryBlocker({
+      status: document.status,
+      operationKey: document.operationKey,
+      templateId: document.templateId,
+      providerDocumentId: document.providerDocumentId,
+      hasRenderData: Boolean((document.payload as { renderData?: unknown } | null)?.renderData),
+      createdAt: document.createdAt,
+      local: localQaRendererEnabled(),
+    });
   return (
     <div className="transaction-flow-documents">
       {documents.map((document) => (
@@ -220,24 +236,35 @@ async function DocumentList({
           <div>
             <strong>
               {documentLabels[document.type] ?? "Dokumen"}
-              {document.type === "quotation" || document.type === "delivery_note" || document.type === "bast"
-                ? ` · versi ${document.version}`
-                : ""}
+              {document.direction === "outbound" && document.type !== "contract" ? ` · versi ${document.version}` : ""}
             </strong>
             <small>{document.documentNo ?? document.originalName ?? "Tanpa nomor"}</small>
-            {document.status === "needs_review" ? <small>Perlu diperiksa sebelum membuat ulang.</small> : null}
+            {document.status === "needs_review" ? (
+              <div className="transaction-document-review" role="status">
+                <strong>PDF versi {document.version} belum siap</strong>
+                <p>
+                  {readDocumentReview(document.payload)?.message ??
+                    "Proses PDF sebelumnya belum selesai. Periksa hasilnya sebelum membuat revisi baru."}
+                </p>
+                <small>
+                  {document.storagePath
+                    ? "File sudah ada dan dapat dilihat."
+                    : "Belum ada file untuk dipratinjau. Versi lama yang siap tetap dapat dibuka di bawah."}
+                </small>
+                {recoveryBlocker(document) ? <small>{recoveryBlocker(document)}</small> : null}
+              </div>
+            ) : null}
             {canRetry &&
             document.type !== "contract" &&
             document.status === "needs_review" &&
-            document.operationKey &&
-            document.providerDocumentId?.startsWith("batch_") ? (
+            !recoveryBlocker(document) ? (
               <form action={retryDocumentGeneration} className="transaction-flow-retry">
                 <input name="documentId" type="hidden" value={document.id} />
                 <label>
-                  <input name="confirmed" required type="checkbox" value="yes" /> Saya sudah memeriksa DocGen; lanjutkan
-                  dengan permintaan yang sama.
+                  <input name="confirmed" required type="checkbox" value="yes" /> Saya sudah memeriksa status PDF;
+                  lanjutkan permintaan yang sama, tanpa membuat versi baru.
                 </label>
-                <button type="submit">Coba arsipkan lagi</button>
+                <button type="submit">Periksa dan pulihkan PDF</button>
               </form>
             ) : null}
           </div>
@@ -363,15 +390,19 @@ async function DocumentList({
 function QuoteStep({
   transaction,
   isAdmin,
-  templateReady,
   templateConfig,
+  documentsHref,
+  readiness,
 }: {
   transaction: Transaction;
   isAdmin: boolean;
-  templateReady: boolean;
   templateConfig?: Record<string, unknown>;
+  documentsHref: string;
+  readiness: DocumentReadinessResult;
 }) {
   const quotationDocuments = transaction.documents.filter((document) => document.type === "quotation");
+  const latestQuotation = [...quotationDocuments].sort((a, b) => b.version - a.version)[0];
+  const quoteNeedsReview = documentRevisionBlocker(latestQuotation?.status);
   const attachments = transaction.documents
     .filter((document) => document.type === "quotation_attachment" && document.status === "received")
     .map((document) => ({
@@ -381,6 +412,17 @@ function QuoteStep({
     }));
   const hasReadyQuote = quotationDocuments.some((document) => document.status === "ready");
   const hasInvoice = transaction.invoices.length > 0;
+  const letterAddress = readQuotationLetter(transaction.header.quoteLetter, transaction.header.title).recipientAddress;
+  const addressReady = Boolean(transaction.header.customerBillingAddress || letterAddress);
+  const readinessId = `quotation-readiness-${transaction.header.id}`;
+  const customerProfile = {
+    legalName: transaction.header.customerLegalName,
+    email: transaction.header.customerEmail ?? "",
+    phone: transaction.header.customerPhone ?? "",
+    taxId: transaction.header.customerTaxId ?? "",
+    billingAddress: transaction.header.customerBillingAddress ?? "",
+    deliveryAddress: transaction.header.customerAddress ?? "",
+  };
   return (
     <div className="transaction-flow-stack">
       <section className="transaction-flow-card">
@@ -437,7 +479,7 @@ function QuoteStep({
             Rincian penawaran dikunci setelah invoice dibuat agar arsip tagihan dan barang tetap cocok.
           </p>
         ) : (
-          <details className="transaction-flow-details" open={!transaction.lines.length}>
+          <details className="transaction-flow-details" id="quote-editor" open={!transaction.lines.length}>
             <summary>{transaction.lines.length ? "Ubah rincian penawaran" : "Isi rincian penawaran"}</summary>
             <TransactionQuoteEditor
               transactionId={transaction.header.id}
@@ -500,29 +542,58 @@ function QuoteStep({
                 : "Nomor dibuat otomatis saat PDF diterbitkan")}
           </strong>
         </p>
-        {!transaction.header.customerBillingAddress &&
-        !readQuotationLetter(transaction.header.quoteLetter, transaction.header.title).recipientAddress ? (
-          <p className="transaction-flow-warning">
-            Alamat penerima belum tersedia. Lengkapi di isi surat sebelum membuat penawaran resmi.
-          </p>
+        {!addressReady ? (
+          <div className="transaction-document-blocker" role="status">
+            <span>Alamat penerima belum tersedia.</span>
+            <CustomerDocumentProfileSheet
+              focusField="billingAddress"
+              initial={customerProfile}
+              transactionId={transaction.header.id}
+            />
+          </div>
         ) : null}
         {isAdmin ? (
           <p>
-            <Link href="/admin/settings/documents">Periksa kesiapan dokumen resmi</Link>
+            <Link href={documentsHref}>Periksa kesiapan dokumen resmi</Link>
           </p>
         ) : null}
-        {transaction.lines.length ? (
+        {!quoteNeedsReview ? (
           <form action={generateQuotation} className="transaction-flow-inline-action">
             <input name="transactionId" type="hidden" value={transaction.header.id} />
-            <button disabled={!templateReady || !docGenAllowed(transaction)} type="submit">
+            <button aria-describedby={readinessId} disabled={!readiness.ready} type="submit">
               {quotationDocuments.length ? "Buat revisi PDF" : "Terbitkan PDF"}
             </button>
-            {!templateReady ? (
-              <small>Template Penawaran belum aktif. Selesaikan di Dokumen resmi; draf tetap tersimpan.</small>
-            ) : null}
+            <div aria-live="polite" id={readinessId}>
+              {readiness.ready ? (
+                <small className="transaction-readiness-ready">Semua persyaratan PDF sudah lengkap.</small>
+              ) : (
+                <small>{readiness.blockers.length} hal perlu dilengkapi sebelum menerbitkan PDF.</small>
+              )}
+            </div>
           </form>
         ) : null}
-        <DocumentList documents={quotationDocuments} transaction={transaction} />
+        {!readiness.ready ? (
+          <ul
+            className="transaction-document-readiness-list"
+            aria-label="Hal yang perlu dilengkapi untuk PDF Penawaran"
+          >
+            {readiness.blockers.map((blocker) => (
+              <li key={blocker.code}>
+                <span>{blocker.message}</span>
+                {["template", "issuer", "number", "renderer", "mode"].includes(blocker.code) ? (
+                  <Link href={documentsHref}>Buka Dokumen resmi</Link>
+                ) : blocker.code === "review" ? (
+                  <a href="#quote-documents">Periksa PDF</a>
+                ) : ["lines", "letter", "validity", "attachments"].includes(blocker.code) ? (
+                  <a href="#quote-editor">Buka rincian</a>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <div id="quote-documents">
+          <DocumentList canRetry={isAdmin} documents={quotationDocuments} transaction={transaction} />
+        </div>
       </section>
     </div>
   );
@@ -602,11 +673,15 @@ function PaymentStep({
   isAdmin,
   templateReady,
   templateConfig,
+  documentsHref,
+  orderHref,
 }: {
   transaction: Transaction;
   isAdmin: boolean;
   templateReady: boolean;
   templateConfig?: Record<string, unknown>;
+  documentsHref: string;
+  orderHref: string;
 }) {
   const paymentProofs = transaction.documents.filter((item) => item.type === "payment_proof");
   const invoiceDocuments = transaction.documents.filter(
@@ -653,12 +728,6 @@ function PaymentStep({
           pelanggan untuk tindak lanjut; sistem tidak mengirim pengingat otomatis.
         </p>
       ) : null}
-      {transaction.totals.overpaymentAmount > 0 ? (
-        <p className="transaction-flow-warning" role="status">
-          Pembayaran yang diperiksa melebihi tagihan terbit sebesar {money(transaction.totals.overpaymentAmount)}.
-          Periksa pencatatan sebelum menutup pekerjaan.
-        </p>
-      ) : null}
       <section className="transaction-flow-card">
         <div className="transaction-flow-card__head">
           <div>
@@ -695,12 +764,21 @@ function PaymentStep({
           <details className="transaction-flow-details">
             <summary>Buat tagihan baru</summary>
             <TransactionInvoiceForm
-              canGenerate={Boolean(docGenAllowed(transaction) && templateReady)}
+              canGenerate={templateReady}
               defaultPaymentTerms={
                 typeof templateConfig?.paymentTerms === "string" ? templateConfig.paymentTerms : undefined
               }
               customerAddress={transaction.header.customerBillingAddress ?? ""}
               customerName={transaction.header.customerName}
+              customerProfile={{
+                legalName: transaction.header.customerLegalName,
+                email: transaction.header.customerEmail ?? "",
+                phone: transaction.header.customerPhone ?? "",
+                taxId: transaction.header.customerTaxId ?? "",
+                billingAddress: transaction.header.customerBillingAddress ?? "",
+                deliveryAddress: transaction.header.customerAddress ?? "",
+              }}
+              documentSettingsHref={documentsHref}
               invoices={transaction.invoices
                 .filter((invoice) => invoiceCountsAsIssued(invoice.status))
                 .map((invoice) => ({
@@ -723,6 +801,7 @@ function PaymentStep({
                 materialName: line.materialName,
               }))}
               poNumber={transaction.documents.find((document) => document.type === "purchase_order")?.documentNo ?? ""}
+              orderHref={orderHref}
               shipments={transaction.shipments
                 .filter(
                   (shipment) =>
@@ -744,9 +823,9 @@ function PaymentStep({
             />
           </details>
         ) : null}
-        <DocumentList documents={invoiceDocuments} transaction={transaction} />
+        <DocumentList canRetry={isAdmin} documents={invoiceDocuments} transaction={transaction} />
       </section>
-      <section className="transaction-flow-card">
+      <section className="transaction-flow-card" id="transaction-payment-review">
         <div className="transaction-flow-card__head">
           <div>
             <span className="eyebrow">02 · Pembayaran</span>
@@ -835,14 +914,15 @@ function PaymentStep({
 function ProductionStep({ transaction, isAdmin }: { transaction: Transaction; isAdmin: boolean }) {
   const released = transaction.header.fulfilmentStatus !== "not_released";
   const checks = [
-    { label: "Pelanggan tercatat", ready: Boolean(transaction.header.customerName) },
+    { id: "customer", label: "Pelanggan tercatat", ready: Boolean(transaction.header.customerName) },
     {
+      id: "quote",
       label: "Barang dan nilai penawaran ada",
       ready: transaction.lines.length > 0 && transaction.totals.quotedAmount > 0,
     },
-    { label: "Target pekerjaan ditentukan", ready: Boolean(transaction.header.dueAt) },
-    { label: "Tagihan sudah diterbitkan", ready: transaction.totals.invoiceAmount > 0 },
-    { label: "Pembayaran sudah diperiksa", ready: transaction.totals.receivedAmount > 0 },
+    { id: "target", label: "Target pekerjaan ditentukan", ready: Boolean(transaction.header.dueAt) },
+    { id: "invoice", label: "Tagihan sudah diterbitkan", ready: transaction.totals.invoiceAmount > 0 },
+    { id: "payment", label: "Pembayaran sudah diperiksa", ready: transaction.totals.receivedAmount > 0 },
   ];
   const incomplete = checks.some((check) => !check.ready);
   return (
@@ -858,13 +938,48 @@ function ProductionStep({ transaction, isAdmin }: { transaction: Transaction; is
         <p>Administrator dapat melanjutkan walaupun ada data yang belum lengkap, tetapi wajib mencatat alasannya.</p>
         <ul className="transaction-flow-checklist">
           {checks.map((check) => (
-            <li key={check.label}>
+            <li key={check.id}>
               <span aria-hidden="true">{check.ready ? "✓" : "!"}</span>
-              {check.label}
-              <strong>{check.ready ? "Siap" : "Perlu perhatian"}</strong>
+              <div className={styles.checklistLabel}>{check.label}</div>
+              <strong>{check.ready ? "Siap" : "Belum lengkap"}</strong>
+              {check.id === "target" ? (
+                <div className={styles.checklistDetail}>
+                  {check.ready ? (
+                    <small>Tanggal target: {date(transaction.header.dueAt)}</small>
+                  ) : (
+                    <>
+                      <small>Tanggal target pekerjaan belum diisi.</small>
+                      {transaction.header.fulfilmentStatus !== "completed" ? (
+                        <a href="#production-target">Isi tanggal target</a>
+                      ) : (
+                        <small>Transaksi sudah ditutup; hubungi Admin bila perlu koreksi.</small>
+                      )}
+                    </>
+                  )}
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>
+        {!transaction.header.dueAt && transaction.header.fulfilmentStatus !== "completed" ? (
+          <form action={saveProductionTargetDate} className={styles.productionTargetForm} id="production-target">
+            <input name="transactionId" type="hidden" value={transaction.header.id} />
+            <label htmlFor="production-target-date">Tanggal target pekerjaan</label>
+            <div className={styles.productionTargetControls}>
+              <input
+                aria-describedby="production-target-hint"
+                id="production-target-date"
+                name="targetDate"
+                required
+                type="date"
+              />
+              <button type="submit">Simpan tanggal</button>
+            </div>
+            <small id="production-target-hint">
+              Tanggal ini untuk jadwal produksi. Invoice dan PDF yang sudah terbit tidak berubah.
+            </small>
+          </form>
+        ) : null}
         {isAdmin && !released ? (
           <form action={releaseProduction} className="transaction-flow-form">
             <input name="transactionId" type="hidden" value={transaction.header.id} />
@@ -902,14 +1017,21 @@ function ProductionStep({ transaction, isAdmin }: { transaction: Transaction; is
               Rencana {number(batch.plannedQuantity)} · selesai {number(batch.completedQuantity)}
             </small>
             {isAdmin && batch.status !== "completed" ? (
-              <form action={completeProductionBatch} className="transaction-flow-inline-action">
+              <form
+                action={completeProductionBatch}
+                className={styles.batchCompleteForm}
+                data-testid="batch-complete-form"
+              >
                 <input name="batchId" type="hidden" value={batch.id} />
-                <label>
+                <label className={styles.batchCompleteField}>
                   Jumlah selesai
                   <input
+                    className={styles.batchCompleteInput}
+                    inputMode="decimal"
                     max={Number(batch.plannedQuantity ?? 0)}
                     min="0.001"
                     name="completedQuantity"
+                    placeholder="0"
                     required
                     step="0.001"
                     type="number"
@@ -950,10 +1072,12 @@ function DeliveryStep({
   transaction,
   isAdmin,
   templateReady,
+  documentsHref,
 }: {
   transaction: Transaction;
   isAdmin: boolean;
   templateReady: boolean;
+  documentsHref: string;
 }) {
   const shippedByLine = new Map<string, number>();
   transaction.shipmentItems.forEach((item) => {
@@ -998,7 +1122,7 @@ function DeliveryStep({
         </div>
         {isAdmin ? (
           <p>
-            <Link href="/admin/settings/documents">Periksa kesiapan dokumen resmi</Link>
+            <Link href={documentsHref}>Periksa kesiapan dokumen resmi</Link>
           </p>
         ) : null}
         {transaction.shipments.length ? (
@@ -1059,10 +1183,18 @@ function DeliveryStep({
                     />
                   </details>
                 ) : null}
-                {shipment.status === "planned" && !document ? (
+                {shipment.status === "planned" && !document && documentRevisionBlocker(versions[0]?.status) ? (
+                  <div className="transaction-document-blocker" role="status">
+                    <span>
+                      PDF surat jalan sebelumnya belum selesai. Periksa status di bawah sebelum membuat revisi.
+                    </span>
+                    <a href={`#delivery-documents-${shipment.id}`}>Periksa PDF</a>
+                  </div>
+                ) : null}
+                {shipment.status === "planned" && !document && !documentRevisionBlocker(versions[0]?.status) ? (
                   <form action={generateDeliveryNote}>
                     <input name="shipmentId" type="hidden" value={shipment.id} />
-                    <button disabled={!docGenAllowed(transaction) || !templateReady} type="submit">
+                    <button disabled={!templateReady} type="submit">
                       {versions.length ? "Buat revisi PDF" : "Terbitkan PDF"}
                     </button>
                     {!templateReady ? (
@@ -1072,7 +1204,11 @@ function DeliveryStep({
                     ) : null}
                   </form>
                 ) : null}
-                {versions.length ? <DocumentList documents={versions} transaction={transaction} /> : null}
+                {versions.length ? (
+                  <div id={`delivery-documents-${shipment.id}`}>
+                    <DocumentList canRetry={isAdmin} documents={versions} transaction={transaction} />
+                  </div>
+                ) : null}
                 {shipment.status === "planned" && document?.status === "ready" ? (
                   <form action={markShipmentSent}>
                     <input name="shipmentId" type="hidden" value={shipment.id} />
@@ -1094,10 +1230,12 @@ function HandoverStep({
   transaction,
   isAdmin,
   templateReady,
+  documentsHref,
 }: {
   transaction: Transaction;
   isAdmin: boolean;
   templateReady: boolean;
+  documentsHref: string;
 }) {
   const pending = transaction.shipments.filter(
     (shipment) => !["received", "received_partial"].includes(shipment.status) || !shipment.bastDocumentId,
@@ -1146,7 +1284,7 @@ function HandoverStep({
         </p>
         {isAdmin ? (
           <p>
-            <Link href="/admin/settings/documents">Periksa kesiapan dokumen resmi</Link>
+            <Link href={documentsHref}>Periksa kesiapan dokumen resmi</Link>
           </p>
         ) : null}
         {transaction.shipments.map((shipment) => {
@@ -1194,7 +1332,9 @@ function HandoverStep({
               </div>
               {shipment.status !== "planned" ? (
                 <>
-                  <DocumentList documents={bastDocuments} transaction={transaction} />
+                  <div id={`handover-documents-${shipment.id}`}>
+                    <DocumentList canRetry={isAdmin} documents={bastDocuments} transaction={transaction} />
+                  </div>
                   {shipment.status === "shipped" || (shipment.bastDocumentId && isAdmin) ? (
                     <TransactionHandoverForm
                       transactionId={transaction.header.id}
@@ -1207,10 +1347,11 @@ function HandoverStep({
                       }))}
                       initial={initial}
                       latestReady={latest?.status === "ready"}
+                      latestNeedsReview={documentRevisionBlocker(latest?.status)}
                       latestNumber={latest?.documentNo ?? null}
                       hasProof={Boolean(shipment.bastDocumentId)}
                       isAdmin={isAdmin}
-                      enabled={docGenAllowed(transaction) && templateReady}
+                      enabled={templateReady}
                     />
                   ) : null}
                   {shipment.bastDocumentId ? (
@@ -1312,6 +1453,7 @@ export default async function TransactionDetailPage({
           ? "quote"
           : suggested);
   const active: Step = steps.some((step) => step.id === requested) ? (requested as Step) : suggested;
+  const quoteReadiness = active === "quote" ? await quotationDocumentReadiness(id) : null;
   const returnTo = query.returnTo?.startsWith("/admin/transactions?") ? query.returnTo : "/admin/transactions";
   const stepStates = transactionStepStates(transaction, transaction.workspace);
   const readonly =
@@ -1325,11 +1467,17 @@ export default async function TransactionDetailPage({
     delivery: Boolean(activeTemplates[2]) || docGenTemplateReady("DELIVERY"),
     handover: Boolean(activeTemplates[3]) || docGenTemplateReady("BAST"),
   };
+  const detailReturnPath = `/admin/transactions/${id}?step=${active}&returnTo=${encodeURIComponent(returnTo)}#transaction-step-title`;
+  const documentsHref = `/admin/settings/documents?returnTo=${encodeURIComponent(detailReturnPath)}`;
+  const orderHref = `/admin/transactions/${id}?step=order&returnTo=${encodeURIComponent(returnTo)}#transaction-step-title`;
 
   const notices: Record<string, string> = {
     "draft-saved": "Rincian penawaran tersimpan. Periksa nilainya sebelum membuat PDF.",
     "pdf-ready": "PDF penawaran siap ditinjau dan dikirim.",
-    "pdf-check": "Pembuatan PDF belum pasti. Periksa DocGen sebelum mencoba lagi agar tidak ada biaya ganda.",
+    "pdf-check": "PDF penawaran belum siap. Buka daftar dokumen untuk melihat penyebab dan cara melanjutkannya.",
+    "pdf-pending-review":
+      "PDF sebelumnya masih perlu diperiksa. Lanjutkan proses yang sama sebelum membuat revisi baru.",
+    "quote-not-ready": "PDF belum dapat diterbitkan. Lihat daftar hal yang perlu dilengkapi pada langkah Penawaran.",
     "docgen-unavailable": "Template penawaran baru belum terverifikasi di DocGen. Draf tetap tersimpan.",
     "invoice-template-unavailable": "Template invoice DocGen belum disiapkan.",
     "invoice-check": "Invoice belum siap. Periksa DocGen sebelum mencoba lagi.",
@@ -1337,13 +1485,20 @@ export default async function TransactionDetailPage({
     "delivery-template-unavailable":
       "Template surat jalan baru belum terverifikasi di DocGen. Rencana tetap tersimpan.",
     "delivery-check": "Surat jalan belum siap. Periksa DocGen sebelum mencoba lagi.",
+    "delivery-pending-review":
+      "PDF surat jalan sebelumnya belum selesai. Periksa proses yang sama sebelum membuat revisi.",
     "delivery-ready": "Surat jalan siap diperiksa.",
     "template-unavailable": "Template dokumen DocGen belum disiapkan.",
     "document-check": "Dokumen belum siap. Periksa DocGen sebelum mencoba lagi.",
+    "handover-pending-review": "PDF STB sebelumnya belum selesai. Periksa proses yang sama sebelum membuat revisi.",
     "document-ready": "Dokumen siap ditinjau.",
     "email-linked": "Email ditautkan ke transaksi ini.",
     "batch-created": "Rencana sampel atau batch tersimpan.",
     "batch-completed": "Jumlah selesai dicatat.",
+    "target-saved": "Tanggal target pekerjaan tersimpan. Pemeriksaan produksi sudah diperbarui.",
+    "target-invalid": "Tanggal target tidak valid. Pilih tanggal pada formulir di langkah Produksi.",
+    "target-unavailable":
+      "Tanggal target belum dapat disimpan. Muat ulang halaman dan periksa apakah transaksi masih aktif.",
     "shipment-planned": "Pengiriman disiapkan. Buat dan periksa surat jalan sebelum mengirim barang.",
     "shipment-revised": "Rincian pengiriman diperbarui. Jika PDF lama ada, buat versi baru sebelum barang dikirim.",
     "shipment-sent": "Barang ditandai sudah dikirim.",
@@ -1357,7 +1512,16 @@ export default async function TransactionDetailPage({
         description={`${transaction.header.referenceNo} · ${transaction.header.customerName} · Penanggung jawab: ${transaction.header.ownerName ?? "Belum ditentukan"}`}
         back={{ href: returnTo, label: "Kembali ke semua transaksi" }}
         actions={
-          <span className="transaction-flow-header__status">
+          <span
+            className={styles.fulfilmentBadge}
+            data-tone={
+              transaction.header.fulfilmentStatus === "completed"
+                ? "success"
+                : transaction.header.fulfilmentStatus === "not_released"
+                  ? "neutral"
+                  : "active"
+            }
+          >
             {transaction.header.fulfilmentStatus === "completed"
               ? "Selesai"
               : transactionStatusLabel("fulfilment", transaction.header.fulfilmentStatus)}
@@ -1414,11 +1578,13 @@ export default async function TransactionDetailPage({
           . Status ini tetap berlaku meskipun produksi atau pengiriman sudah berjalan.
         </p>
       ) : null}
-      {transaction.workspace.overpayment && transaction.workspace.overpayment !== "0.00" ? (
-        <p className="transaction-flow-notice">
-          Kelebihan pembayaran: <strong>{workspaceMoney(transaction.workspace.overpayment)}</strong>. Periksa
-          alokasinya; bukan sisa tagihan negatif.
-        </p>
+      {transaction.totals.overpaymentAmount > 0 ? (
+        <TransactionPaymentAttention
+          difference={money(transaction.totals.overpaymentAmount)}
+          href={`/admin/transactions/${id}?step=payment&returnTo=${encodeURIComponent(returnTo)}#transaction-payment-review`}
+          issued={money(transaction.totals.invoiceAmount)}
+          received={money(transaction.totals.receivedAmount)}
+        />
       ) : null}
       <div className="transaction-flow-layout">
         <main>
@@ -1505,14 +1671,17 @@ export default async function TransactionDetailPage({
                 <QuoteStep
                   transaction={transaction}
                   isAdmin={user.role === "admin"}
+                  documentsHref={documentsHref}
                   templateConfig={(activeTemplates[0]?.config as Record<string, unknown> | null) ?? undefined}
-                  templateReady={templateReady.quotation}
+                  readiness={quoteReadiness!}
                 />
               ) : null}
               {active === "order" ? <OrderStep transaction={transaction} returnTo={returnTo} /> : null}
               {active === "payment" ? (
                 <PaymentStep
                   isAdmin={user.role === "admin"}
+                  documentsHref={documentsHref}
+                  orderHref={orderHref}
                   templateConfig={(activeTemplates[1]?.config as Record<string, unknown> | null) ?? undefined}
                   templateReady={templateReady.invoice}
                   transaction={transaction}
@@ -1523,6 +1692,7 @@ export default async function TransactionDetailPage({
               ) : null}
               {active === "delivery" ? (
                 <DeliveryStep
+                  documentsHref={documentsHref}
                   isAdmin={user.role === "admin"}
                   templateReady={templateReady.delivery}
                   transaction={transaction}
@@ -1530,6 +1700,7 @@ export default async function TransactionDetailPage({
               ) : null}
               {active === "handover" ? (
                 <HandoverStep
+                  documentsHref={documentsHref}
                   isAdmin={user.role === "admin"}
                   templateReady={templateReady.handover}
                   transaction={transaction}

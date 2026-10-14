@@ -7,6 +7,290 @@
 .detail {
   min-width: 0;
 }
+.checklistLabel {
+  min-width: 0;
+  line-height: 1.45;
+}
+.checklistDetail {
+  display: flex;
+  grid-column: 2 / -1;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.checklistDetail small {
+  color: var(--admin-muted);
+  font-size: inherit;
+}
+.checklistDetail a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--admin-blue);
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+.productionTargetForm {
+  display: grid;
+  gap: 7px;
+  margin: 8px 0 18px;
+  border-left: 3px solid var(--admin-blue);
+  padding: 4px 0 4px 12px;
+  scroll-margin-block: 16px 220px;
+}
+.productionTargetForm > label {
+  color: var(--admin-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.productionTargetControls {
+  display: grid;
+  grid-template-columns: minmax(0, 210px) auto;
+  justify-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+.productionTargetControls > input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--admin-line);
+  border-radius: 10px;
+  background: var(--admin-field);
+  padding: 8px 11px;
+  color: var(--admin-ink);
+  font-size: 13px;
+}
+.productionTargetControls > button {
+  min-height: 44px;
+  white-space: nowrap;
+}
+.productionTargetForm > small {
+  max-width: 52ch;
+  color: var(--admin-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+@media (max-width: 430px) {
+  .productionTargetControls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .productionTargetControls > button {
+    width: 100%;
+  }
+}
+.batchCompleteForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  width: min(100%, 420px);
+  min-width: 0;
+  margin-top: 12px;
+}
+.batchCompleteField {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--admin-ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.batchCompleteInput {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--admin-line);
+  border-radius: 10px;
+  background: var(--admin-field);
+  padding: 9px 12px;
+  color: var(--admin-ink);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.batchCompleteInput::-webkit-inner-spin-button,
+.batchCompleteInput::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+.batchCompleteForm > button {
+  min-height: 44px;
+  white-space: nowrap;
+}
+@media (max-width: 340px) {
+  .batchCompleteForm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .batchCompleteForm > button {
+    width: 100%;
+  }
+}
+.fulfilmentBadge {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--admin-blue) 28%, var(--admin-line));
+  border-radius: 999px;
+  background: var(--admin-soft-blue);
+  padding: 7px 12px;
+  color: var(--admin-blue);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+.fulfilmentBadge::before {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+.fulfilmentBadge[data-tone="success"] {
+  border-color: color-mix(in srgb, var(--admin-success) 35%, var(--admin-line));
+  background: var(--admin-success-surface);
+  color: var(--admin-success);
+}
+.fulfilmentBadge[data-tone="neutral"] {
+  border-color: var(--admin-line);
+  background: var(--admin-surface);
+  color: var(--admin-muted);
+}
+.paymentAttention {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 18px;
+  scroll-margin-block: 16px 120px;
+  border: 1px solid color-mix(in srgb, var(--admin-warning) 33%, var(--admin-line));
+  border-inline-start: 4px solid var(--admin-warning);
+  border-radius: 12px;
+  background: var(--admin-warning-surface);
+  padding: 14px 16px;
+  color: var(--admin-ink);
+}
+.paymentAttentionIcon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--admin-warning) 16%, transparent);
+  color: var(--admin-warning);
+}
+.paymentAttentionIcon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+.paymentAttentionCopy {
+  min-width: 0;
+}
+.paymentAttentionCopy h2 {
+  margin: 0 0 3px;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+.paymentAttentionCopy p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.paymentAttentionLink,
+.paymentAttentionFloating a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--admin-warning) 50%, var(--admin-line));
+  border-radius: 9px;
+  background: var(--admin-surface);
+  padding: 8px 12px;
+  color: var(--admin-warning);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+}
+.paymentAttentionLink:hover,
+.paymentAttentionFloating a:hover {
+  background: color-mix(in srgb, var(--admin-warning) 12%, var(--admin-surface));
+}
+.paymentAttentionLink:focus-visible,
+.paymentAttentionFloating :is(a, button):focus-visible {
+  outline: 3px solid var(--admin-warning);
+  outline-offset: 2px;
+}
+.paymentAttentionFloating {
+  position: fixed;
+  z-index: 95;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 10px;
+  width: min(390px, calc(100vw - 36px));
+  border: 1px solid color-mix(in srgb, var(--admin-warning) 38%, var(--admin-line));
+  border-inline-start: 4px solid var(--admin-warning);
+  border-radius: 14px;
+  background: var(--admin-surface);
+  padding: 12px;
+  box-shadow: 0 22px 55px -28px rgba(20, 13, 35, 0.5);
+  color: var(--admin-ink);
+}
+.paymentAttentionFloating strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.paymentAttentionFloating p {
+  margin: 3px 0 8px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.paymentAttentionFloating a {
+  min-height: 38px;
+}
+.paymentAttentionFloating button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--admin-muted);
+  cursor: pointer;
+}
+.paymentAttentionFloating button:hover {
+  background: var(--admin-surface-soft);
+}
+.paymentAttentionFloating button svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+.detail :global(#transaction-payment-review) {
+  scroll-margin-top: 24px;
+}
 .detail :global(.transaction-flow-header h1) {
   font-size: clamp(22px, 2.3vw, 32px);
   line-height: 1.35;
@@ -44,13 +328,26 @@
 }
 .detail :global(.transaction-flow-money dt),
 .detail :global(.transaction-flow-checklist li > strong) {
+  margin-left: 0;
+  justify-self: end;
   color: var(--admin-muted);
 }
 .detail :global(.transaction-flow-checklist li > span) {
   color: var(--admin-blue);
 }
 .detail :global(.transaction-flow-checklist li) {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 9px;
+  row-gap: 4px;
   border-color: var(--admin-line);
+}
+@media (max-width: 340px) {
+  .detail :global(.transaction-flow-checklist li > strong) {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
 }
 .detail :global(.transaction-flow-documents small),
 .detail :global(.transaction-flow-documents__status) {
@@ -194,6 +491,20 @@
   }
 }
 @media (max-width: 600px) {
+  .paymentAttention {
+    grid-template-columns: 32px minmax(0, 1fr);
+    align-items: start;
+    padding: 12px;
+  }
+  .paymentAttentionLink {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .paymentAttentionFloating {
+    right: max(8px, env(safe-area-inset-right));
+    bottom: calc(94px + env(safe-area-inset-bottom));
+    width: min(390px, calc(100vw - 16px));
+  }
   .detail :global(.transaction-flow-details) {
     padding: 12px 16px 16px;
   }

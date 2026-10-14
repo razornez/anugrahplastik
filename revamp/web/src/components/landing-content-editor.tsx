@@ -2108,7 +2108,7 @@ function LandingVisualFields({
             </LandingEditorItem>
           ))}
           <button
-            disabled={disabled || content.trust.partners.length >= 24}
+            disabled={disabled || content.trust.partners.length >= 48}
             onClick={() =>
               set({
                 ...content,

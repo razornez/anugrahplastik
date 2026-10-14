@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   calculateDeliveryInvoice,
   calculateDpInvoice,
@@ -10,6 +10,9 @@ import {
 } from "@/features/operations/invoice-math";
 import { createTransactionInvoice } from "@/features/operations/workflow-actions";
 import { centsText } from "@/features/operations/quote-math";
+import { CustomerDocumentProfileSheet } from "@/components/customer-document-profile-sheet";
+import type { CustomerDocumentProfileInput } from "@/features/operations/customer-document-profile";
+import { useTransactionDraft } from "@/components/use-transaction-draft";
 
 type IssuedInvoice = {
   kind: string;
@@ -20,6 +23,15 @@ type IssuedInvoice = {
 };
 
 type Shipment = { id: string; referenceNo: string; status: string; items: InvoiceQuantity[] };
+type InvoiceDraft = {
+  kind: "dp" | "final";
+  amount: string;
+  shipmentId: string;
+  dpApplied: string;
+  terms: string;
+  dueDate: string;
+  taxConfirmed: boolean;
+};
 
 const rupiah = (value: string | number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 2 }).format(
@@ -38,6 +50,9 @@ export function TransactionInvoiceForm(props: {
   customerAddress: string;
   poNumber: string;
   canGenerate: boolean;
+  customerProfile: CustomerDocumentProfileInput;
+  documentSettingsHref: string;
+  orderHref: string;
   defaultPaymentTerms?: string;
 }) {
   const [kind, setKind] = useState<"dp" | "final">("dp");
@@ -46,6 +61,35 @@ export function TransactionInvoiceForm(props: {
   const [dpApplied, setDpApplied] = useState("0");
   const configuredTerms = props.defaultPaymentTerms?.trim() || dpTerms;
   const [terms, setTerms] = useState(configuredTerms);
+  const [dueDate, setDueDate] = useState("");
+  const [taxConfirmed, setTaxConfirmed] = useState(false);
+  const initialDraft = useMemo<InvoiceDraft>(
+    () => ({
+      kind: "dp",
+      amount: "",
+      shipmentId: "",
+      dpApplied: "0",
+      terms: configuredTerms,
+      dueDate: "",
+      taxConfirmed: false,
+    }),
+    [configuredTerms],
+  );
+  const restoreDraft = useCallback((draft: InvoiceDraft) => {
+    setKind(draft.kind);
+    setAmount(draft.amount);
+    setShipmentId(draft.shipmentId);
+    setDpApplied(draft.dpApplied);
+    setTerms(draft.terms);
+    setDueDate(draft.dueDate);
+    setTaxConfirmed(draft.taxConfirmed);
+  }, []);
+  const { restored, discard } = useTransactionDraft({
+    key: props.transactionId + ":invoice",
+    value: { kind, amount, shipmentId, dpApplied, terms, dueDate, taxConfirmed },
+    initial: initialDraft,
+    restore: restoreDraft,
+  });
   const preview = useMemo(() => {
     try {
       if (props.lines.some((line) => line.taxMethod === "legacy")) {
@@ -82,9 +126,19 @@ export function TransactionInvoiceForm(props: {
     }
   }, [kind, amount, shipmentId, dpApplied, props.lines, props.shipments, props.invoices, props.verifiedPayments]);
   const ready = !!preview && typeof preview !== "string";
+  const prerequisitesReady = props.canGenerate && Boolean(props.customerAddress) && Boolean(props.poNumber);
+  const readinessId = `invoice-readiness-${props.transactionId}`;
   return (
     <form action={createTransactionInvoice} className="transaction-flow-form transaction-invoice-form">
       <input name="transactionId" type="hidden" value={props.transactionId} />
+      {restored ? (
+        <div className="transaction-draft-restored" role="status">
+          <span>Draft belum disimpan dipulihkan.</span>
+          <button onClick={discard} type="button">
+            Buang draft
+          </button>
+        </div>
+      ) : null}
       <label>
         Jenis tagihan
         <select
@@ -154,7 +208,13 @@ export function TransactionInvoiceForm(props: {
       {kind === "dp" ? <input name="dpApplied" type="hidden" value="0" /> : null}
       <label>
         Jatuh tempo
-        <input name="dueDate" required type="date" />
+        <input
+          name="dueDate"
+          onChange={(event) => setDueDate(event.target.value)}
+          required
+          type="date"
+          value={dueDate}
+        />
       </label>
       <label>
         Syarat pembayaran
@@ -174,7 +234,20 @@ export function TransactionInvoiceForm(props: {
           <b>Pelanggan:</b> {props.customerName} · <b>PO:</b> {props.poNumber || "Nomor belum dicantumkan"}
         </p>
         {!props.customerAddress ? (
-          <p className="transaction-flow-warning">Alamat penagihan pelanggan belum dilengkapi.</p>
+          <div className="transaction-document-blocker" role="status">
+            <span>Alamat penagihan pelanggan belum dilengkapi.</span>
+            <CustomerDocumentProfileSheet
+              focusField="billingAddress"
+              initial={props.customerProfile}
+              transactionId={props.transactionId}
+            />
+          </div>
+        ) : null}
+        {!props.poNumber ? (
+          <p className="transaction-document-blocker">
+            <span>Nomor PO pelanggan belum dicantumkan.</span>
+            <a href={props.orderHref}>Buka langkah PO</a>
+          </p>
         ) : null}
         {typeof preview === "string" ? (
           <p className="transaction-flow-warning">{preview}</p>
@@ -222,17 +295,32 @@ export function TransactionInvoiceForm(props: {
         )}
       </div>
       <label className="transaction-invoice-confirm">
-        <input name="taxConfirmed" required type="checkbox" value="yes" /> Saya sudah meninjau metode pajak, diskon,
-        data pelanggan, dan jumlah tagihan.
+        <input
+          checked={taxConfirmed}
+          name="taxConfirmed"
+          onChange={(event) => setTaxConfirmed(event.target.checked)}
+          required
+          type="checkbox"
+          value="yes"
+        />{" "}
+        Saya sudah meninjau metode pajak, diskon, data pelanggan, dan jumlah tagihan.
       </label>
-      <button disabled={!props.canGenerate || !ready} type="submit">
+      <button aria-describedby={readinessId} disabled={!prerequisitesReady || !ready} type="submit">
         Terbitkan PDF
       </button>
-      {!props.canGenerate ? (
-        <p className="transaction-flow-warning">
-          Pembuatan PDF belum tersedia untuk transaksi ini atau template DocGen belum siap.
-        </p>
-      ) : null}
+      <div aria-live="polite" id={readinessId}>
+        {!props.canGenerate ? (
+          <p className="transaction-flow-warning">
+            Template Invoice belum aktif. <a href={props.documentSettingsHref}>Buka Dokumen resmi</a>.
+          </p>
+        ) : !props.customerAddress ? (
+          <p className="transaction-flow-warning">Lengkapi alamat penagihan untuk menerbitkan PDF.</p>
+        ) : !props.poNumber ? (
+          <p className="transaction-flow-warning">Lengkapi nomor PO pelanggan untuk menerbitkan PDF.</p>
+        ) : ready ? (
+          <p className="transaction-readiness-ready">Semua persyaratan PDF sudah lengkap.</p>
+        ) : null}
+      </div>
     </form>
   );
 }

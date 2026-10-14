@@ -5,6 +5,7 @@ import { desc, eq } from "drizzle-orm";
 import { EmailTemplateSettingsEditor } from "@/components/email-template-settings-editor";
 import { EmailTemplateRestoreButton } from "@/components/email-template-restore-button";
 import { TemplateAttachmentManager } from "@/components/template-attachment-manager";
+import { EmailTemplateCreateDialog } from "@/components/email-template-create-dialog";
 import {
   getActiveTemplate,
   listEmailTemplates,
@@ -17,7 +18,6 @@ import { getDatabase } from "@/lib/database/client";
 import { emailTemplateAttachments, emailTemplateVersions } from "@/lib/database/schema";
 import {
   archiveEmailTemplate,
-  createEmailTemplate,
   duplicateEmailTemplate,
   setDefaultEmailTemplate,
 } from "@/features/integrations/email-template-actions";
@@ -71,9 +71,9 @@ export default async function EmailTemplateSettingsPage({
         </Link>
         <Link href="/admin/settings/templates?area=pdf">Dokumen PDF</Link>
       </nav>
-      {query.status === "saved" ? (
+      {query.status === "saved" || query.status === "created" ? (
         <p className="admin-notice" role="status">
-          Versi template baru sudah aktif.
+          {query.status === "created" ? "Template baru siap diedit." : "Versi template baru sudah aktif."}
         </p>
       ) : null}
       <form className="email-template-catalog-filter" method="get">
@@ -143,18 +143,7 @@ export default async function EmailTemplateSettingsPage({
           ))}
           {!catalog.length ? <p className="admin-empty-copy">Belum ada template untuk filter ini.</p> : null}
           {!(["layout", "new", "reply"] as string[]).includes(key) ? (
-            <form action={createEmailTemplate} className="email-template-create-form">
-              <input name="key" type="hidden" value={key} />
-              <label>
-                Nama
-                <input name="name" required />
-              </label>
-              <label>
-                Bahasa
-                <input defaultValue="id" name="language" pattern="[a-z]{2}(-[A-Z]{2})?" required />
-              </label>
-              <button type="submit">Tambah template</button>
-            </form>
+            <EmailTemplateCreateDialog templateKey={key} />
           ) : null}
         </aside>
         <div className="email-template-catalog-editor">

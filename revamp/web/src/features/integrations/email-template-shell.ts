@@ -4,15 +4,19 @@ export const emailShellAccents = ["blue", "sky", "gold"] as const;
 export type EmailShellConfig = {
   preset: (typeof emailShellPresets)[number];
   accent: (typeof emailShellAccents)[number];
+  logoPath: "/brand/quotation-logo.png";
   companyName: string;
   tagline: string;
   contactEmail: string;
   footerText: string;
 };
 
+export type BrandShellConfig = EmailShellConfig;
+
 export const defaultEmailShellConfig: EmailShellConfig = {
   preset: "corporate-navy",
   accent: "blue",
+  logoPath: "/brand/quotation-logo.png",
   companyName: "ANUGRAH PLASTIK",
   tagline: "CETAK PLASTIK · BANDUNG",
   contactEmail: "cs@anugrahplastik.com",
@@ -37,6 +41,7 @@ export function parseEmailShellConfig(raw: unknown): EmailShellConfig {
     accent: emailShellAccents.includes(input.accent as EmailShellConfig["accent"])
       ? (input.accent as EmailShellConfig["accent"])
       : defaultEmailShellConfig.accent,
+    logoPath: "/brand/quotation-logo.png",
     companyName: validShellText(input.companyName, defaultEmailShellConfig.companyName, 80),
     tagline: validShellText(input.tagline, defaultEmailShellConfig.tagline, 100),
     contactEmail:
@@ -51,6 +56,8 @@ export function validateEmailShellConfig(raw: unknown): EmailShellConfig {
   if (input.preset !== "corporate-navy") throw new Error("Preset tampilan email tidak tersedia.");
   if (!emailShellAccents.includes(input.accent as EmailShellConfig["accent"]))
     throw new Error("Warna aksen email tidak tersedia.");
+  if (input.logoPath && input.logoPath !== "/brand/quotation-logo.png")
+    throw new Error("Logo tampilan bersama tidak tersedia.");
   const config = parseEmailShellConfig(input);
   if (
     config.companyName !==

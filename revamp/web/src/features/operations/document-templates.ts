@@ -4,9 +4,15 @@ import { resolve } from "node:path";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDatabase } from "@/lib/database/client";
-import { documentTemplateCatalogs, documentTemplateVersions } from "@/lib/database/schema";
+import {
+  documentTemplateCatalogs,
+  documentTemplateVersions,
+  emailTemplates,
+  emailTemplateVersions,
+} from "@/lib/database/schema";
 import { localQaRendererEnabled, type DocGenTemplateKind } from "./docgen-policy";
-import { documentTemplateLabels, type DocumentTemplateKind } from "./document-template-shared";
+import { documentTemplateKinds, documentTemplateLabels, type DocumentTemplateKind } from "./document-template-shared";
+import { defaultEmailShellConfig, parseEmailShellConfig } from "@/features/integrations/email-template-shell";
 
 export { documentTemplateKinds, documentTemplateLabels, type DocumentTemplateKind } from "./document-template-shared";
 
@@ -112,9 +118,44 @@ function placeholderContract(html: string) {
 
 export async function compileDocumentTemplate(kind: DocumentTemplateKind, input: unknown) {
   const config = documentTemplateSchemas[kind].parse(input) as Record<string, string | number>;
+  const database = getDatabase();
+  const [layout] = database
+    ? await database
+        .select({ shellConfig: emailTemplateVersions.shellConfig })
+        .from(emailTemplates)
+        .innerJoin(emailTemplateVersions, eq(emailTemplateVersions.templateId, emailTemplates.id))
+        .where(and(eq(emailTemplates.templateKey, "layout"), eq(emailTemplates.isArchived, false)))
+        .orderBy(desc(emailTemplateVersions.version))
+        .limit(1)
+    : [];
+  const sharedShell = parseEmailShellConfig(layout?.shellConfig ?? defaultEmailShellConfig);
   const original = await readFile(resolve(process.cwd(), "docs/templates", sourceFiles[kind]), "utf8");
+  const originalFooter = original.match(/<footer>([\s\S]*?)<\/footer>/)?.[1].trim() ?? "";
   const opening = `<p class="document-template-opening">${escapeHtml(config.opening)}</p>`;
-  let compiled = original.replace("</style>", ".document-template-opening{margin:0 0 14px;line-height:1.55}</style>");
+  const accents = { blue: "#0b5fbe", sky: "#087ea4", gold: "#9a6700" } as const;
+  const accent = accents[sharedShell.accent];
+  const sharedCss =
+    ".document-template-opening{margin:0 0 14px;line-height:1.55}" +
+    "@media screen{body{padding:17mm 5mm 19mm!important}}" +
+    "header{background:#102b49!important;border-bottom:4px solid " +
+    accent +
+    "!important;border-radius:10px 10px 0 0;color:#fff!important;padding:18px 20px!important;min-height:76px}" +
+    "header .brand{align-items:center!important;gap:14px!important}" +
+    "header .brand img{display:block!important;width:52px!important;height:52px!important;max-height:52px!important;object-fit:contain!important}" +
+    "header .brand strong,header .brand-name{color:#fff!important;font-size:15px!important;letter-spacing:.02em!important}" +
+    "header .brand small,header .brand-meta{color:#c9d9ea!important;font-size:8px!important;letter-spacing:.08em!important}" +
+    "header .document-title,header .document-number,header .doc-title h1,header .doc-title p{color:#fff!important}" +
+    "footer{border-top-color:" +
+    accent +
+    "!important}" +
+    ".document-title,.doc-title h1,.title h1,.title strong{color:" +
+    accent +
+    "!important}";
+  let compiled = original.replace("</style>", sharedCss + "</style>");
+  compiled = compiled.replace(
+    /Spesialis injeksi plastik, spare part, rubber, logam, dan lain-lain/g,
+    escapeHtml(sharedShell.tagline),
+  );
   const titles: Record<DocumentTemplateKind, RegExp> = {
     quotation: /<div class="letter-title">[\s\S]*?<\/div>/,
     invoice: /<h1>[\s\S]*?<\/h1>/,
@@ -126,7 +167,17 @@ export async function compileDocumentTemplate(kind: DocumentTemplateKind, input:
       ? `<div class="letter-title">${escapeHtml(config.title)}</div>`
       : `<h1>${escapeHtml(config.title)}</h1>`;
   compiled = compiled.replace(titles[kind], `${opening}${titleTag}`);
-  compiled = compiled.replace(/<footer>[\s\S]*?<\/footer>/, `<footer>${escapeHtml(config.footer)}</footer>`);
+  compiled = compiled.replace(
+    /<footer>[\s\S]*?<\/footer>/,
+    "<footer>" +
+      escapeHtml(config.footer) +
+      "<br />" +
+      escapeHtml(sharedShell.footerText) +
+      " · " +
+      escapeHtml(sharedShell.contactEmail) +
+      (originalFooter ? "<br />" + originalFooter : "") +
+      "</footer>",
+  );
   if (kind === "quotation") compiled = compiled.replace("Hormat kami,", escapeHtml(config.signatureLabel));
   const before = placeholderContract(original);
   const after = placeholderContract(compiled);
@@ -276,13 +327,46 @@ function anonymousSmokeData(kind: DocumentTemplateKind, html: string): Record<st
   const data: Record<string, string | boolean> = { isDummy: false, isPreview: true };
   for (const key of placeholderContract(html)) data[key] = "Belum tersedia";
   data.penerbit = "CV. ANUGRAHPLASTIK MANDIRI BANDUNG";
+  data.logo =
+    kind === "invoice"
+      ? '<img src="/brand/quotation-logo.png" alt="Logo Anugrah Plastik" width="52" height="52" />'
+      : "/brand/quotation-logo.png";
   data.nama_pelanggan = "PT PELANGGAN CONTOH";
   data.penerima = "PENERIMA CONTOH";
+  data.pic_penerima = "Ibu Dewi";
+  data.alamat_penerima = "Jl. Industri Contoh No. 10, Bandung";
+  data.alamat_pelanggan = "Jl. Industri Contoh No. 10, Bandung";
+  data.alamat = "Jl. Industri Contoh No. 10, Bandung";
+  data.alamat_penerbit = "Bandung, Jawa Barat";
+  data.email_penerbit = "cs@anugrahplastik.com";
+  data.telepon_penerbit = "0812 2339 587";
+  data.situs_penerbit = "anugrahplastik.com";
+  data.tanggal = "14 Oktober 2026";
   data.baris_barang =
     "<tr><td>1</td><td>Barang contoh</td><td>1 pcs</td><td>Belum tersedia</td><td>Rp1.000</td><td>Rp1.000</td><td>Belum tersedia</td></tr>";
   const source = defaultDocumentTemplateConfigs[kind];
   Object.keys(source).forEach((key) => (data[key] = String(source[key])));
   return data;
+}
+
+function renderPreviewHtml(template: string, data: Record<string, string | boolean>) {
+  let rendered = template.replace(/{{#if\s+([a-zA-Z0-9_.]+)}}([\s\S]*?){{\/if}}/g, (_, key: string, body: string) =>
+    data[key] ? body : "",
+  );
+  rendered = rendered.replace(/{{{\s*([a-zA-Z0-9_.]+)\s*}}}/g, (_, key: string) =>
+    String(data[key] ?? "Belum tersedia"),
+  );
+  rendered = rendered.replace(/{{\s*([a-zA-Z0-9_.]+)\s*}}/g, (_, key: string) =>
+    escapeHtml(data[key] ?? "Belum tersedia"),
+  );
+  return rendered;
+}
+
+export async function renderAnonymousDocumentPreview(kind: DocumentTemplateKind, input: unknown) {
+  const compiled = await compileDocumentTemplate(kind, input);
+  const html = renderPreviewHtml(compiled.html, anonymousSmokeData(kind, compiled.html));
+  if (html.includes("{{")) throw new Error("Pratinjau masih memiliki variabel yang belum dirender.");
+  return html;
 }
 
 export async function activateDocumentTemplate(input: {
@@ -334,6 +418,84 @@ export async function activateDocumentTemplate(input: {
       .update(documentTemplateVersions)
       .set({ status: "failed", failureCode: error instanceof Error ? error.message.slice(0, 80) : "publish_failed" })
       .where(eq(documentTemplateVersions.id, pending.id));
+    throw error;
+  }
+}
+
+export async function republishActiveDocumentTemplates(actorId: string) {
+  const database = getDatabase();
+  if (!database) throw new Error("Database belum terhubung.");
+  const prepared: Array<{
+    id: string;
+    kind: DocumentTemplateKind;
+    version: number;
+    html: string;
+  }> = [];
+  const activeTemplates = await Promise.all(documentTemplateKinds.map((kind) => getActiveDocumentTemplate(kind)));
+  const missingIndex = activeTemplates.findIndex((template) => !template);
+  if (missingIndex >= 0)
+    throw new Error(documentTemplateLabels[documentTemplateKinds[missingIndex]] + " belum memiliki versi aktif.");
+  for (const [index, kind] of documentTemplateKinds.entries()) {
+    const active = activeTemplates[index]!;
+    const compiled = await compileDocumentTemplate(kind, active.config);
+    const [latest] = await database
+      .select({ version: documentTemplateVersions.version })
+      .from(documentTemplateVersions)
+      .where(eq(documentTemplateVersions.kind, kind))
+      .orderBy(desc(documentTemplateVersions.version))
+      .limit(1);
+    const version = (latest?.version ?? 0) + 1;
+    const [pending] = await database
+      .insert(documentTemplateVersions)
+      .values({
+        kind,
+        version,
+        config: compiled.config,
+        compiledChecksum: compiled.checksum,
+        createdBy: actorId,
+        restoredFromId: active.id,
+      })
+      .returning({ id: documentTemplateVersions.id });
+    if (!pending) throw new Error(documentTemplateLabels[kind] + " tidak dapat disiapkan.");
+    prepared.push({ id: pending.id, kind, version, html: compiled.html });
+  }
+  try {
+    const published: Array<{
+      id: string;
+      kind: DocumentTemplateKind;
+      version: number;
+      html: string;
+      providerTemplateId: string;
+    }> = [];
+    for (const item of prepared) {
+      const providerTemplateId = await publishToDocGen(item.kind, item.version, item.html);
+      published.push({ ...item, providerTemplateId });
+    }
+    await database.transaction(async (tx) => {
+      for (const item of published) {
+        await tx
+          .update(documentTemplateVersions)
+          .set({ status: "active", providerTemplateId: item.providerTemplateId, activatedAt: new Date() })
+          .where(eq(documentTemplateVersions.id, item.id));
+        await tx
+          .insert(documentTemplateCatalogs)
+          .values({ kind: item.kind, activeVersionId: item.id })
+          .onConflictDoUpdate({
+            target: documentTemplateCatalogs.kind,
+            set: { activeVersionId: item.id, updatedAt: new Date() },
+          });
+      }
+    });
+    return published;
+  } catch (error) {
+    await database.transaction(async (tx) => {
+      for (const item of prepared) {
+        await tx
+          .update(documentTemplateVersions)
+          .set({ status: "failed", failureCode: "shared_shell_publish_failed" })
+          .where(eq(documentTemplateVersions.id, item.id));
+      }
+    });
     throw error;
   }
 }

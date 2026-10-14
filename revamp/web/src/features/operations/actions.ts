@@ -8,6 +8,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/database/client";
 import { moneyCents } from "./invoice-math";
+import { getCustomerProfile, snapshotCustomerProfile } from "./customer-profile-service";
 import {
   auditLogs,
   businessTransactions,
@@ -389,6 +390,9 @@ export async function createTransaction(
     const user = await actor("operations");
     const database = getDatabase();
     if (!database) return { status: "error", message: "Data belum dapat diakses. Coba lagi sesaat lagi." };
+    const customerProfile = await getCustomerProfile(parsed.data.customerId);
+    if (!customerProfile) return { status: "error", message: "Data pelanggan tidak ditemukan." };
+    const customerSnapshot = snapshotCustomerProfile(parsed.data.customerId, customerProfile);
 
     const year = new Date().getFullYear();
     const transaction = await database.transaction(async (tx) => {
@@ -407,6 +411,7 @@ export async function createTransaction(
           .values({
             referenceNo,
             customerId: customer.id,
+            customerSnapshot,
             ownerId: user.id,
             title: parsed.data.title,
             dataClass: "test",
@@ -435,7 +440,13 @@ export async function createTransaction(
       const referenceNo = `TRX-${year}-${String(counter.lastValue).padStart(5, "0")}`;
       const [record] = await tx
         .insert(businessTransactions)
-        .values({ referenceNo, customerId: parsed.data.customerId, ownerId: user.id, title: parsed.data.title })
+        .values({
+          referenceNo,
+          customerId: parsed.data.customerId,
+          customerSnapshot,
+          ownerId: user.id,
+          title: parsed.data.title,
+        })
         .returning({ id: businessTransactions.id });
 
       if (!record) throw new Error("Transaksi belum dapat disimpan.");

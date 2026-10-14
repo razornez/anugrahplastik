@@ -1,4 +1,5 @@
 import { z } from "zod";
+import clientLogoCatalog from "../../../scripts/release/client-logo-catalog.json";
 
 export const LANDING_CONTENT_KEY = "landing.page";
 
@@ -82,7 +83,7 @@ export const landingContentSchema = z.object({
     filters: z.array(portfolioFilterSchema).min(1).max(8),
     items: z.array(portfolioItemSchema).min(1).max(60),
   }),
-  trust: z.object({ title: shortText, description: longText, partners: z.array(partnerSchema).max(24) }),
+  trust: z.object({ title: shortText, description: longText, partners: z.array(partnerSchema).max(48) }),
   faq: z.object({
     title: shortText,
     description: longText,
@@ -472,15 +473,13 @@ export const defaultLandingContent: LandingContent = {
     title: "Dipercaya oleh klien lintas industri",
     description:
       "Dari industri tekstil dan otomotif sampai UMKM kemasan dan pertanian, komponen cetak plastik kami dipakai lintas sektor.",
-    partners: [
-      {
-        name: "Surya Pro",
-        subtitle: "Gudang Garam",
-        imagePath: "/images-webp/portfolio/surya_pro_1.webp",
-        altText: "Produk Surya Pro untuk Gudang Garam",
-        isFeatured: true,
-      },
-    ],
+    partners: clientLogoCatalog.map(({ name, slug }) => ({
+      name,
+      subtitle: "",
+      imagePath: `/images-webp/clients/${slug}.webp`,
+      altText: `Logo ${name}`,
+      isFeatured: false,
+    })),
   },
   faq: {
     title: "Pertanyaan yang biasanya muncul sebelum mulai.",

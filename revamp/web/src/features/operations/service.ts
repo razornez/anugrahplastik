@@ -23,6 +23,7 @@ import {
 import { getDatabase } from "@/lib/database/client";
 import { decodeTimeCursor, encodeTimeCursor } from "@/lib/pagination/cursor";
 import { calculateQuote } from "./quote-math";
+import { formatCustomerAddress, type TransactionCustomerSnapshot } from "./customer-profile";
 import { transactionWorkspace } from "./transaction-workspace";
 
 export const masterKinds = ["customers", "suppliers", "materials", "products", "moulds", "designs"] as const;
@@ -581,10 +582,11 @@ export async function getDesignFile(id: string) {
 export async function getTransactionDetail(id: string) {
   const database = getDatabase();
   if (!database) return null;
-  const [header] = await database
+  const [rawHeader] = await database
     .select({
       id: businessTransactions.id,
       customerId: businessTransactions.customerId,
+      customerSnapshot: businessTransactions.customerSnapshot,
       ownerId: businessTransactions.ownerId,
       dataClass: businessTransactions.dataClass,
       referenceNo: businessTransactions.referenceNo,
@@ -599,8 +601,10 @@ export async function getTransactionDetail(id: string) {
       createdAt: businessTransactions.createdAt,
       updatedAt: businessTransactions.updatedAt,
       customerName: customers.displayName,
+      customerLegalName: customers.legalName,
       customerEmail: customers.email,
       customerPhone: customers.phone,
+      customerTaxId: customers.taxId,
       customerAddress: customers.deliveryAddress,
       customerBillingAddress: customers.billingAddress,
       ownerName: users.name,
@@ -609,93 +613,135 @@ export async function getTransactionDetail(id: string) {
     .innerJoin(customers, eq(customers.id, businessTransactions.customerId))
     .leftJoin(users, eq(users.id, businessTransactions.ownerId))
     .where(eq(businessTransactions.id, id));
-  if (!header) return null;
+  if (!rawHeader) return null;
+  const customerSnapshot =
+    rawHeader.customerSnapshot && typeof rawHeader.customerSnapshot === "object"
+      ? (rawHeader.customerSnapshot as TransactionCustomerSnapshot)
+      : null;
+  const snapshotPrimary =
+    customerSnapshot?.contacts.find((contact) => contact.isPrimary) ?? customerSnapshot?.contacts[0];
+  const snapshotDelivery =
+    customerSnapshot?.deliveryAddresses.find((address) => address.id === customerSnapshot.selectedDeliveryAddressId) ??
+    customerSnapshot?.deliveryAddresses.find((address) => address.isDefault);
+  const header = {
+    ...rawHeader,
+    customerName: customerSnapshot?.name || rawHeader.customerName,
+    customerLegalName: customerSnapshot?.name || rawHeader.customerLegalName,
+    customerEmail: snapshotPrimary?.email || rawHeader.customerEmail,
+    customerPhone: snapshotPrimary?.phone || rawHeader.customerPhone,
+    customerTaxId: customerSnapshot?.taxId || rawHeader.customerTaxId,
+    customerAddress: formatCustomerAddress(snapshotDelivery) || rawHeader.customerAddress,
+    customerBillingAddress: formatCustomerAddress(customerSnapshot?.billingAddress) || rawHeader.customerBillingAddress,
+  };
 
-  const [lines, invoices, documents, entries, batches, deliveryRows, deliveryItems, relatedEmails, activity, contacts] =
-    await Promise.all([
-      database
-        .select({ ...getTableColumns(transactionLines), productName: products.name, materialName: materials.name })
-        .from(transactionLines)
-        .leftJoin(products, eq(products.id, transactionLines.productId))
-        .leftJoin(materials, eq(materials.id, transactionLines.materialId))
-        .where(eq(transactionLines.transactionId, id))
-        .orderBy(transactionLines.sortOrder),
-      database
-        .select()
-        .from(transactionInvoices)
-        .where(eq(transactionInvoices.transactionId, id))
-        .orderBy(desc(transactionInvoices.createdAt)),
-      database
-        .select()
-        .from(transactionDocuments)
-        .where(eq(transactionDocuments.transactionId, id))
-        .orderBy(desc(transactionDocuments.createdAt)),
-      database
-        .select({ ...getTableColumns(transactionFinancialEntries), verifiedByName: users.name })
-        .from(transactionFinancialEntries)
-        .leftJoin(users, eq(users.id, transactionFinancialEntries.verifiedBy))
-        .where(eq(transactionFinancialEntries.transactionId, id))
-        .orderBy(desc(transactionFinancialEntries.occurredAt)),
-      database
-        .select({ ...getTableColumns(productionBatches), productName: products.name, mouldName: moulds.name })
-        .from(productionBatches)
-        .leftJoin(products, eq(products.id, productionBatches.productId))
-        .leftJoin(moulds, eq(moulds.id, productionBatches.mouldId))
-        .where(eq(productionBatches.transactionId, id))
-        .orderBy(desc(productionBatches.createdAt)),
-      database.select().from(shipments).where(eq(shipments.transactionId, id)).orderBy(desc(shipments.createdAt)),
-      database
-        .select({
-          shipmentId: shipmentLines.shipmentId,
-          lineId: transactionLines.id,
-          description: transactionLines.description,
-          quantity: shipmentLines.quantity,
-          acceptedQuantity: shipmentLines.acceptedQuantity,
-          logistics: shipmentLines.logistics,
-        })
-        .from(shipmentLines)
-        .innerJoin(transactionLines, eq(transactionLines.id, shipmentLines.transactionLineId))
-        .innerJoin(shipments, eq(shipments.id, shipmentLines.shipmentId))
-        .where(eq(shipments.transactionId, id)),
-      database
-        .select({
-          id: csEmails.id,
-          subject: csEmails.subject,
-          fromAddress: csEmails.fromAddress,
-          receivedAt: csEmails.receivedAt,
-          linkedTransactionId: csEmails.linkedTransactionId,
-        })
-        .from(csEmails)
-        .where(
-          and(
-            eq(csEmails.folder, "inbox"),
-            or(
-              eq(csEmails.linkedTransactionId, id),
-              and(
-                sql`${csEmails.linkedTransactionId} is null`,
-                or(
-                  eq(csEmails.fromAddress, header.customerEmail ?? ""),
-                  ilike(csEmails.subject, `%${header.referenceNo}%`),
-                ),
+  const [
+    lines,
+    invoices,
+    documents,
+    entries,
+    batches,
+    deliveryRows,
+    deliveryItems,
+    relatedEmails,
+    activity,
+    masterContacts,
+  ] = await Promise.all([
+    database
+      .select({ ...getTableColumns(transactionLines), productName: products.name, materialName: materials.name })
+      .from(transactionLines)
+      .leftJoin(products, eq(products.id, transactionLines.productId))
+      .leftJoin(materials, eq(materials.id, transactionLines.materialId))
+      .where(eq(transactionLines.transactionId, id))
+      .orderBy(transactionLines.sortOrder),
+    database
+      .select()
+      .from(transactionInvoices)
+      .where(eq(transactionInvoices.transactionId, id))
+      .orderBy(desc(transactionInvoices.createdAt)),
+    database
+      .select()
+      .from(transactionDocuments)
+      .where(eq(transactionDocuments.transactionId, id))
+      .orderBy(desc(transactionDocuments.createdAt)),
+    database
+      .select({ ...getTableColumns(transactionFinancialEntries), verifiedByName: users.name })
+      .from(transactionFinancialEntries)
+      .leftJoin(users, eq(users.id, transactionFinancialEntries.verifiedBy))
+      .where(eq(transactionFinancialEntries.transactionId, id))
+      .orderBy(desc(transactionFinancialEntries.occurredAt)),
+    database
+      .select({ ...getTableColumns(productionBatches), productName: products.name, mouldName: moulds.name })
+      .from(productionBatches)
+      .leftJoin(products, eq(products.id, productionBatches.productId))
+      .leftJoin(moulds, eq(moulds.id, productionBatches.mouldId))
+      .where(eq(productionBatches.transactionId, id))
+      .orderBy(desc(productionBatches.createdAt)),
+    database.select().from(shipments).where(eq(shipments.transactionId, id)).orderBy(desc(shipments.createdAt)),
+    database
+      .select({
+        shipmentId: shipmentLines.shipmentId,
+        lineId: transactionLines.id,
+        description: transactionLines.description,
+        quantity: shipmentLines.quantity,
+        acceptedQuantity: shipmentLines.acceptedQuantity,
+        logistics: shipmentLines.logistics,
+      })
+      .from(shipmentLines)
+      .innerJoin(transactionLines, eq(transactionLines.id, shipmentLines.transactionLineId))
+      .innerJoin(shipments, eq(shipments.id, shipmentLines.shipmentId))
+      .where(eq(shipments.transactionId, id)),
+    database
+      .select({
+        id: csEmails.id,
+        subject: csEmails.subject,
+        fromAddress: csEmails.fromAddress,
+        receivedAt: csEmails.receivedAt,
+        linkedTransactionId: csEmails.linkedTransactionId,
+      })
+      .from(csEmails)
+      .where(
+        and(
+          eq(csEmails.folder, "inbox"),
+          or(
+            eq(csEmails.linkedTransactionId, id),
+            and(
+              sql`${csEmails.linkedTransactionId} is null`,
+              or(
+                eq(csEmails.fromAddress, header.customerEmail ?? ""),
+                ilike(csEmails.subject, `%${header.referenceNo}%`),
               ),
             ),
           ),
-        )
-        .orderBy(desc(csEmails.receivedAt))
-        .limit(10),
-      database
-        .select({ ...getTableColumns(auditLogs), actorName: users.name })
-        .from(auditLogs)
-        .leftJoin(users, eq(users.id, auditLogs.actorId))
-        .where(sql`${auditLogs.entityType} = 'transaction' and ${auditLogs.entityId} = ${id}`)
-        .orderBy(desc(auditLogs.createdAt))
-        .limit(30),
-      database
-        .select()
-        .from(customerContacts)
-        .where(eq(customerContacts.customerId, header.customerId))
-        .orderBy(desc(customerContacts.isPrimary), customerContacts.name),
-    ]);
+        ),
+      )
+      .orderBy(desc(csEmails.receivedAt))
+      .limit(10),
+    database
+      .select({ ...getTableColumns(auditLogs), actorName: users.name })
+      .from(auditLogs)
+      .leftJoin(users, eq(users.id, auditLogs.actorId))
+      .where(sql`${auditLogs.entityType} = 'transaction' and ${auditLogs.entityId} = ${id}`)
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(30),
+    database
+      .select()
+      .from(customerContacts)
+      .where(eq(customerContacts.customerId, header.customerId))
+      .orderBy(desc(customerContacts.isPrimary), customerContacts.name),
+  ]);
+  const contacts = customerSnapshot?.contacts.length
+    ? customerSnapshot.contacts.map((contact, index) => ({
+        id: contact.id ?? `snapshot-${index}`,
+        customerId: header.customerId,
+        name: contact.name,
+        position: contact.position || null,
+        email: contact.email || null,
+        phone: contact.phone || null,
+        isPrimary: contact.isPrimary,
+        createdAt: header.createdAt,
+        updatedAt: header.updatedAt,
+      }))
+    : masterContacts;
   const calculatedQuote = (() => {
     try {
       return calculateQuote(lines);

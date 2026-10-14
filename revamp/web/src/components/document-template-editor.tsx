@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { restoreDocumentTemplate, saveDocumentTemplate } from "@/features/operations/document-settings-actions";
@@ -72,13 +72,36 @@ export function DocumentTemplateEditor({
 }) {
   const [values, setValues] = useState(initial);
   const [preview, setPreview] = useState<"desktop" | "mobile">("desktop");
-  const summary = useMemo(
-    () =>
-      fields[kind]
-        .filter((field) => !["title", "opening", "footer", "signatureLabel"].includes(field.name))
-        .slice(0, 3),
-    [kind],
-  );
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [previewError, setPreviewError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/admin/document-templates/preview", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind, config: values }),
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          throw new Error(payload?.message ?? "Pratinjau belum dapat dibuat.");
+        }
+        setPreviewHtml(await response.text());
+        setPreviewError("");
+      } catch (previewFailure) {
+        if (previewFailure instanceof DOMException && previewFailure.name === "AbortError") return;
+        setPreviewError(previewFailure instanceof Error ? previewFailure.message : "Pratinjau belum dapat dibuat.");
+      }
+    }, 320);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [kind, values]);
   return (
     <div className="document-template-editor-layout">
       <form action={saveDocumentTemplate} className="document-template-editor-form">
@@ -148,57 +171,17 @@ export function DocumentTemplateEditor({
           </div>
         </header>
         <div className="document-template-preview-frame" data-size={preview}>
-          <article>
-            <div className="document-preview-brand">
-              <span>AP</span>
-              <strong>
-                ANUGRAH PLASTIK<small>Dokumen resmi</small>
-              </strong>
-            </div>
-            <p className="document-preview-no">
-              No. {kind === "invoice" ? "INV" : kind === "delivery" ? "SJ" : kind === "handover" ? "STB" : "SP"}
-              /AMB/001/X/2026
+          {previewError ? (
+            <p className="integration-error" role="alert">
+              {previewError}
             </p>
-            <h3>{String(values.title ?? "")}</h3>
-            <p>{String(values.opening ?? "")}</p>
-            <dl>
-              <div>
-                <dt>Pelanggan</dt>
-                <dd>PT Pelanggan Contoh</dd>
-              </div>
-              <div>
-                <dt>Tanggal</dt>
-                <dd>14 Oktober 2026</dd>
-              </div>
-            </dl>
-            <table>
-              <thead>
-                <tr>
-                  <th>Uraian</th>
-                  <th>Jumlah</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Produk plastik contoh</td>
-                  <td>100 pcs</td>
-                  <td>Rp1.500.000</td>
-                </tr>
-              </tbody>
-            </table>
-            {summary.map((field) => (
-              <p className="document-preview-term" key={field.name}>
-                <strong>{field.label}</strong>
-                {String(values[field.name] ?? "Belum tersedia")}
-              </p>
-            ))}
-            <div className="document-preview-signature">
-              <span>{String(values.signatureLabel ?? "")}</span>
-              <strong>Nama penanda tangan</strong>
-            </div>
-            <footer>{String(values.footer ?? "")}</footer>
-          </article>
+          ) : previewHtml ? (
+            <iframe sandbox="" srcDoc={previewHtml} title={`Pratinjau ${documentTemplateLabels[kind]}`} />
+          ) : (
+            <p className="document-template-preview-loading" role="status">
+              Menyiapkan pratinjau PDF…
+            </p>
+          )}
         </div>
         {versions.length ? (
           <details className="document-template-history">

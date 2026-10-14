@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { saveQuoteDraft } from "@/features/operations/workflow-actions";
 import { calculateQuote, type QuoteLineInput } from "@/features/operations/quote-math";
 import { type QuotationLetter } from "@/features/operations/quotation-letter";
+import { useTransactionDraft } from "@/components/use-transaction-draft";
 
 const blankLine = (): QuoteLineInput => ({
   description: "",
@@ -50,6 +51,26 @@ export function TransactionQuoteEditor({
 }) {
   const [lines, setLines] = useState<QuoteLineInput[]>(initialLines.length ? initialLines : [blankLine()]);
   const [letter, setLetter] = useState(initialLetter);
+  const [targetDate, setTargetDate] = useState(initialTargetDate);
+  const initialDraft = useMemo(
+    () => ({
+      lines: initialLines.length ? initialLines : [blankLine()],
+      letter: initialLetter,
+      targetDate: initialTargetDate,
+    }),
+    [initialLetter, initialLines, initialTargetDate],
+  );
+  const restoreDraft = useCallback((draft: typeof initialDraft) => {
+    setLines(draft.lines);
+    setLetter(draft.letter);
+    setTargetDate(draft.targetDate);
+  }, []);
+  const { restored, discard } = useTransactionDraft({
+    key: transactionId + ":quote",
+    value: { lines, letter, targetDate },
+    initial: initialDraft,
+    restore: restoreDraft,
+  });
   const preview = useMemo(() => {
     try {
       const quote = calculateQuote(lines);
@@ -80,6 +101,14 @@ export function TransactionQuoteEditor({
       <input name="transactionId" type="hidden" value={transactionId} />
       <input name="lines" type="hidden" value={JSON.stringify(lines)} />
       <input name="letter" type="hidden" value={JSON.stringify(letter)} />
+      {restored ? (
+        <div className="transaction-draft-restored" role="status">
+          <span>Draft belum disimpan dipulihkan.</span>
+          <button onClick={discard} type="button">
+            Buang draft
+          </button>
+        </div>
+      ) : null}
       <div className="transaction-quote-editor__heading">
         <div>
           <p className="eyebrow">Isi penawaran</p>
@@ -313,7 +342,12 @@ export function TransactionQuoteEditor({
       <div className="transaction-quote-editor__bottom">
         <label>
           Target pekerjaan
-          <input defaultValue={initialTargetDate} name="targetDate" type="date" />
+          <input
+            name="targetDate"
+            onChange={(event) => setTargetDate(event.target.value)}
+            type="date"
+            value={targetDate}
+          />
         </label>
         <dl className="transaction-quote-editor__totals" aria-live="polite">
           <div>

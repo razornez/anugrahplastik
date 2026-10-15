@@ -20,7 +20,7 @@ test_backup() { [[ -s "$backup_manifest" && -s "$restore_proof" ]] && find "$res
 test_secrets() {
   local file=/etc/anugrahplastik/web.env
   [[ -r "$file" ]] || return 1
-  for key in DATABASE_URL SESSION_SECRET DOCGEN_API_KEY; do
+  for key in DATABASE_URL AUTH_SECRET DOCGEN_API_KEY; do
     grep -Eq "^${key}=.+" "$file" || return 1
   done
 }

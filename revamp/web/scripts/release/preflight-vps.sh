@@ -62,8 +62,8 @@ test_memory() {
 }
 test_services() {
   systemctl is-active --quiet anugrahplastik-web nginx postgresql
-  curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3050/api/health | grep -Eq '"status"[[:space:]]*:[[:space:]]*"(ok|healthy)"'
-  curl --fail --silent --show-error --max-time 8 https://anugrahplastik.com/ | grep -qi 'Anugrah Plastik'
+  curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3050/api/health | grep -E '"status"[[:space:]]*:[[:space:]]*"(ok|healthy)"' >/dev/null
+  curl --fail --silent --show-error --max-time 8 https://anugrahplastik.com/ | grep -i 'Anugrah Plastik' >/dev/null
 }
 
 gate 'Artefak rilis dapat dibaca' test_artifact

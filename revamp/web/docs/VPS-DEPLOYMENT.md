@@ -22,8 +22,10 @@ dan perubahan DNS tetap merupakan gate terpisah.
    disk, inode, port, unit aktif, ukuran release, serta ukuran database per
    database. Jangan restart atau membersihkan layanan lain.
 2. Pastikan setelah menyisakan release aktif, satu rollback, backup DB+media,
-   dan cushion 5 GiB, disk masih aman. RAM headroom harus stabil minimal 2 GiB
-   tanpa swap yang bertambah. Bila gagal, tunda cutover.
+   dan cushion kapasitas, disk masih aman. RAM tersedia harus melebihi puncak
+   tambahan yang **diukur** untuk rilis ini dan swap tidak boleh bertambah.
+   Jalankan `ops/preflight-vps.sh` secara baca-saja dengan nilai pengukuran itu;
+   jangan memakai ambang 2 GiB universal. Bila satu gerbang gagal, tunda cutover.
 3. Buat backup pasangan database dan media lokal. Unduh ulang, cocokkan
    checksum, lalu restore ke database terisolasi dan uji login, konten, file
    privat, transaksi, Finance, serta Email CS cache.

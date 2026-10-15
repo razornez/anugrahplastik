@@ -1,16 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Hanken_Grotesk, Space_Mono } from "next/font/google";
+import "@fontsource-variable/archivo/wght.css";
+import "@fontsource-variable/hanken-grotesk/wght.css";
+import "@fontsource/space-mono/latin-400.css";
+import "@fontsource/space-mono/latin-700.css";
 import { SITE_ORIGIN, socialMetadata } from "@/features/marketing/site-metadata";
 import "./globals.css";
 import "./landing-template.css";
-
-const heading = Archivo({
-  variable: "--font-archivo",
-  subsets: ["latin"],
-  weight: ["500", "600", "700", "800", "900"],
-});
-const sans = Hanken_Grotesk({ variable: "--font-hanken", subsets: ["latin"], weight: ["400", "500", "600", "700"] });
-const mono = Space_Mono({ variable: "--font-space", subsets: ["latin"], weight: ["400", "700"] });
 
 const defaultTitle = "Cetak Plastik Custom Tanpa Minimum Order | Anugrah Plastik Bandung";
 const defaultDescription =
@@ -38,7 +33,7 @@ export const viewport: Viewport = { themeColor: "#0b2442", viewportFit: "cover" 
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html data-scroll-behavior="smooth" lang="id" className={`${heading.variable} ${sans.variable} ${mono.variable}`}>
+    <html data-scroll-behavior="smooth" lang="id">
       <body>{children}</body>
     </html>
   );

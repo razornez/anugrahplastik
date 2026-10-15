@@ -12,18 +12,12 @@ import { userNotifications } from "@/lib/database/schema";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { DM_Sans, Poppins } from "next/font/google";
+import "@fontsource-variable/dm-sans/wght.css";
+import "@fontsource/poppins/latin-600.css";
+import "@fontsource/poppins/latin-700.css";
+import "@fontsource/poppins/latin-800.css";
 import "./admin-home.css";
 import "./admin-design.css";
-
-const adminUi = DM_Sans({ subsets: ["latin"], variable: "--font-admin-ui", display: "swap" });
-const adminDisplay = Poppins({
-  subsets: ["latin"],
-  weight: ["600", "700", "800"],
-  variable: "--font-admin-display",
-  display: "swap",
-});
-const adminFonts = `${adminUi.variable} ${adminDisplay.variable}`;
 
 export const instant = false;
 
@@ -40,7 +34,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
 
   if (!session) {
     return (
-      <main className={`${adminFonts} admin-shell admin-shell--public`} data-theme={theme}>
+      <main className="admin-shell admin-shell--public" data-theme={theme}>
         <TransactionListCacheScope userId={null} />
         <AdminToastProvider>{children}</AdminToastProvider>
       </main>
@@ -58,7 +52,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
 
   return (
     <AdminInstallProvider>
-      <main className={`${adminFonts} admin-shell`} data-theme={theme}>
+      <main className="admin-shell" data-theme={theme}>
         <TransactionListCacheScope userId={session.id} />
         <AdminSidebar name={session.name} role={session.role} onLogout={logout} initialTheme={theme} />
         <AdminToastProvider>

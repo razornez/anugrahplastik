@@ -1,5 +1,7 @@
 /* Admin-only design system. Public landing styles stay in globals.css. */
 .admin-shell {
+  --font-admin-ui: "DM Sans Variable";
+  --font-admin-display: "Poppins";
   --admin-font-ui: var(--font-admin-ui), ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --admin-font-display: var(--font-admin-display), var(--admin-font-ui);
   --admin-font: var(--admin-font-ui);

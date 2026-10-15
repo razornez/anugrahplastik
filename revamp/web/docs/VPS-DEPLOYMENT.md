@@ -63,6 +63,10 @@ dan perubahan DNS tetap merupakan gate terpisah.
    baru berpindah dalam satu transaksi setelah seluruh PDF valid; bila satu
    gagal, versi aktif sebelumnya tetap dipakai. Jangan menaruh API key pada
    command line atau history.
+   Untuk revisi satu jenis yang sudah aktif, tambahkan
+   `DOCUMENT_TEMPLATE_KIND=delivery` (atau jenis lain yang valid). Konfigurasi
+   versi aktif tetap dipertahankan; hanya pointer jenis tersebut yang berpindah
+   setelah smoke render. Periksa checksum dan hasil PDF sebelum cutover.
 7. Setelah smoke canary lulus, arahkan symlink `current` ke release baru lalu
    mulai web dan worker analitik. Jalankan kembali
    `bash scripts/release/smoke-release.sh http://127.0.0.1:3050` dan pastikan

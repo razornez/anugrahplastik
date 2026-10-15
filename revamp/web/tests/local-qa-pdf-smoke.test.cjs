@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
-const { readFileSync } = require("node:fs");
+const { existsSync, readFileSync } = require("node:fs");
 const { mkdir, writeFile } = require("node:fs/promises");
 const { join, resolve } = require("node:path");
 const test = require("node:test");
@@ -65,17 +65,34 @@ function render(templateId, data) {
   });
 }
 
-test("four official local templates render anonymous PDFs without external services", async () => {
+test("four official templates retain their document and print contracts", () => {
   for (const [kind, filename] of templates) {
     const html = readFileSync(resolve("docs/templates", filename), "utf8");
-    const bytes = await render(`local_qa:${kind}`, anonymousData(kind, html));
-    assert.equal(bytes.subarray(0, 5).toString(), "%PDF-");
-    const pdf = await PDFDocument.load(bytes);
-    assert.ok(pdf.getPageCount() >= 1, `${kind} has a page`);
-    if (process.env.KEEP_PDF_SMOKE === "1") {
-      const output = resolve("tmp/pdfs");
-      await mkdir(output, { recursive: true });
-      await writeFile(join(output, `${kind.toLowerCase()}-smoke.pdf`), bytes);
-    }
+    assert.match(html, /<html/i, `${kind} is an HTML document`);
+    assert.match(html, /@page|page-break|break-inside/i, `${kind} has print rules`);
+    assert.match(html, /{{{?\s*[a-zA-Z0-9_.]+\s*}?}}/, `${kind} has data placeholders`);
+    assert.doesNotMatch(html, /<script\b|javascript:|on[a-z]+\s*=/i, `${kind} has no executable HTML`);
   }
 });
+
+const rendererPath = resolve("../../../docgen/packages/renderer/dist/index.js");
+test(
+  "four official local templates render anonymous PDFs without external services",
+  {
+    skip: !existsSync(rendererPath) && "The separate DocGen QA renderer is not installed on this runner",
+  },
+  async () => {
+    for (const [kind, filename] of templates) {
+      const html = readFileSync(resolve("docs/templates", filename), "utf8");
+      const bytes = await render(`local_qa:${kind}`, anonymousData(kind, html));
+      assert.equal(bytes.subarray(0, 5).toString(), "%PDF-");
+      const pdf = await PDFDocument.load(bytes);
+      assert.ok(pdf.getPageCount() >= 1, `${kind} has a page`);
+      if (process.env.KEEP_PDF_SMOKE === "1") {
+        const output = resolve("tmp/pdfs");
+        await mkdir(output, { recursive: true });
+        await writeFile(join(output, `${kind.toLowerCase()}-smoke.pdf`), bytes);
+      }
+    }
+  },
+);

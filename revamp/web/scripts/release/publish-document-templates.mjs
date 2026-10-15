@@ -8,6 +8,7 @@ import pg from "pg";
 const confirmation = process.env.DOCUMENT_TEMPLATE_RELEASE_CONFIRM;
 const connectionString = process.env.DATABASE_URL;
 const apiKey = process.env.DOCGEN_API_KEY;
+const selectedKind = process.env.DOCUMENT_TEMPLATE_KIND || null;
 
 if (confirmation !== "publish-official-v1") {
   console.error("Refusing to publish without DOCUMENT_TEMPLATE_RELEASE_CONFIRM=publish-official-v1.");
@@ -77,6 +78,11 @@ const templates = {
     },
   },
 };
+
+if (selectedKind && !Object.hasOwn(templates, selectedKind)) {
+  console.error("DOCUMENT_TEMPLATE_KIND must be quotation, invoice, delivery, or handover.");
+  process.exit(2);
+}
 
 const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
 
@@ -187,8 +193,10 @@ async function publish(kind, template, html) {
   return templateId;
 }
 
+const kinds = selectedKind ? [selectedKind] : Object.keys(templates);
 const prepared = [];
-for (const [kind, template] of Object.entries(templates)) {
+for (const kind of kinds) {
+  const template = templates[kind];
   const html = await readFile(resolve(process.cwd(), "docs/templates", template.file), "utf8");
   if (/<script\b|javascript:|on[a-z]+\s*=/i.test(html)) throw new Error(`Template ${kind} tidak aman.`);
   const providerTemplateId = await publish(kind, template, html);
@@ -211,6 +219,12 @@ try {
   const actorId = actor.rows[0]?.id ?? null;
   for (const item of prepared) {
     await client.query("select kind from document_template_catalogs where kind = $1 for update", [item.kind]);
+    const current = await client.query(
+      `select v.config from document_template_catalogs c
+       join document_template_versions v on v.id = c.active_version_id
+       where c.kind = $1`,
+      [item.kind],
+    );
     const latest = await client.query(
       "select coalesce(max(version), 0)::integer as version from document_template_versions where kind = $1",
       [item.kind],
@@ -220,7 +234,14 @@ try {
       `insert into document_template_versions
         (kind, version, config, compiled_checksum, provider_template_id, status, created_by, activated_at)
        values ($1, $2, $3::jsonb, $4, $5, 'active', $6, now()) returning id`,
-      [item.kind, version, JSON.stringify(item.config), item.checksum, item.providerTemplateId, actorId],
+      [
+        item.kind,
+        version,
+        JSON.stringify(current.rows[0]?.config ?? item.config),
+        item.checksum,
+        item.providerTemplateId,
+        actorId,
+      ],
     );
     await client.query(
       `insert into document_template_catalogs (kind, active_version_id)
@@ -241,7 +262,7 @@ try {
     ],
   );
   await client.query("commit");
-  process.stdout.write("Empat template resmi aktif dalam satu transaksi database.\n");
+  process.stdout.write(`${prepared.length} template resmi aktif dalam satu transaksi database.\n`);
 } catch (error) {
   await client.query("rollback");
   throw error;

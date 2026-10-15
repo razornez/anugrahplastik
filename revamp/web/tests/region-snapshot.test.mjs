@@ -21,9 +21,11 @@ test("bundled Indonesian region snapshot is complete and has valid hierarchy", (
   assert.ok(snapshot.rows.some(([code]) => code.startsWith("32.73.")));
 });
 
-test("release package includes the offline region importer and snapshot", () => {
+test("release package includes offline regions and emergency Admin recovery", () => {
   const file = new URL("../scripts/release/package-linux.sh", import.meta.url);
   const source = readFileSync(file, "utf8");
   assert.match(source, /scripts\/import-indonesia-regions\.mjs/);
   assert.match(source, /scripts\/data\/indonesia-regions-493bd1\.json\.gz/);
+  assert.match(source, /scripts\/admin-auth-cli\.mjs/);
+  assert.match(source, /node_modules\/bcryptjs/);
 });

@@ -125,6 +125,10 @@ test("Local workflow: concurrent payment, roles, cancelled invoice, partial rece
       "insert into transaction_lines(id,transaction_id,description,quantity,unit,unit_price,tax_rate,tax_method,discount_kind,discount_value) values($1,$2,'[UJI] Spacer',100,'pcs',10,0,'none','none',0)",
       [lineId, transactionId],
     );
+    await pools[0].query(
+      "insert into production_batches(transaction_id,transaction_line_id,batch_no,kind,status,planned_quantity,completed_quantity,completed_at) values($1,$2,$3,'production','completed',100,100,now())",
+      [transactionId, lineId, `QA-BATCH-${transactionId.slice(0, 8)}`],
+    );
     for (const [suffix, amount, status, kind] of [
       ["DP", 200, "paid", "dp"],
       ["FINAL", 800, "sent", "final"],
@@ -252,6 +256,7 @@ test("Local workflow: concurrent payment, roles, cancelled invoice, partial rece
           transactionId,
           recipient: "[UJI] Penerima",
           address: "[UJI] Alamat lokal",
+          plannedShipAt: "2026-10-15T11:00",
           items: JSON.stringify([{ lineId, quantity: "21", logistics: blankLogistics }]),
         }),
       ),
@@ -263,6 +268,7 @@ test("Local workflow: concurrent payment, roles, cancelled invoice, partial rece
           transactionId,
           recipient: "[UJI] Penerima",
           address: "[UJI] Alamat lokal",
+          plannedShipAt: "2026-10-15T11:00",
           items: JSON.stringify([{ lineId, quantity: "20", logistics: blankLogistics }]),
         }),
       ),

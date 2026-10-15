@@ -7,6 +7,10 @@ import { TransactionQuoteEditor } from "@/components/transaction-quote-editor";
 import { TransactionShipmentForm } from "@/components/transaction-shipment-form";
 import { TransactionInvoiceForm } from "@/components/transaction-invoice-form";
 import { TransactionHandoverForm } from "@/components/transaction-handover-form";
+import { TransactionActionFeedback } from "@/components/transaction-action-feedback";
+import { TransactionDesignFiles } from "@/components/transaction-design-files";
+import { UncontrolledRupiahInput } from "@/components/rupiah-input";
+import { TransactionManagement } from "@/components/transaction-management";
 import { CustomerDocumentProfileSheet } from "@/components/customer-document-profile-sheet";
 import { TransactionPaymentAttention } from "./transaction-payment-attention";
 import {
@@ -27,9 +31,12 @@ import {
   localQaRendererEnabled,
 } from "@/features/operations/docgen-policy";
 import { getTransactionDetail } from "@/features/operations/service";
+import { getTransactionDeletionImpact } from "@/features/operations/transaction-deletion";
 import { transactionStepStates, workspaceMoney } from "@/features/operations/transaction-workspace";
 import { readDeliveryDetails, readShipmentLogistics } from "@/features/operations/delivery-note";
-import { acceptedAmount, committedAmount, handoverDetailsSchema } from "@/features/operations/handover-note";
+import type { TransactionCustomerSnapshot } from "@/features/operations/customer-profile";
+import { shipmentAvailableByLine } from "@/features/operations/shipment-stock";
+import { acceptedAmount, handoverDetailsSchema } from "@/features/operations/handover-note";
 import { readQuotationLetter, type QuotationTemplateDefaults } from "@/features/operations/quotation-letter";
 import { getActiveDocumentTemplate, type DocumentTemplateKind } from "@/features/operations/document-templates";
 import {
@@ -52,6 +59,7 @@ import {
   generateQuotation,
   linkTransactionEmail,
   markShipmentSent,
+  mapProductionBatchToLine,
   retryDocumentGeneration,
   saveProductionTargetDate,
 } from "@/features/operations/workflow-actions";
@@ -847,7 +855,7 @@ function PaymentStep({
           <input name="operationKey" type="hidden" value={randomUUID()} />
           <label>
             Jumlah yang dikonfirmasi (Rp)
-            <input min="0.01" name="amount" required step="0.01" type="number" />
+            <UncontrolledRupiahInput name="amount" required placeholder="Rp 0" />
           </label>
           <label>
             Bukti transfer
@@ -1014,8 +1022,29 @@ function ProductionStep({ transaction, isAdmin }: { transaction: Transaction; is
               {batch.status === "completed" ? "Selesai" : "Direncanakan"}
             </span>
             <small>
-              Rencana {number(batch.plannedQuantity)} · selesai {number(batch.completedQuantity)}
+              {transaction.lines.find((line) => line.id === batch.transactionLineId)?.description ??
+                "Item belum ditautkan"}
+              {" · "}Rencana {number(batch.plannedQuantity)} · selesai {number(batch.completedQuantity)}
             </small>
+            {isAdmin && !batch.transactionLineId && transaction.lines.length > 1 ? (
+              <form action={mapProductionBatchToLine} className={styles.batchCompleteForm}>
+                <input name="batchId" type="hidden" value={batch.id} />
+                <label className={styles.batchCompleteField}>
+                  Item penawaran untuk batch lama
+                  <select defaultValue="" name="lineId" required>
+                    <option disabled value="">
+                      Pilih item yang dikerjakan
+                    </option>
+                    {transaction.lines.map((line) => (
+                      <option key={line.id} value={line.id}>
+                        {line.description}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button type="submit">Tautkan item</button>
+              </form>
+            ) : null}
             {isAdmin && batch.status !== "completed" ? (
               <form
                 action={completeProductionBatch}
@@ -1049,6 +1078,23 @@ function ProductionStep({ transaction, isAdmin }: { transaction: Transaction; is
             <form action={createProductionBatch} className="transaction-flow-form">
               <input name="transactionId" type="hidden" value={transaction.header.id} />
               <label>
+                Barang atau jasa
+                <select
+                  defaultValue={transaction.lines.length === 1 ? transaction.lines[0].id : ""}
+                  name="lineId"
+                  required
+                >
+                  <option disabled value="">
+                    Pilih item penawaran
+                  </option>
+                  {transaction.lines.map((line) => (
+                    <option key={line.id} value={line.id}>
+                      {line.description}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 Jenis pekerjaan
                 <select name="kind">
                   <option value="sample">Sampel</option>
@@ -1079,19 +1125,19 @@ function DeliveryStep({
   templateReady: boolean;
   documentsHref: string;
 }) {
-  const shippedByLine = new Map<string, number>();
-  transaction.shipmentItems.forEach((item) => {
-    const shipment = transaction.shipments.find((entry) => entry.id === item.shipmentId)!;
-    shippedByLine.set(
-      item.lineId,
-      (shippedByLine.get(item.lineId) ?? 0) + committedAmount(shipment.status, item.quantity, item.acceptedQuantity),
-    );
-  });
+  const allocations = transaction.shipmentItems.map((item) => ({
+    lineId: item.lineId,
+    shipmentId: item.shipmentId,
+    quantity: item.quantity,
+    acceptedQuantity: item.acceptedQuantity,
+    status: transaction.shipments.find((shipment) => shipment.id === item.shipmentId)?.status,
+  }));
+  const available = shipmentAvailableByLine(transaction.lines, transaction.batches, allocations);
   const shipmentLines = transaction.lines.map((line) => ({
     id: line.id,
     description: line.description,
     unit: line.unit,
-    remaining: Math.max(0, Number(line.quantity) - (shippedByLine.get(line.id) ?? 0)),
+    remaining: available.get(line.id) ?? 0,
   }));
   return (
     <div className="transaction-flow-stack">
@@ -1106,10 +1152,12 @@ function DeliveryStep({
           <p className="transaction-flow-empty">Pekerjaan perlu dilepas ke produksi sebelum pengiriman disiapkan.</p>
         ) : (
           <TransactionShipmentForm
+            key={`new-${transaction.shipments.length}`}
             transactionId={transaction.header.id}
             lines={shipmentLines}
             customerName={transaction.header.customerName}
             customerAddress={transaction.header.customerAddress ?? ""}
+            customerSnapshot={transaction.header.customerSnapshot as TransactionCustomerSnapshot | null}
           />
         )}
       </section>
@@ -1170,10 +1218,14 @@ function DeliveryStep({
                       lines={shipmentLines.map((line) => ({
                         ...line,
                         remaining:
-                          line.remaining + Number(currentItems.find((item) => item.lineId === line.id)?.quantity ?? 0),
+                          shipmentAvailableByLine(transaction.lines, transaction.batches, allocations, shipment.id).get(
+                            line.id,
+                          ) ?? 0,
                       }))}
                       customerName={shipment.recipientName ?? transaction.header.customerName}
                       customerAddress={shipment.deliveryAddress ?? transaction.header.customerAddress ?? ""}
+                      customerSnapshot={transaction.header.customerSnapshot as TransactionCustomerSnapshot | null}
+                      initialPlannedShipAt={shipment.plannedShipAt}
                       initialDetails={readDeliveryDetails(shipment.deliveryDetails)}
                       initialItems={currentItems.map((item) => ({
                         lineId: item.lineId,
@@ -1442,6 +1494,7 @@ export default async function TransactionDetailPage({
     ),
   ]);
   if (!transaction) notFound();
+  const deletionImpact = user.role === "admin" ? await getTransactionDeletionImpact(id) : null;
   const suggested = latestStep(transaction);
   const requested =
     query.step ??
@@ -1457,7 +1510,9 @@ export default async function TransactionDetailPage({
   const returnTo = query.returnTo?.startsWith("/admin/transactions?") ? query.returnTo : "/admin/transactions";
   const stepStates = transactionStepStates(transaction, transaction.workspace);
   const readonly =
-    transaction.header.fulfilmentStatus === "completed" || transaction.header.commercialStatus === "cancelled";
+    Boolean(transaction.header.archivedAt) ||
+    transaction.header.fulfilmentStatus === "completed" ||
+    transaction.header.commercialStatus === "cancelled";
   const recommended = transaction.workspace.pendingPayment ? "payment" : suggested;
   const recommendedLabel = steps.find((step) => step.id === recommended)!.label;
   const ContinueLink = active === recommended ? "a" : Link;
@@ -1495,7 +1550,9 @@ export default async function TransactionDetailPage({
     "email-linked": "Email ditautkan ke transaksi ini.",
     "batch-created": "Rencana sampel atau batch tersimpan.",
     "batch-completed": "Jumlah selesai dicatat.",
+    "batch-mapped": "Batch lama sudah ditautkan ke item penawaran. Stok kirim dihitung ulang.",
     "target-saved": "Tanggal target pekerjaan tersimpan. Pemeriksaan produksi sudah diperbarui.",
+    "title-updated": "Judul pekerjaan diperbarui. Dokumen dan email yang sudah terbit tidak berubah.",
     "target-invalid": "Tanggal target tidak valid. Pilih tanggal pada formulir di langkah Produksi.",
     "target-unavailable":
       "Tanggal target belum dapat disimpan. Muat ulang halaman dan periksa apakah transaksi masih aktif.",
@@ -1507,6 +1564,13 @@ export default async function TransactionDetailPage({
 
   return (
     <section className={`transaction-flow-page ${styles.detail}`}>
+      <TransactionActionFeedback
+        message={query.notice ? notices[query.notice] : undefined}
+        notice={query.notice}
+        transactionId={id}
+        userId={user.id}
+        step={active}
+      />
       <AdminPageHeader
         title={transaction.header.title}
         description={`${transaction.header.referenceNo} · ${transaction.header.customerName} · Penanggung jawab: ${transaction.header.ownerName ?? "Belum ditentukan"}`}
@@ -1528,13 +1592,17 @@ export default async function TransactionDetailPage({
           </span>
         }
       />
+      <TransactionManagement
+        id={id}
+        referenceNo={transaction.header.referenceNo}
+        title={transaction.header.title}
+        step={active}
+        isAdmin={user.role === "admin"}
+        archived={Boolean(transaction.header.archivedAt)}
+        deletionImpact={deletionImpact}
+      />
       {transaction.header.dataClass !== "production" ? (
         <p className="transaction-flow-notice">Transaksi uji atau contoh, bukan pelanggan nyata.</p>
-      ) : null}
-      {query.notice && notices[query.notice] ? (
-        <p className="transaction-flow-notice" role="status">
-          {notices[query.notice]}
-        </p>
       ) : null}
       {query.email === "sent" ? (
         <p className="transaction-flow-notice" role="status">
@@ -1706,8 +1774,22 @@ export default async function TransactionDetailPage({
                   transaction={transaction}
                 />
               ) : null}
+              {query.notice && notices[query.notice] ? (
+                <p
+                  className="transaction-inline-result"
+                  data-tone={
+                    /(?:check|invalid|unavailable|not-ready|pending-review)/.test(query.notice) ? "error" : "success"
+                  }
+                  role={
+                    /(?:check|invalid|unavailable|not-ready|pending-review)/.test(query.notice) ? "alert" : "status"
+                  }
+                >
+                  {notices[query.notice]}
+                </p>
+              ) : null}
             </fieldset>
           </section>
+          <TransactionDesignFiles files={transaction.designFiles} />
         </main>
         <aside className="transaction-flow-aside">
           <p className="eyebrow">Informasi pekerjaan</p>

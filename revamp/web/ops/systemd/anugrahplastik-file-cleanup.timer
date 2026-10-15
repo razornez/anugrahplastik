@@ -1,0 +1,10 @@
+[Unit]
+Description=Retry Anugrah Plastik private-file cleanup hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+Unit=anugrahplastik-file-cleanup.service
+
+[Install]
+WantedBy=timers.target

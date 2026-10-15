@@ -1,0 +1,17 @@
+[Unit]
+Description=Anugrah Plastik idempotent private-file cleanup
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=anugrahplastik
+Group=anugrahplastik
+WorkingDirectory=/srv/anugrahplastik/current/app
+EnvironmentFile=/etc/anugrahplastik/web.env
+Environment=NODE_ENV=production
+ExecStart=/opt/anugrahplastik/node/bin/node scripts/release/cleanup-transaction-files.mjs
+TimeoutStartSec=120
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+UMask=0077

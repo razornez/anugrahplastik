@@ -3,6 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useState } from "react";
 import { createFinanceEntry } from "@/features/finance/actions";
+import { UncontrolledRupiahInput } from "@/components/rupiah-input";
 import styles from "./finance.module.css";
 
 type Account = { id: string; name: string };
@@ -90,7 +91,7 @@ export function FinanceComposer({ accounts, categories, suppliers, defaultDate }
                   </label>
                   <label>
                     Nominal
-                    <input name="amount" inputMode="decimal" required placeholder="0" />
+                    <UncontrolledRupiahInput name="amount" required placeholder="Rp 0" />
                   </label>
                   <label>
                     Tanggal

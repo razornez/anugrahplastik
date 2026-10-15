@@ -45,6 +45,7 @@ import {
 import { invoiceRenderData } from "./invoice-render-data";
 import { invoiceIssuerIsReady } from "./invoice-settings";
 import { readInvoiceLogo } from "./invoice-logo";
+import { shipmentAvailableByLine } from "./shipment-stock";
 import { appendQuotationAttachments, type QuotationAttachment } from "./quotation-attachments";
 import { assertDocGenTestTransaction, renderDocGenPdf } from "./docgen";
 import {
@@ -107,6 +108,43 @@ function field(formData: FormData, name: string) {
   return String(formData.get(name) ?? "").trim();
 }
 
+class ShipmentInlineFieldError extends Error {
+  constructor(
+    message: string,
+    readonly fieldName: string,
+  ) {
+    super(message);
+  }
+}
+
+function validateShipmentSnapshotSources(
+  details: { recipientContactId: string; deliveryAddressId: string },
+  value: unknown,
+) {
+  if (!details.recipientContactId && !details.deliveryAddressId) return;
+  const snapshot = value && typeof value === "object" ? (value as TransactionCustomerSnapshot) : null;
+  const contacts = snapshot?.contacts ?? [];
+  const addresses = snapshot?.deliveryAddresses ?? [];
+  if (
+    details.recipientContactId &&
+    !contacts.some((contact, index) => (contact.id ?? `snapshot-${index}`) === details.recipientContactId)
+  ) {
+    throw new ShipmentInlineFieldError(
+      "PIC pilihan tidak lagi tersedia pada data transaksi. Pilih ulang penerima.",
+      "recipient",
+    );
+  }
+  if (
+    details.deliveryAddressId &&
+    !addresses.some((address, index) => (address.id ?? `snapshot-${index}`) === details.deliveryAddressId)
+  ) {
+    throw new ShipmentInlineFieldError(
+      "Alamat pilihan tidak lagi tersedia pada data transaksi. Pilih ulang alamat.",
+      "address",
+    );
+  }
+}
+
 const shipmentItemSchema = z.object({
   lineId: z.string().uuid(),
   quantity: z.string().regex(/^\d{1,7}(?:\.\d{1,3})?$/),
@@ -126,6 +164,8 @@ function parseShipmentForm(formData: FormData) {
   const recipient = z.string().trim().min(2).max(160).parse(field(formData, "recipient"));
   const address = z.string().trim().min(5).max(1000).parse(field(formData, "address"));
   const details = deliveryDetailsSchema.parse({
+    recipientContactId: field(formData, "recipientContactId"),
+    deliveryAddressId: field(formData, "deliveryAddressId"),
     deliveryOrderNo: field(formData, "deliveryOrderNo"),
     senderName: field(formData, "senderName"),
     driverName: field(formData, "driverName"),
@@ -133,7 +173,13 @@ function parseShipmentForm(formData: FormData) {
     vehiclePlate: field(formData, "vehiclePlate"),
     note: field(formData, "note"),
   });
-  return { items, recipient, address, details };
+  const localTime = field(formData, "plannedShipAt");
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(localTime)) {
+    throw new Error("Isi tanggal dan jam rencana pengiriman dalam WIB.");
+  }
+  const plannedShipAt = new Date(`${localTime}:00+07:00`);
+  if (Number.isNaN(plannedShipAt.getTime())) throw new Error("Tanggal dan jam pengiriman tidak valid.");
+  return { items, recipient, address, details, plannedShipAt };
 }
 
 async function operationsUser() {
@@ -951,11 +997,13 @@ export async function createProductionBatch(formData: FormData) {
     .object({
       transactionId: z.string().uuid(),
       kind: z.enum(["sample", "production"]),
+      lineId: z.string().uuid().optional(),
       plannedQuantity: z.string().regex(/^\d{1,7}(?:\.\d{1,3})?$/),
     })
     .parse({
       transactionId: field(formData, "transactionId"),
       kind: field(formData, "kind"),
+      lineId: field(formData, "lineId") || undefined,
       plannedQuantity: field(formData, "plannedQuantity"),
     });
   if (Number(input.plannedQuantity) <= 0) throw new Error("Jumlah harus lebih dari nol.");
@@ -973,6 +1021,14 @@ export async function createProductionBatch(formData: FormData) {
     if (!header || header.fulfilmentStatus === "not_released" || header.fulfilmentStatus === "completed") {
       throw new Error("Lepaskan pekerjaan ke produksi sebelum mencatat sampel atau batch.");
     }
+    const lines = await tx
+      .select({ id: transactionLines.id })
+      .from(transactionLines)
+      .where(eq(transactionLines.transactionId, input.transactionId));
+    const lineId = input.lineId ?? (lines.length === 1 ? lines[0].id : undefined);
+    if (!lineId || !lines.some((line) => line.id === lineId)) {
+      throw new Error("Pilih barang atau jasa yang dikerjakan pada batch ini.");
+    }
     const [count] = await tx
       .select({ total: sql<number>`count(*)` })
       .from(productionBatches)
@@ -980,7 +1036,13 @@ export async function createProductionBatch(formData: FormData) {
     const batchNo = `${header.referenceNo}-${input.kind === "sample" ? "SPL" : "PRD"}-${String(Number(count?.total ?? 0) + 1).padStart(2, "0")}`;
     const [batch] = await tx
       .insert(productionBatches)
-      .values({ transactionId: input.transactionId, batchNo, kind: input.kind, plannedQuantity: input.plannedQuantity })
+      .values({
+        transactionId: input.transactionId,
+        transactionLineId: lineId,
+        batchNo,
+        kind: input.kind,
+        plannedQuantity: input.plannedQuantity,
+      })
       .returning({ id: productionBatches.id });
     await tx
       .update(businessTransactions)
@@ -1034,38 +1096,102 @@ export async function completeProductionBatch(formData: FormData) {
   redirect(transactionPath(result.transactionId, "production", "batch-completed"));
 }
 
+export async function mapProductionBatchToLine(formData: FormData) {
+  const user = await administrator();
+  const batchId = z.string().uuid().parse(field(formData, "batchId"));
+  const lineId = z.string().uuid().parse(field(formData, "lineId"));
+  const database = getDatabase();
+  if (!database) throw new Error("Database belum terhubung.");
+  const transactionId = await database.transaction(async (tx) => {
+    const [batch] = await tx
+      .select({ transactionId: productionBatches.transactionId, lineId: productionBatches.transactionLineId })
+      .from(productionBatches)
+      .where(eq(productionBatches.id, batchId));
+    if (!batch || batch.lineId) throw new Error("Batch sudah ditautkan atau tidak ditemukan.");
+    await tx.execute(sql`select id from business_transactions where id = ${batch.transactionId} for update`);
+    const [line] = await tx
+      .select({ id: transactionLines.id })
+      .from(transactionLines)
+      .where(and(eq(transactionLines.id, lineId), eq(transactionLines.transactionId, batch.transactionId)));
+    if (!line) throw new Error("Item penawaran tidak termasuk transaksi ini.");
+    const [updated] = await tx
+      .update(productionBatches)
+      .set({ transactionLineId: lineId })
+      .where(and(eq(productionBatches.id, batchId), sql`${productionBatches.transactionLineId} is null`))
+      .returning({ id: productionBatches.id });
+    if (!updated) throw new Error("Batch baru saja ditautkan. Muat ulang halaman.");
+    await tx.insert(auditLogs).values({
+      actorId: user.id,
+      action: "transaction.batch_line_mapped",
+      entityType: "transaction",
+      entityId: batch.transactionId,
+      metadata: { batchId, lineId },
+    });
+    return batch.transactionId;
+  });
+  revalidatePath(`/admin/transactions/${transactionId}`);
+  redirect(transactionPath(transactionId, "production", "batch-mapped"));
+}
+
 export async function createShipment(formData: FormData) {
   const user = await operationsUser();
   const transactionId = z.string().uuid().parse(field(formData, "transactionId"));
-  const { items, recipient, address, details } = parseShipmentForm(formData);
+  const operationKey = z
+    .string()
+    .uuid()
+    .parse(field(formData, "operationKey") || randomUUID());
+  const { items, recipient, address, details, plannedShipAt } = parseShipmentForm(formData);
   const database = getDatabase();
   if (!database) throw new Error("Database belum terhubung.");
   await database.transaction(async (tx) => {
     await tx.execute(sql`select id from business_transactions where id = ${transactionId} for update`);
+    const [duplicate] = await tx
+      .select({ id: shipments.id, transactionId: shipments.transactionId })
+      .from(shipments)
+      .where(eq(shipments.operationKey, operationKey));
+    if (duplicate) {
+      if (duplicate.transactionId !== transactionId)
+        throw new Error("Kunci pengiriman sudah digunakan transaksi lain.");
+      return;
+    }
     const [header] = await tx
       .select({
         referenceNo: businessTransactions.referenceNo,
         fulfilmentStatus: businessTransactions.fulfilmentStatus,
+        customerSnapshot: businessTransactions.customerSnapshot,
       })
       .from(businessTransactions)
       .where(eq(businessTransactions.id, transactionId));
     if (!header || header.fulfilmentStatus === "not_released" || header.fulfilmentStatus === "completed") {
       throw new Error("Pekerjaan belum dilepas ke produksi.");
     }
+    validateShipmentSnapshotSources(details, header.customerSnapshot);
     const lines = await tx
       .select({ id: transactionLines.id, quantity: transactionLines.quantity, unit: transactionLines.unit })
       .from(transactionLines)
       .where(eq(transactionLines.transactionId, transactionId));
     const shipped = await tx
       .select({
+        shipmentId: shipments.id,
         lineId: shipmentLines.transactionLineId,
         quantity: shipmentLines.quantity,
         accepted: shipmentLines.acceptedQuantity,
+        acceptedQuantity: shipmentLines.acceptedQuantity,
         status: shipments.status,
       })
       .from(shipmentLines)
       .innerJoin(shipments, eq(shipments.id, shipmentLines.shipmentId))
       .where(eq(shipments.transactionId, transactionId));
+    const stockBatches = await tx
+      .select({
+        transactionLineId: productionBatches.transactionLineId,
+        kind: productionBatches.kind,
+        status: productionBatches.status,
+        completedQuantity: productionBatches.completedQuantity,
+      })
+      .from(productionBatches)
+      .where(eq(productionBatches.transactionId, transactionId));
+    const available = shipmentAvailableByLine(lines, stockBatches, shipped);
     for (const item of items) {
       const line = lines.find((entry) => entry.id === item.lineId);
       const used = shipped
@@ -1074,7 +1200,20 @@ export async function createShipment(formData: FormData) {
       if (!line || Number(item.quantity) + used > Number(line.quantity) + 0.0001) {
         throw new Error("Jumlah pengiriman melebihi barang dalam penawaran.");
       }
-      validateShipmentLogistics(item.logistics, item.quantity, line.unit);
+      if (Number(item.quantity) > (available.get(item.lineId) ?? 0) + 0.0001) {
+        throw new ShipmentInlineFieldError(
+          "Jumlah pengiriman melebihi hasil produksi yang belum dialokasikan.",
+          `items:${item.lineId}`,
+        );
+      }
+      try {
+        validateShipmentLogistics(item.logistics, item.quantity, line.unit);
+      } catch (error) {
+        throw new ShipmentInlineFieldError(
+          error instanceof Error ? error.message : "Periksa jumlah dan kemasan barang ini.",
+          `items:${item.lineId}`,
+        );
+      }
     }
     const [count] = await tx
       .select({ total: sql<number>`count(*)` })
@@ -1086,9 +1225,11 @@ export async function createShipment(formData: FormData) {
       .values({
         transactionId,
         shipmentNo,
+        operationKey,
         recipientName: recipient,
         deliveryAddress: address,
         deliveryDetails: details,
+        plannedShipAt,
       })
       .returning({ id: shipments.id });
     await tx.insert(shipmentLines).values(
@@ -1107,6 +1248,7 @@ export async function createShipment(formData: FormData) {
       metadata: { shipmentId: shipment.id, itemCount: items.length },
     });
   });
+  if (field(formData, "inlineResult") === "yes") return { ok: true as const, message: "Rencana pengiriman disimpan." };
   revalidatePath(`/admin/transactions/${transactionId}`);
   redirect(transactionPath(transactionId, "delivery", "shipment-planned"));
 }
@@ -1115,7 +1257,7 @@ export async function updatePlannedShipment(formData: FormData) {
   const user = await operationsUser();
   const transactionId = z.string().uuid().parse(field(formData, "transactionId"));
   const shipmentId = z.string().uuid().parse(field(formData, "shipmentId"));
-  const { items, recipient, address, details } = parseShipmentForm(formData);
+  const { items, recipient, address, details, plannedShipAt } = parseShipmentForm(formData);
   const database = getDatabase();
   if (!database) throw new Error("Database belum terhubung.");
   await database.transaction(async (tx) => {
@@ -1125,6 +1267,11 @@ export async function updatePlannedShipment(formData: FormData) {
       .from(shipments)
       .where(and(eq(shipments.id, shipmentId), eq(shipments.transactionId, transactionId)));
     if (!shipment || shipment.status !== "planned") throw new Error("Pengiriman sudah dikirim atau tidak ditemukan.");
+    const [transaction] = await tx
+      .select({ customerSnapshot: businessTransactions.customerSnapshot })
+      .from(businessTransactions)
+      .where(eq(businessTransactions.id, transactionId));
+    validateShipmentSnapshotSources(details, transaction?.customerSnapshot);
     if (shipment.deliveryDocumentId) {
       const [document] = await tx
         .select({ status: transactionDocuments.status, documentNo: transactionDocuments.documentNo })
@@ -1141,14 +1288,26 @@ export async function updatePlannedShipment(formData: FormData) {
       .where(eq(transactionLines.transactionId, transactionId));
     const others = await tx
       .select({
+        shipmentId: shipments.id,
         lineId: shipmentLines.transactionLineId,
         quantity: shipmentLines.quantity,
         accepted: shipmentLines.acceptedQuantity,
+        acceptedQuantity: shipmentLines.acceptedQuantity,
         status: shipments.status,
       })
       .from(shipmentLines)
       .innerJoin(shipments, eq(shipments.id, shipmentLines.shipmentId))
       .where(and(eq(shipments.transactionId, transactionId), ne(shipments.id, shipmentId)));
+    const stockBatches = await tx
+      .select({
+        transactionLineId: productionBatches.transactionLineId,
+        kind: productionBatches.kind,
+        status: productionBatches.status,
+        completedQuantity: productionBatches.completedQuantity,
+      })
+      .from(productionBatches)
+      .where(eq(productionBatches.transactionId, transactionId));
+    const available = shipmentAvailableByLine(lines, stockBatches, others);
     for (const item of items) {
       const line = lines.find((entry) => entry.id === item.lineId);
       const used = others
@@ -1157,7 +1316,20 @@ export async function updatePlannedShipment(formData: FormData) {
       if (!line || Number(item.quantity) + used > Number(line.quantity) + 0.0001) {
         throw new Error("Jumlah pengiriman melebihi barang dalam penawaran.");
       }
-      validateShipmentLogistics(item.logistics, item.quantity, line.unit);
+      if (Number(item.quantity) > (available.get(item.lineId) ?? 0) + 0.0001) {
+        throw new ShipmentInlineFieldError(
+          "Jumlah pengiriman melebihi hasil produksi yang belum dialokasikan.",
+          `items:${item.lineId}`,
+        );
+      }
+      try {
+        validateShipmentLogistics(item.logistics, item.quantity, line.unit);
+      } catch (error) {
+        throw new ShipmentInlineFieldError(
+          error instanceof Error ? error.message : "Periksa jumlah dan kemasan barang ini.",
+          `items:${item.lineId}`,
+        );
+      }
     }
     await tx.delete(shipmentLines).where(eq(shipmentLines.shipmentId, shipmentId));
     await tx.insert(shipmentLines).values(
@@ -1174,6 +1346,7 @@ export async function updatePlannedShipment(formData: FormData) {
         recipientName: recipient,
         deliveryAddress: address,
         deliveryDetails: details,
+        plannedShipAt,
         deliveryDocumentId: null,
       })
       .where(eq(shipments.id, shipmentId));
@@ -1185,8 +1358,47 @@ export async function updatePlannedShipment(formData: FormData) {
       metadata: { shipmentId, itemCount: items.length, previousDocumentId: shipment.deliveryDocumentId },
     });
   });
+  if (field(formData, "inlineResult") === "yes") return { ok: true as const, message: "Koreksi pengiriman disimpan." };
   revalidatePath(`/admin/transactions/${transactionId}`);
   redirect(transactionPath(transactionId, "delivery", "shipment-revised"));
+}
+
+export type ShipmentActionState = {
+  ok: boolean;
+  message: string;
+  fieldErrors: Record<string, string>;
+};
+
+export async function saveShipmentInline(
+  _previous: ShipmentActionState,
+  formData: FormData,
+): Promise<ShipmentActionState> {
+  formData.set("inlineResult", "yes");
+  try {
+    const result = field(formData, "shipmentId")
+      ? await updatePlannedShipment(formData)
+      : await createShipment(formData);
+    return { ok: true, message: result?.message ?? "Pengiriman disimpan.", fieldErrors: {} };
+  } catch (error) {
+    const message =
+      error instanceof Error &&
+      /jumlah|pack|berat|tanggal|jam|penerima|alamat|produksi|penawaran|pengiriman/i.test(error.message)
+        ? error.message
+        : "Pengiriman belum tersimpan. Periksa data dan coba lagi.";
+    const fieldName =
+      error instanceof ShipmentInlineFieldError
+        ? error.fieldName
+        : /pack|berat|jumlah|produksi|penawaran/i.test(message)
+          ? "items"
+          : /tanggal|jam/i.test(message)
+            ? "plannedShipAt"
+            : /alamat/i.test(message)
+              ? "address"
+              : /penerima/i.test(message)
+                ? "recipient"
+                : "form";
+    return { ok: false, message, fieldErrors: { [fieldName]: message } };
+  }
 }
 
 export async function generateDeliveryNote(formData: FormData) {
@@ -1216,6 +1428,7 @@ export async function generateDeliveryNote(formData: FormData) {
         shipmentNo: shipments.shipmentNo,
         deliveryNo: shipments.deliveryNo,
         deliveryDetails: shipments.deliveryDetails,
+        plannedShipAt: shipments.plannedShipAt,
         status: shipments.status,
         transactionId: shipments.transactionId,
         recipientName: shipments.recipientName,
@@ -1311,6 +1524,7 @@ export async function generateDeliveryNote(formData: FormData) {
       number: prepared.documentNo,
       version: prepared.version,
       issuedAt,
+      plannedShipAt: prepared.detail.plannedShipAt,
       customerName: prepared.detail.customerName,
       recipientName: prepared.detail.recipientName ?? prepared.detail.customerName,
       address: prepared.detail.deliveryAddress ?? "",
@@ -1526,6 +1740,66 @@ export async function closeTransaction(formData: FormData) {
   });
   revalidatePath(`/admin/transactions/${transactionId}`);
   redirect(transactionPath(transactionId, "handover", "closed"));
+}
+
+export async function updateTransactionTitle(formData: FormData) {
+  const user = await operationsUser();
+  const id = z.string().uuid().parse(field(formData, "transactionId"));
+  const title = z.string().trim().min(2, "Judul minimal dua karakter.").max(180).parse(field(formData, "title"));
+  const step = z
+    .enum(["quote", "order", "payment", "production", "delivery", "handover"])
+    .catch("quote")
+    .parse(field(formData, "step"));
+  const database = getDatabase();
+  if (!database) throw new Error("Database belum terhubung.");
+  await database.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({ id: businessTransactions.id, title: businessTransactions.title })
+      .from(businessTransactions)
+      .where(eq(businessTransactions.id, id));
+    if (!existing) throw new Error("Transaksi tidak ditemukan.");
+    await tx.update(businessTransactions).set({ title, updatedAt: new Date() }).where(eq(businessTransactions.id, id));
+    await tx.insert(auditLogs).values({
+      actorId: user.id,
+      action: "transaction.title_updated",
+      entityType: "transaction",
+      entityId: id,
+      metadata: { previousTitle: existing.title, title },
+    });
+  });
+  revalidatePath(`/admin/transactions/${id}`);
+  revalidatePath("/admin/transactions");
+  redirect(transactionPath(id, step, "title-updated"));
+}
+
+export async function setTransactionArchived(formData: FormData) {
+  const user = await administrator();
+  const id = z.string().uuid().parse(field(formData, "transactionId"));
+  const archive = field(formData, "archive") === "yes";
+  const database = getDatabase();
+  if (!database) throw new Error("Database belum terhubung.");
+  await database.transaction(async (tx) => {
+    await tx.execute(sql`select id from business_transactions where id = ${id} for update`);
+    const [existing] = await tx
+      .select({ archivedAt: businessTransactions.archivedAt, referenceNo: businessTransactions.referenceNo })
+      .from(businessTransactions)
+      .where(eq(businessTransactions.id, id));
+    if (!existing) throw new Error("Transaksi tidak ditemukan.");
+    await tx
+      .update(businessTransactions)
+      .set({ archivedAt: archive ? new Date() : null, archivedBy: archive ? user.id : null, updatedAt: new Date() })
+      .where(eq(businessTransactions.id, id));
+    await tx.insert(auditLogs).values({
+      actorId: user.id,
+      action: archive ? "transaction.archived" : "transaction.restored",
+      entityType: "transaction",
+      entityId: id,
+      metadata: { referenceNo: existing.referenceNo },
+    });
+  });
+  revalidatePath(`/admin/transactions/${id}`);
+  revalidatePath("/admin/transactions");
+  redirect("/admin/transactions");
 }
 
 export async function generateHandoverNote(formData: FormData) {

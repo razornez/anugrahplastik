@@ -2,6 +2,8 @@ import Link from "next/link";
 import { AdminPageHeader } from "@/components/admin-page-header";
 import { TransactionCreateForm } from "@/components/transaction-create-form";
 import { TransactionListScrollRestorer, TransactionResultLink } from "@/components/transaction-list-navigation";
+import { TransactionListCacheCapture } from "@/components/transaction-list-cache";
+import { TransactionListOutcome } from "@/components/transaction-list-outcome";
 import { getActiveCustomerCount, getTransactionPage } from "@/features/operations/service";
 import { requireOperationsAccess } from "@/features/operations/access";
 import { transactionStatusLabel } from "@/features/operations/transaction-status";
@@ -16,6 +18,8 @@ type Query = {
   fulfilment?: string;
   cursor?: string;
   direction?: string;
+  view?: string;
+  notice?: string;
 };
 function transactionUrl(params: Query) {
   const search = new URLSearchParams();
@@ -54,6 +58,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
       fulfilment: query.fulfilment,
       cursor: query.cursor,
       direction: query.direction === "previous" ? "previous" : "next",
+      archived: query.view === "archive",
     }),
     getActiveCustomerCount(),
   ]);
@@ -62,12 +67,34 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   const filtered = Boolean(query.q || query.status || query.payment || query.fulfilment);
   return (
     <section className={styles.workspace}>
+      <TransactionListOutcome notice={query.notice} />
+      {query.view !== "archive" && !filtered && transactions ? (
+        <TransactionListCacheCapture
+          userId={user.id}
+          rows={transactions.rows.map((row) => ({
+            id: row.id,
+            title: row.title,
+            referenceNo: row.referenceNo,
+            customerName: row.customerName,
+            stage: stepLabels[row.workspace.step],
+            payment: row.workspace.paymentLabel,
+          }))}
+        />
+      ) : null}
       <TransactionListScrollRestorer listUrl={listUrl} />
       <AdminPageHeader
-        title="Transaksi"
+        title={query.view === "archive" ? "Arsip transaksi" : "Transaksi"}
         description="Kelola penawaran, tagihan, produksi, dan pengiriman pelanggan."
         actions={<TransactionCreateForm customerCount={customerCount} />}
       />
+      <nav aria-label="Status arsip transaksi" className={styles.archiveNav}>
+        <Link aria-current={query.view === "archive" ? undefined : "page"} href="/admin/transactions">
+          Aktif
+        </Link>
+        <Link aria-current={query.view === "archive" ? "page" : undefined} href="/admin/transactions?view=archive">
+          Arsip
+        </Link>
+      </nav>
       {!customerCount ? (
         <p className="operations-notice">Tambahkan pelanggan di Data master sebelum membuat transaksi.</p>
       ) : null}

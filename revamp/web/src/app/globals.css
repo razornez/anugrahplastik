@@ -357,6 +357,7 @@
 .transaction-flow-send input,
 .transaction-flow-send textarea,
 .transaction-shipment-form input,
+.transaction-shipment-form select,
 .transaction-shipment-form textarea {
   width: 100%;
   min-width: 0;

@@ -54,6 +54,7 @@ install -D -m 0755 "$project_root/scripts/release/publish-client-logos.mjs" "$re
 install -D -m 0644 "$project_root/scripts/release/client-logo-catalog.json" "$release_root/app/scripts/release/client-logo-catalog.json"
 install -D -m 0755 "$project_root/scripts/release/publish-document-templates.mjs" "$release_root/app/scripts/release/publish-document-templates.mjs"
 install -D -m 0755 "$project_root/scripts/release/smoke-release.sh" "$release_root/app/scripts/release/smoke-release.sh"
+install -D -m 0755 "$project_root/scripts/release/cleanup-transaction-files.mjs" "$release_root/app/scripts/release/cleanup-transaction-files.mjs"
 install -D -m 0755 "$project_root/scripts/reconcile-landing-assets.mjs" "$release_root/app/scripts/reconcile-landing-assets.mjs"
 install -D -m 0755 "$project_root/scripts/import-legacy-portfolio.mjs" "$release_root/app/scripts/import-legacy-portfolio.mjs"
 install -D -m 0755 "$project_root/scripts/analytics-worker.cjs" "$release_root/app/scripts/analytics-worker.cjs"
@@ -66,8 +67,29 @@ install -D -m 0644 "$project_root/ops/systemd/anugrahplastik-integrations-mail.s
 install -D -m 0644 "$project_root/ops/systemd/anugrahplastik-integrations-mail.timer" "$release_root/ops/systemd/anugrahplastik-integrations-mail.timer"
 install -D -m 0644 "$project_root/ops/systemd/anugrahplastik-integrations-ads.service" "$release_root/ops/systemd/anugrahplastik-integrations-ads.service"
 install -D -m 0644 "$project_root/ops/systemd/anugrahplastik-integrations-ads.timer" "$release_root/ops/systemd/anugrahplastik-integrations-ads.timer"
+install -D -m 0644 "$project_root/ops/systemd/anugrahplastik-file-cleanup.service" "$release_root/ops/systemd/anugrahplastik-file-cleanup.service"
+install -D -m 0644 "$project_root/ops/systemd/anugrahplastik-file-cleanup.timer" "$release_root/ops/systemd/anugrahplastik-file-cleanup.timer"
 install -D -m 0644 "$project_root/ops/nginx/anugrahplastik.conf.template" "$release_root/ops/nginx/anugrahplastik.conf.template"
 install -D -m 0755 "$project_root/scripts/release/audit-vps.sh" "$release_root/ops/audit-vps.sh"
+install -D -m 0755 "$project_root/scripts/release/preflight-vps.sh" "$release_root/ops/preflight-vps.sh"
+
+for required in \
+  app/scripts/release/migrate-production.mjs \
+  app/scripts/admin-auth-cli.mjs \
+  app/scripts/release/publish-document-templates.mjs \
+  app/scripts/release/cleanup-transaction-files.mjs \
+  app/scripts/data/indonesia-regions-493bd1.json.gz \
+  app/docs/templates/surat-jalan-docgen.html \
+  app/docs/templates/penawaran-docgen.html \
+  app/docs/templates/invoice-resmi-docgen.html \
+  app/docs/templates/bast-docgen.html \
+  app/public/brand/quotation-logo.png \
+  app/drizzle/0048_transaction_delivery_polish.sql \
+  app/drizzle/0049_transaction_file_cleanup.sql \
+  app/drizzle/0050_shipment_idempotency.sql; do
+  test -s "$release_root/$required" || { echo "Missing release asset: $required" >&2; exit 1; }
+done
+test -s "$release_root/ops/preflight-vps.sh" || { echo 'Missing read-only VPS preflight.' >&2; exit 1; }
 
 # Next standalone can carry local development files when built from a dirty
 # workstation. They are never part of a production release.

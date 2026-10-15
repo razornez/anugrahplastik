@@ -6,6 +6,7 @@ import { saveQuoteDraft } from "@/features/operations/workflow-actions";
 import { calculateQuote, type QuoteLineInput } from "@/features/operations/quote-math";
 import { type QuotationLetter } from "@/features/operations/quotation-letter";
 import { useTransactionDraft } from "@/components/use-transaction-draft";
+import { RupiahInput } from "@/components/rupiah-input";
 
 const blankLine = (): QuoteLineInput => ({
   description: "",
@@ -97,7 +98,7 @@ export function TransactionQuoteEditor({
   }
 
   return (
-    <form action={saveQuoteDraft} className="transaction-quote-editor">
+    <form action={saveQuoteDraft} className="transaction-quote-editor" data-controlled-draft="true">
       <input name="transactionId" type="hidden" value={transactionId} />
       <input name="lines" type="hidden" value={JSON.stringify(lines)} />
       <input name="letter" type="hidden" value={JSON.stringify(letter)} />
@@ -169,10 +170,8 @@ export function TransactionQuoteEditor({
             </label>
             <label>
               Harga per satuan (Rp)
-              <input
-                inputMode="decimal"
-                onChange={(event) => editLine(index, "unitPrice", event.target.value)}
-                pattern="[0-9]+([.][0-9]{1,2})?"
+              <RupiahInput
+                onChange={(value) => editLine(index, "unitPrice", value)}
                 placeholder="mis. 15000"
                 required
                 value={line.unitPrice}
@@ -197,14 +196,23 @@ export function TransactionQuoteEditor({
             {(line.discountKind ?? "none") !== "none" ? (
               <label>
                 {line.discountKind === "percent" ? "Diskon (%)" : "Diskon (Rp)"}
-                <input
-                  disabled={!canEditDiscount}
-                  inputMode="decimal"
-                  onChange={(event) => editLine(index, "discountValue", event.target.value)}
-                  pattern="[0-9]+([.][0-9]{1,2})?"
-                  required
-                  value={line.discountValue ?? "0"}
-                />
+                {line.discountKind === "amount" ? (
+                  <RupiahInput
+                    disabled={!canEditDiscount}
+                    onChange={(value) => editLine(index, "discountValue", value)}
+                    required
+                    value={line.discountValue ?? "0"}
+                  />
+                ) : (
+                  <input
+                    disabled={!canEditDiscount}
+                    inputMode="decimal"
+                    onChange={(event) => editLine(index, "discountValue", event.target.value)}
+                    pattern="[0-9]+([.][0-9]{1,2})?"
+                    required
+                    value={line.discountValue ?? "0"}
+                  />
+                )}
               </label>
             ) : null}
             {!canEditDiscount && (line.discountKind ?? "none") !== "none" ? (

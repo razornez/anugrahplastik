@@ -95,8 +95,7 @@ export function createFileDigest() {
 }
 
 export async function removePrivateFile(relativePath: string) {
-  const root = storageRoot();
-  const absolutePath = resolve(root, relativePath);
+  const absolutePath = privateFilePath(relativePath);
   await rm(absolutePath, { force: true });
 }
 

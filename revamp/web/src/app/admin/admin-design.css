@@ -881,7 +881,7 @@
   bottom: 0;
   display: grid;
   width: min(680px, calc(100vw - 44px));
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
   border: 0;
   border-inline-start: 1px solid var(--admin-line);
@@ -1124,17 +1124,30 @@
   font-size: 13px;
   line-height: 1.45;
 }
-.transaction-email-editor footer,
-.transaction-email-preview footer {
+.transaction-email-actionbar {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   border-top: 1px solid var(--admin-line);
-  padding-top: 12px;
+  background: var(--admin-surface);
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
 }
-.transaction-email-editor footer button,
-.transaction-email-preview footer button {
+.transaction-email-actionbar button {
   min-height: 44px;
+}
+.transaction-inline-result {
+  margin: 12px 0 0;
+  border-inline-start: 4px solid var(--admin-success);
+  border-radius: 8px;
+  background: var(--admin-success-surface);
+  padding: 12px 14px;
+  color: var(--admin-ink);
+  font-weight: 600;
+  line-height: 1.45;
+}
+.transaction-inline-result[data-tone="error"] {
+  border-inline-start-color: var(--admin-danger);
+  background: var(--admin-danger-surface);
 }
 .transaction-email-preview dl {
   display: grid;
@@ -1325,6 +1338,7 @@
   }
   .transaction-email-sheet {
     width: 100vw;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
     border: 0;
   }
   .transaction-email-segments {
@@ -1332,6 +1346,9 @@
   }
   .transaction-email-editor,
   .transaction-email-preview {
+    padding-inline: 10px;
+  }
+  .transaction-email-actionbar {
     padding-inline: 10px;
   }
   .transaction-email-template-catalog {
@@ -2264,9 +2281,17 @@
   background: var(--admin-success-surface);
   color: var(--admin-success);
 }
+.admin-toast[data-tone="success"] {
+  border-color: var(--admin-success);
+  background: color-mix(in srgb, var(--admin-success-surface) 64%, var(--admin-surface));
+}
 .admin-toast[data-tone="error"] .admin-toast__icon {
   background: var(--admin-danger-surface);
   color: var(--admin-danger);
+}
+.admin-toast[data-tone="error"] {
+  border-color: var(--admin-danger);
+  background: color-mix(in srgb, var(--admin-danger-surface) 64%, var(--admin-surface));
 }
 .admin-toast__copy {
   display: grid;
@@ -8780,6 +8805,300 @@ body:has(.admin-shell[data-theme="dark"]) .customer-profile-address legend {
 }
 .admin-shell .customer-document-profile-form :is(input:not([type="checkbox"]), textarea) {
   font-size: 13px;
+}
+.admin-shell .customer-profile-form :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  padding-inline: 12px;
+}
+.admin-shell .customer-profile-form textarea {
+  padding-block: 10px;
+}
+
+/* Document actions are laid out by their own available width, including the narrow aside. */
+.admin-shell .transaction-flow-documents {
+  container-type: inline-size;
+}
+.admin-shell .transaction-flow-documents article {
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px 10px;
+}
+.admin-shell .transaction-flow-documents article > div:first-of-type {
+  grid-column: 2 / -1;
+}
+.admin-shell .transaction-flow-documents article > div:first-of-type :is(strong, small) {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.admin-shell .transaction-flow-documents__status {
+  grid-column: 2;
+  align-self: center;
+}
+.admin-shell .transaction-flow-documents article > a {
+  grid-column: 3;
+  align-self: center;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.admin-shell .transaction-flow-documents .transaction-email-trigger {
+  grid-column: 2 / -1;
+  justify-self: start;
+  min-width: 112px;
+  white-space: nowrap;
+}
+
+.admin-shell .transaction-related-designs {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--admin-border);
+  border-radius: 14px;
+  background: var(--admin-surface);
+}
+.admin-shell .transaction-related-designs h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+.admin-shell .transaction-related-designs p {
+  margin: 0 0 12px;
+}
+.admin-shell .transaction-related-designs ul {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.admin-shell .transaction-related-designs li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--admin-border);
+}
+.admin-shell .transaction-related-designs li > div:first-child {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.admin-shell .transaction-related-designs li strong,
+.admin-shell .transaction-related-designs li small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.admin-shell .transaction-related-designs li > button,
+.admin-shell .transaction-related-designs li > a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+.admin-shell .transaction-related-designs__preview {
+  flex: 1 0 100%;
+  min-width: 0;
+}
+.admin-shell .transaction-management {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: start;
+  margin: 0 0 16px;
+}
+.admin-shell .transaction-management > button,
+.admin-shell .transaction-management button {
+  min-height: 44px;
+}
+.admin-shell .transaction-management form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+.admin-shell .transaction-management label {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+.admin-shell .transaction-management input:not([type="hidden"]) {
+  min-height: 44px;
+  min-width: min(280px, 80vw);
+  border: 1px solid var(--admin-border);
+  border-radius: 9px;
+  padding-inline: 12px;
+  background: var(--admin-surface);
+  color: var(--admin-ink);
+}
+.admin-shell .transaction-shipment-form select {
+  min-height: 44px;
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--admin-border);
+  border-radius: 9px;
+  padding-inline: 12px;
+  background: var(--admin-surface);
+  color: var(--admin-ink);
+  font: inherit;
+}
+.admin-shell .transaction-inline-error {
+  color: var(--admin-danger, #b42318);
+  font-weight: 600;
+}
+.admin-shell .transaction-inline-success {
+  color: var(--admin-success, #067647);
+  font-weight: 600;
+}
+.admin-shell .transaction-management .transaction-management__delete {
+  color: #b42318;
+  border: 1px solid #b42318;
+  background: transparent;
+}
+.transaction-delete-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: rgb(16 24 40 / 65%);
+}
+.transaction-delete-dialog {
+  position: fixed;
+  z-index: 151;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+  color: var(--admin-ink);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 22%);
+}
+.transaction-delete-dialog > h2 {
+  margin: 0 0 6px;
+}
+.transaction-delete-dialog dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 20px;
+}
+.transaction-delete-dialog dl div {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--admin-border);
+  padding: 7px 0;
+}
+.transaction-delete-dialog form {
+  display: grid;
+  gap: 12px;
+}
+.transaction-delete-dialog form label:not(.transaction-delete-dialog__check) {
+  display: grid;
+  gap: 5px;
+}
+.transaction-delete-dialog form input:not([type="hidden"]):not([type="checkbox"]) {
+  min-height: 44px;
+  border: 1px solid var(--admin-border);
+  border-radius: 9px;
+  padding-inline: 12px;
+  background: var(--admin-surface);
+  color: var(--admin-ink);
+}
+.transaction-delete-dialog__check {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+}
+.transaction-delete-dialog__check input {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+.transaction-delete-dialog__actions {
+  display: flex;
+  justify-content: end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.transaction-delete-dialog__actions button {
+  min-height: 44px;
+  padding-inline: 16px;
+}
+.transaction-delete-dialog__actions button[type="submit"] {
+  background: #b42318;
+  color: #fff;
+  border-radius: 9px;
+}
+.transaction-delete-dialog__actions button:disabled {
+  opacity: 0.55;
+}
+.transaction-list-loading {
+  padding: 16px;
+}
+.transaction-list-loading h1 {
+  margin: 0 0 8px;
+}
+.transaction-list-loading ul {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+}
+.transaction-list-loading li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--admin-border);
+}
+.transaction-list-loading li :is(a, span) {
+  display: block;
+}
+.transaction-list-loading li a {
+  min-height: 44px;
+  font-weight: 700;
+}
+.transaction-list-loading li span {
+  color: var(--admin-muted);
+}
+.transaction-list-loading__skeleton {
+  display: grid;
+  gap: 10px;
+}
+.transaction-list-loading__skeleton span {
+  display: block;
+  width: 100%;
+  height: 68px;
+  border-radius: 10px;
+  background: var(--admin-surface-soft);
+}
+.transaction-navigation-dialog {
+  position: fixed;
+  z-index: 151;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, calc(100vw - 16px));
+  padding: 20px;
+  border: 1px solid var(--admin-border);
+  border-radius: 14px;
+  background: var(--admin-surface);
+  color: var(--admin-ink);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 22%);
+}
+.transaction-navigation-dialog > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 8px;
+}
+.transaction-navigation-dialog button {
+  min-height: 44px;
+  padding-inline: 12px;
+}
+@container (max-width: 290px) {
+  .admin-shell .transaction-flow-documents article {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+  .admin-shell .transaction-flow-documents article > div:first-of-type,
+  .admin-shell .transaction-flow-documents .transaction-email-trigger {
+    grid-column: 2;
+  }
+  .admin-shell .transaction-flow-documents article > a {
+    grid-column: 2;
+  }
 }
 .admin-shell .customer-document-profile-form .customer-document-profile-form__master-sync small {
   color: var(--admin-muted);

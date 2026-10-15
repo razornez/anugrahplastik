@@ -1,11 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import type { Role } from "@/lib/auth/session";
 import { AdminThemePicker } from "@/components/admin-theme-picker";
+import { AdminDialogPortalFrame } from "@/components/admin-dialog-portal-frame";
+import {
+  clearTransactionDraftMarks,
+  hasDirtyTransactionDraft,
+  scopeTransactionSession,
+} from "@/components/transaction-session-state";
 
 type AdminSidebarProps = {
   name: string;
@@ -126,7 +132,9 @@ function SettingsIcon() {
 
 export function AdminSidebar({ name, role, onLogout, initialTheme }: AdminSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [pendingTransactionNavigation, setPendingTransactionNavigation] = useState(false);
   const [theme, setTheme] = useState(initialTheme);
   useEffect(() => {
     const shell = document.querySelector<HTMLElement>(".admin-shell");
@@ -179,6 +187,16 @@ export function AdminSidebar({ name, role, onLogout, initialTheme }: AdminSideba
           <Link
             key={item.href}
             href={item.href}
+            onClick={(event) => {
+              if (
+                item.href === "/admin/transactions" &&
+                pathname.startsWith("/admin/transactions/") &&
+                hasDirtyTransactionDraft()
+              ) {
+                event.preventDefault();
+                setPendingTransactionNavigation(true);
+              }
+            }}
             aria-current={
               pathname === item.href ||
               (item.href === "/admin/transactions" && pathname.startsWith("/admin/transactions/")) ||
@@ -220,7 +238,7 @@ export function AdminSidebar({ name, role, onLogout, initialTheme }: AdminSideba
             <small>{role === "admin" ? "Administrator" : role === "content" ? "Editor konten" : "Sales"}</small>
           </div>
         </Link>
-        <form action={onLogout}>
+        <form action={onLogout} onSubmit={() => scopeTransactionSession(null)}>
           <button type="submit" aria-label="Keluar dari ruang kerja" title="Keluar dari ruang kerja">
             <span>Keluar</span>
           </button>
@@ -231,6 +249,16 @@ export function AdminSidebar({ name, role, onLogout, initialTheme }: AdminSideba
           <Link
             key={item.href}
             href={item.href}
+            onClick={(event) => {
+              if (
+                item.href === "/admin/transactions" &&
+                pathname.startsWith("/admin/transactions/") &&
+                hasDirtyTransactionDraft()
+              ) {
+                event.preventDefault();
+                setPendingTransactionNavigation(true);
+              }
+            }}
             aria-current={
               pathname === item.href ||
               (item.href === "/admin/transactions" && pathname.startsWith("/admin/transactions/")) ||
@@ -290,13 +318,42 @@ export function AdminSidebar({ name, role, onLogout, initialTheme }: AdminSideba
                   <span>Lihat landing page</span>
                 </Link>
               </nav>
-              <form action={onLogout}>
+              <form action={onLogout} onSubmit={() => scopeTransactionSession(null)}>
                 <button type="submit">Keluar dari ruang kerja</button>
               </form>
             </Dialog.Content>
           </Dialog.Portal>
         </Dialog.Root>
       </nav>
+      <Dialog.Root open={pendingTransactionNavigation} onOpenChange={setPendingTransactionNavigation}>
+        <Dialog.Portal>
+          <AdminDialogPortalFrame>
+            <Dialog.Overlay className="transaction-delete-overlay" />
+            <Dialog.Content
+              className="transaction-navigation-dialog"
+              aria-describedby="transaction-navigation-description"
+            >
+              <Dialog.Title>Draft belum disimpan</Dialog.Title>
+              <Dialog.Description id="transaction-navigation-description">
+                Isian terakhir tetap disimpan di perangkat ini dan akan dipulihkan saat Anda kembali.
+              </Dialog.Description>
+              <div>
+                <Dialog.Close type="button">Tetap mengedit</Dialog.Close>
+                <button
+                  onClick={() => {
+                    clearTransactionDraftMarks();
+                    setPendingTransactionNavigation(false);
+                    router.push("/admin/transactions");
+                  }}
+                  type="button"
+                >
+                  Pindah, draft tetap tersimpan di perangkat
+                </button>
+              </div>
+            </Dialog.Content>
+          </AdminDialogPortalFrame>
+        </Dialog.Portal>
+      </Dialog.Root>
     </aside>
   );
 }

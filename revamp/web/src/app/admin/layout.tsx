@@ -3,6 +3,7 @@ import Link from "next/link";
 import { logout } from "@/features/auth/actions";
 import { AdminSidebar } from "@/components/admin-sidebar";
 import { AdminToastProvider } from "@/components/admin-ui";
+import { TransactionListCacheScope } from "@/components/transaction-list-cache";
 import { AdminInstallProvider } from "@/components/admin-install-provider";
 import { SessionExpiryBanner } from "@/components/session-expiry-banner";
 import { markNotificationRead } from "@/features/auth/notification-actions";
@@ -40,6 +41,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
   if (!session) {
     return (
       <main className={`${adminFonts} admin-shell admin-shell--public`} data-theme={theme}>
+        <TransactionListCacheScope userId={null} />
         <AdminToastProvider>{children}</AdminToastProvider>
       </main>
     );
@@ -57,6 +59,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
   return (
     <AdminInstallProvider>
       <main className={`${adminFonts} admin-shell`} data-theme={theme}>
+        <TransactionListCacheScope userId={session.id} />
         <AdminSidebar name={session.name} role={session.role} onLogout={logout} initialTheme={theme} />
         <AdminToastProvider>
           <div className="admin-main" data-ui-surface="page" id="admin-main" tabIndex={-1}>

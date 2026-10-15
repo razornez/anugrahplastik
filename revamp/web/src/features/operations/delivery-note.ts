@@ -13,6 +13,8 @@ export const shipmentLogisticsSchema = z.object({
 });
 
 export const deliveryDetailsSchema = z.object({
+  recipientContactId: z.string().max(80).optional().default(""),
+  deliveryAddressId: z.string().max(80).optional().default(""),
   deliveryOrderNo: z.string().trim().max(80),
   senderName: z.string().trim().max(120),
   driverName: z.string().trim().max(120),
@@ -34,6 +36,8 @@ export const emptyLogistics: ShipmentLogistics = {
 };
 
 export const emptyDeliveryDetails: DeliveryDetails = {
+  recipientContactId: "",
+  deliveryAddressId: "",
   deliveryOrderNo: "",
   senderName: "",
   driverName: "",
@@ -61,6 +65,14 @@ export function validateShipmentLogistics(logistics: ShipmentLogistics, quantity
       throw new Error("Jumlah pack × isi per pack harus sama dengan jumlah pcs yang dikirim.");
     }
   }
+}
+
+export function shipmentPackError(logistics: ShipmentLogistics, quantity: string, unit: string) {
+  if (unit.toLowerCase() !== "pcs" || !logistics.packCount || !logistics.piecesPerPack || !quantity) return null;
+  const packed = Number(logistics.packCount) * Number(logistics.piecesPerPack);
+  const shipped = Number(quantity);
+  if (packed === shipped) return null;
+  return `${logistics.packCount} pack × ${logistics.piecesPerPack} pcs = ${new Intl.NumberFormat("id-ID").format(packed)} pcs, sedangkan jumlah dikirim ${new Intl.NumberFormat("id-ID").format(shipped)} pcs. Sesuaikan jumlah, pack, atau isi per pack.`;
 }
 
 const months = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
@@ -91,6 +103,7 @@ export function deliveryRenderData(input: {
   number: string;
   version: number;
   issuedAt: Date;
+  plannedShipAt?: Date | null;
   customerName: string;
   recipientName: string;
   address: string;
@@ -103,6 +116,11 @@ export function deliveryRenderData(input: {
     nomor_surat_jalan: input.number,
     versi: input.version > 1 ? `Revisi ${input.version}` : "Penerbitan pertama",
     tanggal: new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "long" }).format(input.issuedAt),
+    jadwal_pengiriman: input.plannedShipAt
+      ? new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "long", timeStyle: "short" }).format(
+          input.plannedShipAt,
+        ) + " WIB"
+      : "Belum dijadwalkan",
     nama_pelanggan: input.customerName,
     penerima: input.recipientName,
     alamat: input.address,

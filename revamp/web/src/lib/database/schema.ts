@@ -996,6 +996,8 @@ export const businessTransactions = pgTable(
     fulfilmentStatus: varchar("fulfilment_status", { length: 32 }).notNull().default("not_released"),
     holdReason: text("hold_reason"),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    archivedBy: uuid("archived_by").references(() => users.id, { onDelete: "set null" }),
     quotedAt: timestamp("quoted_at", { withTimezone: true }),
     dueAt: timestamp("due_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -1004,7 +1006,23 @@ export const businessTransactions = pgTable(
   (table) => [
     index("business_transactions_customer_created_idx").on(table.customerId, table.createdAt),
     index("business_transactions_status_updated_idx").on(table.commercialStatus, table.updatedAt),
+    index("business_transactions_archived_updated_idx").on(table.archivedAt, table.updatedAt),
   ],
+);
+
+export const transactionFileCleanupJobs = pgTable(
+  "transaction_file_cleanup_jobs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    storagePath: varchar("storage_path", { length: 500 }).notNull().unique(),
+    transactionReference: varchar("transaction_reference", { length: 32 }).notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: varchar("last_error", { length: 300 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [index("transaction_file_cleanup_status_idx").on(table.status, table.createdAt)],
 );
 
 export const transactionNumberCounters = pgTable("transaction_number_counters", {
@@ -1328,6 +1346,7 @@ export const productionBatches = pgTable(
     transactionId: uuid("transaction_id")
       .notNull()
       .references(() => businessTransactions.id, { onDelete: "cascade" }),
+    transactionLineId: uuid("transaction_line_id").references(() => transactionLines.id, { onDelete: "set null" }),
     productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
     materialId: uuid("material_id").references(() => materials.id, { onDelete: "set null" }),
     colorLotId: uuid("color_lot_id").references(() => materialColorLots.id, { onDelete: "set null" }),
@@ -1341,7 +1360,10 @@ export const productionBatches = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [index("production_batches_transaction_status_idx").on(table.transactionId, table.status)],
+  (table) => [
+    index("production_batches_transaction_status_idx").on(table.transactionId, table.status),
+    index("production_batches_transaction_line_idx").on(table.transactionId, table.transactionLineId),
+  ],
 );
 
 export const shipments = pgTable(
@@ -1352,6 +1374,7 @@ export const shipments = pgTable(
       .notNull()
       .references(() => businessTransactions.id, { onDelete: "cascade" }),
     shipmentNo: varchar("shipment_no", { length: 80 }).notNull().unique(),
+    operationKey: uuid("operation_key").unique(),
     deliveryNo: varchar("delivery_no", { length: 80 }).unique(),
     handoverNo: varchar("handover_no", { length: 80 }).unique(),
     handoverDetails: jsonb("handover_details"),
@@ -1359,6 +1382,7 @@ export const shipments = pgTable(
     status: varchar("status", { length: 24 }).notNull().default("planned"),
     recipientName: varchar("recipient_name", { length: 160 }),
     deliveryAddress: text("delivery_address"),
+    plannedShipAt: timestamp("planned_ship_at", { withTimezone: true }),
     shippedAt: timestamp("shipped_at", { withTimezone: true }),
     receivedAt: timestamp("received_at", { withTimezone: true }),
     deliveryDocumentId: uuid("delivery_document_id").references(() => transactionDocuments.id, {

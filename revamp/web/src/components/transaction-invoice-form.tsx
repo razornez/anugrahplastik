@@ -13,6 +13,7 @@ import { centsText } from "@/features/operations/quote-math";
 import { CustomerDocumentProfileSheet } from "@/components/customer-document-profile-sheet";
 import type { CustomerDocumentProfileInput } from "@/features/operations/customer-document-profile";
 import { useTransactionDraft } from "@/components/use-transaction-draft";
+import { RupiahInput } from "@/components/rupiah-input";
 
 type IssuedInvoice = {
   kind: string;
@@ -129,7 +130,11 @@ export function TransactionInvoiceForm(props: {
   const prerequisitesReady = props.canGenerate && Boolean(props.customerAddress) && Boolean(props.poNumber);
   const readinessId = `invoice-readiness-${props.transactionId}`;
   return (
-    <form action={createTransactionInvoice} className="transaction-flow-form transaction-invoice-form">
+    <form
+      action={createTransactionInvoice}
+      className="transaction-flow-form transaction-invoice-form"
+      data-controlled-draft="true"
+    >
       <input name="transactionId" type="hidden" value={props.transactionId} />
       {restored ? (
         <div className="transaction-draft-restored" role="status">
@@ -163,15 +168,7 @@ export function TransactionInvoiceForm(props: {
       {kind === "dp" ? (
         <label>
           Jumlah uang muka (Rp)
-          <input
-            min="0.01"
-            name="amount"
-            onChange={(event) => setAmount(event.target.value)}
-            required
-            step="0.01"
-            type="number"
-            value={amount}
-          />
+          <RupiahInput name="amount" onChange={setAmount} required value={amount} />
         </label>
       ) : (
         <>
@@ -193,15 +190,7 @@ export function TransactionInvoiceForm(props: {
           </label>
           <label>
             DP terverifikasi yang diterapkan (Rp)
-            <input
-              min="0"
-              name="dpApplied"
-              onChange={(event) => setDpApplied(event.target.value)}
-              required
-              step="0.01"
-              type="number"
-              value={dpApplied}
-            />
+            <RupiahInput name="dpApplied" onChange={setDpApplied} required value={dpApplied} />
           </label>
         </>
       )}

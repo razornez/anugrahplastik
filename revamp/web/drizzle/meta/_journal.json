@@ -337,6 +337,27 @@
       "when": 1792044000000,
       "tag": "0047_fair_carmella_unuscione",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1792076400000,
+      "tag": "0048_transaction_delivery_polish",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1792076460000,
+      "tag": "0049_transaction_file_cleanup",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1792076520000,
+      "tag": "0050_shipment_idempotency",
+      "breakpoints": true
     }
   ]
 }

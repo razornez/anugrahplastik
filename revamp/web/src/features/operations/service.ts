@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, getTableColumns, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   auditLogs,
@@ -378,8 +378,10 @@ export async function getTransactionPage(
     fulfilment?: string;
     cursor?: string;
     direction?: "next" | "previous";
+    archived?: boolean;
   } = {},
 ) {
+  const startedAt = performance.now();
   const database = getDatabase();
   if (!database) return null;
   const cursor = decodeTimeCursor(query.cursor);
@@ -390,6 +392,7 @@ export async function getTransactionPage(
   const updatedClock = sql`date_trunc('milliseconds', ${businessTransactions.updatedAt})`;
   const conditions = and(
     eq(businessTransactions.dataClass, "production"),
+    query.archived ? isNotNull(businessTransactions.archivedAt) : isNull(businessTransactions.archivedAt),
     query.status ? eq(businessTransactions.commercialStatus, query.status) : undefined,
     query.payment ? eq(businessTransactions.paymentStatus, query.payment) : undefined,
     query.fulfilment ? eq(businessTransactions.fulfilmentStatus, query.fulfilment) : undefined,
@@ -421,6 +424,7 @@ export async function getTransactionPage(
       quotationNo: businessTransactions.quotationNo,
       quoteLetter: businessTransactions.quoteLetter,
       title: businessTransactions.title,
+      archivedAt: businessTransactions.archivedAt,
       dataClass: businessTransactions.dataClass,
       commercialStatus: businessTransactions.commercialStatus,
       paymentStatus: businessTransactions.paymentStatus,
@@ -517,6 +521,8 @@ export async function getTransactionPage(
     groupedDocuments = grouped(documents),
     groupedBatches = grouped(batches),
     groupedDeliveries = grouped(deliveries);
+  const durationMs = Math.round(performance.now() - startedAt);
+  if (durationMs >= 250) console.info("[transactions.list] query_duration_ms", durationMs);
   return {
     rows: rows.map((row) => ({
       ...row,
@@ -593,6 +599,7 @@ export async function getTransactionDetail(id: string) {
       quotationNo: businessTransactions.quotationNo,
       quoteLetter: businessTransactions.quoteLetter,
       title: businessTransactions.title,
+      archivedAt: businessTransactions.archivedAt,
       commercialStatus: businessTransactions.commercialStatus,
       paymentStatus: businessTransactions.paymentStatus,
       fulfilmentStatus: businessTransactions.fulfilmentStatus,
@@ -645,6 +652,7 @@ export async function getTransactionDetail(id: string) {
     relatedEmails,
     activity,
     masterContacts,
+    designFiles,
   ] = await Promise.all([
     database
       .select({ ...getTableColumns(transactionLines), productName: products.name, materialName: materials.name })
@@ -728,6 +736,20 @@ export async function getTransactionDetail(id: string) {
       .from(customerContacts)
       .where(eq(customerContacts.customerId, header.customerId))
       .orderBy(desc(customerContacts.isPrimary), customerContacts.name),
+    database
+      .select({
+        id: productDesignFiles.id,
+        originalName: productDesignFiles.originalName,
+        format: productDesignFiles.format,
+        version: productDesignFiles.version,
+        checksum: productDesignFiles.checksum,
+        thumbnailStoragePath: productDesignFiles.thumbnailStoragePath,
+        derivedPreviewStoragePath: productDesignFiles.derivedPreviewStoragePath,
+        derivedPreviewSourceChecksum: productDesignFiles.derivedPreviewSourceChecksum,
+      })
+      .from(productDesignFiles)
+      .where(eq(productDesignFiles.transactionId, id))
+      .orderBy(desc(productDesignFiles.createdAt)),
   ]);
   const contacts = customerSnapshot?.contacts.length
     ? customerSnapshot.contacts.map((contact, index) => ({
@@ -785,6 +807,7 @@ export async function getTransactionDetail(id: string) {
     shipmentItems: deliveryItems,
     relatedEmails,
     contacts,
+    designFiles,
     activity,
     workspace,
     totals: {

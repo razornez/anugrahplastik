@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { markTransactionDraftDirty } from "@/components/transaction-session-state";
 
 export type TransactionDraftEnvelope<T> = {
   version: 1;
@@ -22,6 +23,7 @@ export function useTransactionDraft<T>({
   const storageKey = useMemo(() => "transaction-draft:v1:" + key, [key]);
   const initialJson = useMemo(() => JSON.stringify(initial), [initial]);
   const restoreRef = useRef(restore);
+  const clearedAfterSave = useRef(false);
   const [hydrated, setHydrated] = useState(false);
   const [restored, setRestored] = useState(false);
 
@@ -58,23 +60,35 @@ export function useTransactionDraft<T>({
   }, [initialJson, storageKey]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || clearedAfterSave.current) return;
     const current = JSON.stringify(value);
-    const timeout = window.setTimeout(() => {
+    markTransactionDraftDirty(storageKey, current !== initialJson);
+    try {
       if (current === initialJson) window.localStorage.removeItem(storageKey);
       else {
         const envelope: TransactionDraftEnvelope<T> = { version: 1, updatedAt: new Date().toISOString(), value };
         window.localStorage.setItem(storageKey, JSON.stringify(envelope));
       }
-    }, 350);
-    return () => window.clearTimeout(timeout);
+    } catch {
+      /* Input remains editable without browser storage. */
+    }
   }, [hydrated, initialJson, storageKey, value]);
 
-  function discard() {
-    window.localStorage.removeItem(storageKey);
-    restore(initial);
-    setRestored(false);
-  }
+  useEffect(() => () => markTransactionDraftDirty(storageKey, false), [storageKey]);
 
-  return { restored, discard };
+  const discard = useCallback(() => {
+    window.localStorage.removeItem(storageKey);
+    restoreRef.current(initial);
+    setRestored(false);
+    markTransactionDraftDirty(storageKey, false);
+  }, [initial, storageKey]);
+
+  const clear = useCallback(() => {
+    clearedAfterSave.current = true;
+    window.localStorage.removeItem(storageKey);
+    markTransactionDraftDirty(storageKey, false);
+    setRestored(false);
+  }, [storageKey]);
+
+  return { restored, discard, clear };
 }

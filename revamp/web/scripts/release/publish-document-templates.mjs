@@ -20,8 +20,13 @@ if (!connectionString || !apiKey) {
 }
 
 const databaseUrl = new URL(connectionString);
-if (["localhost", "127.0.0.1", "[::1]"].includes(databaseUrl.hostname)) {
-  console.error("The official publisher must not run against a local database.");
+const productionContext =
+  process.platform === "linux" &&
+  process.cwd().startsWith("/srv/anugrahplastik/") &&
+  process.env.APP_ORIGIN?.replace(/\/$/, "") === "https://anugrahplastik.com" &&
+  databaseUrl.pathname === "/anugrahplastik";
+if (!productionContext) {
+  console.error("The official publisher must run from the production VPS against the dedicated database.");
   process.exit(2);
 }
 

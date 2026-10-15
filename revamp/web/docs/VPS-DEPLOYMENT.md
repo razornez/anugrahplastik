@@ -67,8 +67,12 @@ dan perubahan DNS tetap merupakan gate terpisah.
    `DOCUMENT_TEMPLATE_KIND=delivery` (atau jenis lain yang valid). Konfigurasi
    versi aktif tetap dipertahankan; hanya pointer jenis tersebut yang berpindah
    setelah smoke render. Periksa checksum dan hasil PDF sebelum cutover.
+   Jalankan dari direktori release VPS dengan `APP_ORIGIN` production dan
+   database khusus production. PostgreSQL boleh memakai loopback VPS; jangan
+   memakai hostname database sebagai satu-satunya pembeda lokal/production.
 7. Setelah smoke canary lulus, arahkan symlink `current` ke release baru lalu
-   mulai web dan worker analitik. Jalankan kembali
+   mulai web dan worker analitik. Tunggu health loopback dengan retry terbatas
+   setelah restart; baru jalankan kembali
    `bash scripts/release/smoke-release.sh http://127.0.0.1:3050` dan pastikan
    jurnal service bersih sebelum Nginx/DNS diubah.
 8. Pasang Nginx, lakukan smoke melalui host override, lalu ubah apex/`www`

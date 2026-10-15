@@ -43,7 +43,7 @@ jobs:
       - name: Package allowlisted Linux release
         run: bash scripts/release/package-linux.sh "$RUNNER_TEMP/anugrahplastik-release-${GITHUB_SHA}.tar.gz"
       - name: Write artifact checksum
-        run: sha256sum "$RUNNER_TEMP/anugrahplastik-release-${GITHUB_SHA}.tar.gz" > "$RUNNER_TEMP/anugrahplastik-release-${GITHUB_SHA}.tar.gz.sha256"
+        run: cd "$RUNNER_TEMP" && sha256sum "anugrahplastik-release-${GITHUB_SHA}.tar.gz" > "anugrahplastik-release-${GITHUB_SHA}.tar.gz.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: anugrahplastik-vps-release-${{ github.sha }}

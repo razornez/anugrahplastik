@@ -9,6 +9,27 @@ type DeviceContext = {
 type LocationContext = { countryName: string | null; regionName: string | null; cityName: string | null };
 
 let readerPromise: Promise<Awaited<ReturnType<typeof open>> | null> | null = null;
+let readerPath: string | null = null;
+
+function geoIpReader(path: string) {
+  if (readerPath !== path || !readerPromise) {
+    readerPath = path;
+    readerPromise = open(path).catch(() => {
+      readerPromise = null;
+      return null;
+    });
+  }
+  return readerPromise;
+}
+
+export async function geoIpHealth() {
+  if (process.env.TRUST_PROXY_HEADERS !== "true" || !process.env.GEOIP_CITY_DB_PATH)
+    return { ready: false, reason: "Konfigurasi geolokasi belum lengkap." };
+  const reader = await geoIpReader(process.env.GEOIP_CITY_DB_PATH);
+  return reader
+    ? { ready: true, reason: "Database geolokasi siap dibaca." }
+    : { ready: false, reason: "Database geolokasi belum tersedia atau tidak dapat dibaca." };
+}
 
 function labelBrowser(userAgent: string) {
   if (/edg\//i.test(userAgent)) return "Microsoft Edge";
@@ -50,8 +71,7 @@ export async function locationContext(headers: Headers): Promise<LocationContext
   const ip = forwardedIp(headers);
   if (!databasePath || !ip) return { countryName: null, regionName: null, cityName: null };
   try {
-    readerPromise ??= open(databasePath);
-    const reader = await readerPromise;
+    const reader = await geoIpReader(databasePath);
     if (!reader) return { countryName: null, regionName: null, cityName: null };
     const result = reader.get(ip) as {
       country?: { names?: { en?: string } };

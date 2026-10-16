@@ -6,6 +6,12 @@ export type TransactionStep = "quote" | "order" | "payment" | "production" | "de
 type Document = { type: string; status: string; version: number; payload: unknown };
 type Invoice = { status: string; amount: string; count?: number };
 type Entry = { status: string; direction: string; kind: string; amount: string };
+type ProductionBatch = {
+  status?: string;
+  kind?: string;
+  plannedQuantity?: string | null;
+  completedQuantity?: string | null;
+};
 export type WorkspaceInput = {
   header: {
     title: string;
@@ -18,7 +24,7 @@ export type WorkspaceInput = {
   invoices: Invoice[];
   entries: Entry[];
   documents: Document[];
-  batches: { status?: string }[];
+  batches: ProductionBatch[];
   shipments: { status: string }[];
 };
 
@@ -26,6 +32,28 @@ function cents(value: string) {
   if (!/^\d+(?:\.\d{1,2})?$/.test(value)) throw new Error("Nilai keuangan perlu ditinjau");
   const [whole, fraction = ""] = value.split(".");
   return BigInt(whole) * BigInt(100) + BigInt(fraction.padEnd(2, "0"));
+}
+
+export function productionBatchProgress(batches: ProductionBatch[]) {
+  const active = batches.filter((batch) => batch.status !== "cancelled");
+  const regular = active.filter((batch) => batch.kind !== "sample");
+  const unfinished = active.filter((batch) => {
+    const planned = Number(batch.plannedQuantity);
+    const completed = Number(batch.completedQuantity);
+    return (
+      batch.status !== "completed" ||
+      !batch.plannedQuantity ||
+      !batch.completedQuantity ||
+      !Number.isFinite(planned) ||
+      !Number.isFinite(completed) ||
+      completed < planned
+    );
+  });
+  return {
+    hasRegular: regular.length > 0,
+    unfinished: unfinished.length,
+    complete: regular.length > 0 && unfinished.length === 0,
+  };
 }
 
 export function quotationIsCurrent(input: Pick<WorkspaceInput, "header" | "lines" | "documents">) {
@@ -97,12 +125,13 @@ export function transactionWorkspace(input: WorkspaceInput) {
     /* Unknown amounts must be reviewed rather than displayed as zero. */
   }
   const currentQuote = quotationIsCurrent(input);
+  const production = productionBatchProgress(input.batches);
   const hasPo = input.documents.some((item) => item.type === "purchase_order");
   let step: TransactionStep;
   // Existing issued invoices/fulfilment remain historical facts even after quotation edits.
   if (input.header.fulfilmentStatus === "completed") step = "handover";
   else if (input.header.fulfilmentStatus !== "not_released" && input.batches.length) {
-    step = input.batches.some((batch) => batch.status !== "completed" && batch.status !== "cancelled")
+    step = !production.complete
       ? "production"
       : !input.shipments.length || input.shipments.some((item) => item.status === "planned")
         ? "delivery"
@@ -161,6 +190,7 @@ type StepState = { kind: "waiting" | "progress" | "attention" | "complete"; labe
 export function transactionStepStates(input: WorkspaceInput, workspace = transactionWorkspace(input)) {
   const state = (kind: StepState["kind"], label: string): StepState => ({ kind, label });
   const finished = input.header.fulfilmentStatus === "completed";
+  const production = productionBatchProgress(input.batches);
   const states: Record<TransactionStep, StepState> = {
     quote: workspace.currentQuote
       ? state("complete", "PDF sesuai rincian")
@@ -177,11 +207,14 @@ export function transactionStepStates(input: WorkspaceInput, workspace = transac
           : workspace.outstanding === "0.00"
             ? state("complete", "Invoice terbit lunas")
             : state("progress", workspace.paymentLabel),
-    production: finished
-      ? state("complete", "Pekerjaan ditutup")
-      : input.header.fulfilmentStatus === "not_released"
+    production:
+      input.header.fulfilmentStatus === "not_released"
         ? state("waiting", "Belum dilepas")
-        : state("progress", input.batches.length ? "Produksi tercatat" : "Sudah dilepas"),
+        : !production.hasRegular
+          ? state("progress", finished ? "Ditutup tanpa batch produksi" : "Belum ada batch produksi")
+          : production.unfinished
+            ? state("progress", `${production.unfinished} batch/sampel belum selesai`)
+            : state("complete", "Seluruh batch selesai"),
     delivery: finished
       ? state("complete", "Pekerjaan ditutup")
       : input.shipments.some((item) => ["shipped", "received", "received_partial"].includes(item.status))

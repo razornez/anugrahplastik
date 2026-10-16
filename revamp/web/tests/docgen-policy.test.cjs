@@ -32,6 +32,11 @@ test("local renderer follows the local database, supports the production workflo
   );
   assert.equal(policy("dummy", { ...extra, DATABASE_URL: "not-a-url" }).localQaRendererEnabled(), false);
   assert.equal(policy("dummy", { ...extra, DOCGEN_RENDER_MODE: "provider" }).localQaRendererEnabled(), false);
+  assert.equal(policy("dummy", { ...extra, APP_ORIGIN: "https://anugrahplastik.com" }).localQaRendererEnabled(), false);
+  assert.equal(
+    policy("dummy", { ...extra, APP_ORIGIN: "https://admin.anugrahplastik.com" }).localQaRendererEnabled(),
+    false,
+  );
 });
 
 test("template contoh hanya merender transaksi uji", () => {

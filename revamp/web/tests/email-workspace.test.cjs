@@ -520,6 +520,7 @@ test("Local database: draft ownership, revisions, frozen preview, SMTP outcomes 
           },
           "@/features/operations/docgen-policy": {
             docGenDummyMode: () => true,
+            localQaRendererEnabled: () => true,
             assertDocGenEmailAllowed: (kind, recipient) => {
               assert.equal(kind, "test");
               assert(["qa@example.invalid", "other@example.invalid"].includes(recipient));
@@ -684,6 +685,24 @@ test("Local database: draft ownership, revisions, frozen preview, SMTP outcomes 
         assert.equal(unchanged.payload.lastEmailState, "simulated");
         assert.equal(unchanged.payload.lastEmailAttemptId, documentPreview.attemptId);
         await assert.rejects(documentWorkspace.sendPreparedDraft(documentPreview.attemptId));
+        await tx
+          .update(schema.transactionDocuments)
+          .set({ payload: { ...unchanged.payload, renderSource: "local_qa" } })
+          .where(require("drizzle-orm").eq(schema.transactionDocuments.id, document.id));
+        process.env.EMAIL_CS_SEND_MODE = "live";
+        const localDraft = await documentWorkspace.createDraft(
+          { ...payload, subject: "[UJI] simulasi PDF lokal", documentSource },
+          1,
+        );
+        const localPreview = await documentWorkspace.prepareDraft(localDraft.id, 1);
+        assert.equal(localPreview.simulation, true, "PDF lokal must force simulation even when SMTP is live");
+        assert.equal((await documentWorkspace.sendPreparedDraft(localPreview.attemptId)).status, "simulated");
+        assert.equal(calls, callsBeforeSimulation, "PDF lokal must never call SMTP");
+        await tx
+          .update(schema.transactionDocuments)
+          .set({ payload: unchanged.payload })
+          .where(require("drizzle-orm").eq(schema.transactionDocuments.id, document.id));
+        process.env.EMAIL_CS_SEND_MODE = "simulate";
         const eq = require("drizzle-orm").eq;
         const nextDraft = await documentWorkspace.createDraft(
           { ...payload, subject: "[UJI] modified after preview", documentSource },

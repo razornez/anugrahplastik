@@ -24,7 +24,7 @@ function load(filename, stubs = {}) {
   );
   return loaded.exports;
 }
-const { transactionWorkspace, transactionStepStates, workspaceMoney } = load(
+const { transactionWorkspace, transactionStepStates, productionBatchProgress, workspaceMoney } = load(
   resolve(__dirname, "../src/features/operations/transaction-workspace.ts"),
 );
 const line = {
@@ -92,7 +92,7 @@ test("Payment verification is visible while fulfilment continues", () => {
   const result = transactionWorkspace(
     input({
       header: { ...input().header, fulfilmentStatus: "production" },
-      batches: [{ status: "completed" }],
+      batches: [{ kind: "production", status: "completed", plannedQuantity: "100", completedQuantity: "100" }],
       entries: [paid("100000.00", "unverified")],
     }),
   );
@@ -127,6 +127,35 @@ test("Step labels do not confuse partial payment, release or shipment with compl
   assert.equal(transactionStepStates(partial).payment.label, "Invoice terbit lunas");
   assert.equal(transactionStepStates(partial).payment.kind, "complete");
 });
+test("Production checklist follows completed regular batches, not transaction closure", () => {
+  const released = { ...input().header, fulfilmentStatus: "production" };
+  const batch = { kind: "production", status: "completed", plannedQuantity: "100", completedQuantity: "100" };
+  const complete = input({
+    header: released,
+    batches: [batch, { ...batch, kind: "sample", plannedQuantity: "10", completedQuantity: "10" }],
+  });
+  assert.equal(transactionStepStates(complete).production.kind, "complete");
+  assert.equal(transactionWorkspace(complete).step, "delivery");
+  assert.equal(
+    transactionStepStates(input({ header: released, batches: [] })).production.label,
+    "Belum ada batch produksi",
+  );
+  assert.equal(
+    transactionStepStates(input({ header: released, batches: [{ ...batch, kind: "sample" }] })).production.kind,
+    "progress",
+  );
+  assert.equal(
+    transactionStepStates(input({ header: released, batches: [{ ...batch, completedQuantity: "90" }] })).production
+      .kind,
+    "progress",
+  );
+  assert.equal(
+    transactionStepStates(input({ header: released, batches: [batch, { ...batch, status: "planned" }] })).production
+      .label,
+    "1 batch/sampel belum selesai",
+  );
+  assert.equal(productionBatchProgress([batch, { ...batch, status: "cancelled" }]).complete, true);
+});
 test("Empty, unknown financial data, signed receipt and closed/cancelled labels remain honest", () => {
   const empty = transactionStepStates(input());
   assert.equal(empty.payment.label, "Belum ada invoice");
@@ -140,6 +169,7 @@ test("Empty, unknown financial data, signed receipt and closed/cancelled labels 
   assert.equal(transactionStepStates(input({ shipments: [{ status: "received" }] })).handover.kind, "progress");
   const closed = transactionStepStates(input({ header: { ...input().header, fulfilmentStatus: "completed" } }));
   assert.equal(closed.handover.kind, "complete");
+  assert.equal(closed.production.kind, "progress");
   const cancelled = transactionStepStates(input({ header: { ...input().header, commercialStatus: "cancelled" } }));
   assert(Object.values(cancelled).every((item) => item.kind === "waiting" && item.label === "Arsip transaksi"));
 });
@@ -171,7 +201,7 @@ test("PO advances to invoice; sent/received partial shipments advance to STB, no
   const result = transactionWorkspace(
     input({
       header: { ...input().header, fulfilmentStatus: "shipping" },
-      batches: [{ status: "completed" }],
+      batches: [{ kind: "production", status: "completed", plannedQuantity: "100", completedQuantity: "100" }],
       shipments: [{ status: "received_partial" }],
     }),
   );

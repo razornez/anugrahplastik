@@ -33,6 +33,7 @@ function load(file, replacements = {}, cache = new Map()) {
   return fixtureModule.exports;
 }
 const model = load("src/features/analytics/visitor-report-model.ts");
+const geo = load("src/features/analytics/request-context.ts");
 const filters = { days: 7, device: "all", city: "", source: "", outcome: "" };
 const sample = [
   { country: "Indonesia", region: "West Java", city: "Bandung", total: 25, forms: 3 },
@@ -41,6 +42,28 @@ const sample = [
   { country: "Singapore", region: "Singapore", city: "Singapore", total: 4, forms: 0 },
   { country: null, region: null, city: null, total: 3, forms: 0 },
 ];
+test("GeoIP health reports missing configuration without guessing visitor location", async () => {
+  const previousProxy = process.env.TRUST_PROXY_HEADERS;
+  const previousPath = process.env.GEOIP_CITY_DB_PATH;
+  try {
+    delete process.env.TRUST_PROXY_HEADERS;
+    delete process.env.GEOIP_CITY_DB_PATH;
+    assert.equal((await geo.geoIpHealth()).ready, false);
+    process.env.TRUST_PROXY_HEADERS = "true";
+    process.env.GEOIP_CITY_DB_PATH = "__missing-geoip-test__.mmdb";
+    assert.equal((await geo.geoIpHealth()).ready, false);
+    assert.deepEqual(await geo.locationContext(new Headers()), {
+      countryName: null,
+      regionName: null,
+      cityName: null,
+    });
+  } finally {
+    if (previousProxy === undefined) delete process.env.TRUST_PROXY_HEADERS;
+    else process.env.TRUST_PROXY_HEADERS = previousProxy;
+    if (previousPath === undefined) delete process.env.GEOIP_CITY_DB_PATH;
+    else process.env.GEOIP_CITY_DB_PATH = previousPath;
+  }
+});
 test("peta menggabungkan alias eksplisit tanpa mengurangi jumlah sesi", () => {
   const rows = model.geographyBuckets(sample, "indonesia");
   assert.equal(rows[0].label, "Jawa Barat");
@@ -177,6 +200,7 @@ test("database lokal: batas WIB, jumlah grafik/peta, alias, kelas data, event be
       ["today", "public", "2026-10-01T17:01:00Z", "Jawa Barat", "valid"],
       ["future", "public", "2026-10-01T17:31:00Z", "West Java", "valid"],
       ["demo", "demo", "2026-10-01T17:01:00Z", "West Java", "valid"],
+      ["local", "internal", "2026-10-01T17:01:00Z", "West Java", "valid"],
     ];
     const ids = {};
     for (const [key, traffic, date, region, status] of fixtures) {
@@ -221,6 +245,8 @@ test("database lokal: batas WIB, jumlah grafik/peta, alias, kelas data, event be
       null,
     );
     assert.ok(await service.getAnalyticsJourney(ids.demo, "demo", testFilters, now));
+    assert.equal((await service.getAnalyticsReport(testFilters, {}, "internal", now)).totals.sessions, 1);
+    assert.equal(await service.getAnalyticsJourney(ids.local, "public", testFilters, now), null);
     const thirty = await service.getAnalyticsReport({ ...testFilters, days: 30 }, {}, "public", now);
     assert.equal(thirty.trend.length, 30);
     assert.equal(thirty.trend[0].date, "2026-09-03");

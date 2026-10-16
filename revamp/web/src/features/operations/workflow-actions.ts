@@ -1772,6 +1772,47 @@ export async function updateTransactionTitle(formData: FormData) {
   redirect(transactionPath(id, step, "title-updated"));
 }
 
+export async function saveTransactionTitleInline(_previous: { ok: boolean; message: string }, formData: FormData) {
+  const user = await operationsUser();
+  const id = z.string().uuid().safeParse(field(formData, "transactionId"));
+  const title = z
+    .string()
+    .trim()
+    .min(2, "Judul minimal dua karakter.")
+    .max(180, "Judul maksimal 180 karakter.")
+    .safeParse(field(formData, "title"));
+  if (!id.success) return { ok: false, message: "Transaksi tidak valid. Muat ulang halaman." };
+  if (!title.success) return { ok: false, message: title.error.issues[0]?.message ?? "Periksa judul pekerjaan." };
+  const database = getDatabase();
+  if (!database) return { ok: false, message: "Database belum terhubung. Coba lagi setelah koneksi pulih." };
+  try {
+    await database.transaction(async (tx) => {
+      const [existing] = await tx
+        .select({ id: businessTransactions.id, title: businessTransactions.title })
+        .from(businessTransactions)
+        .where(eq(businessTransactions.id, id.data));
+      if (!existing) throw new Error("Transaksi tidak ditemukan.");
+      if (existing.title === title.data) return;
+      await tx
+        .update(businessTransactions)
+        .set({ title: title.data, updatedAt: new Date() })
+        .where(eq(businessTransactions.id, id.data));
+      await tx.insert(auditLogs).values({
+        actorId: user.id,
+        action: "transaction.title_updated",
+        entityType: "transaction",
+        entityId: id.data,
+        metadata: { previousTitle: existing.title, title: title.data },
+      });
+    });
+  } catch {
+    return { ok: false, message: "Judul belum tersimpan. Periksa koneksi lalu coba lagi." };
+  }
+  revalidatePath(`/admin/transactions/${id.data}`);
+  revalidatePath("/admin/transactions");
+  return { ok: true, message: "Judul pekerjaan tersimpan." };
+}
+
 export async function setTransactionArchived(formData: FormData) {
   const user = await administrator();
   const id = z.string().uuid().parse(field(formData, "transactionId"));

@@ -861,6 +861,11 @@
   color: var(--admin-success);
   font-size: 12px;
 }
+.transaction-email-local-note {
+  color: var(--admin-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
 .transaction-flow-documents__email-error {
   color: var(--admin-danger);
   font-weight: 600;
@@ -1979,7 +1984,7 @@
     padding-inline: 8px;
     text-align: center;
   }
-  .admin-shell :is(.marketing-kpis, .visitor-stat-row, .profile-grid, .team-layout, .integration-grid) {
+  .admin-shell :is(.marketing-kpis, .profile-grid, .team-layout, .integration-grid) {
     grid-template-columns: minmax(0, 1fr) !important;
   }
   .admin-shell .seo-ranking-list > article {
@@ -9118,6 +9123,323 @@ body:has(.admin-shell[data-theme="dark"]) .customer-profile-address legend {
   min-height: 18px;
   margin: 2px 0 0;
   padding: 0;
+}
+
+/* Transaction title and secondary actions stay aligned with the heading. */
+.admin-shell .admin-page-header__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  position: relative;
+}
+.admin-shell .admin-page-header__title-row h1 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.admin-shell .transaction-title-editor {
+  display: inline-flex;
+  flex: 0 0 auto;
+  position: static;
+}
+.admin-shell .transaction-title-editor__trigger,
+.admin-shell .transaction-management__menu > summary {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--admin-muted);
+  cursor: pointer;
+}
+.admin-shell .transaction-title-editor__trigger:hover,
+.admin-shell .transaction-management__menu > summary:hover,
+.admin-shell .transaction-management__menu[open] > summary {
+  border-color: var(--admin-line);
+  background: var(--admin-surface-soft);
+  color: var(--admin-blue);
+}
+.admin-shell .transaction-title-editor__trigger:focus-visible,
+.admin-shell .transaction-management__menu > summary:focus-visible {
+  outline: 3px solid var(--admin-blue);
+  outline-offset: 2px;
+}
+.admin-shell .transaction-title-editor__trigger svg,
+.admin-shell .transaction-management__menu > summary svg {
+  width: 19px;
+  height: 19px;
+}
+.admin-shell .transaction-title-editor__inline {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  width: min(430px, calc(100vw - 32px));
+  border: 1px solid var(--admin-line);
+  border-radius: 15px;
+  background: var(--admin-surface);
+  box-shadow: var(--admin-shadow);
+  padding: 16px;
+}
+.transaction-title-editor__form {
+  display: grid;
+  gap: 10px;
+  font: 14px var(--admin-font-ui);
+}
+.transaction-title-editor__form label {
+  font-weight: 700;
+  color: var(--admin-ink);
+}
+.transaction-title-editor__form input:not([type="hidden"]) {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--admin-line);
+  border-radius: 10px;
+  background: var(--admin-field);
+  color: var(--admin-ink);
+  padding: 0 12px;
+  font: inherit;
+}
+.transaction-title-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.transaction-title-editor__actions button {
+  min-height: 44px;
+  padding-inline: 16px;
+  border-radius: 10px;
+}
+.transaction-title-editor__sheet {
+  position: fixed;
+  z-index: 151;
+  inset: auto 0 0;
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  border-radius: 18px 18px 0 0;
+  border: 1px solid var(--admin-line);
+  background: var(--admin-surface);
+  color: var(--admin-ink);
+  padding: 20px 16px max(20px, env(safe-area-inset-bottom));
+  box-shadow: 0 -20px 60px rgb(0 0 0 / 20%);
+}
+.transaction-title-editor__sheet > h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+.transaction-title-editor__sheet > p {
+  margin: 0 0 18px;
+  color: var(--admin-muted);
+}
+.admin-shell .transaction-management {
+  margin: 0;
+  position: relative;
+}
+.admin-shell .transaction-management__menu > summary {
+  list-style: none;
+}
+.admin-shell .transaction-management__menu > summary::-webkit-details-marker {
+  display: none;
+}
+.admin-shell .transaction-management__menu-content {
+  position: absolute;
+  z-index: 40;
+  right: 0;
+  top: calc(100% + 7px);
+  display: grid;
+  gap: 4px;
+  width: max-content;
+  min-width: 210px;
+  max-width: min(280px, calc(100vw - 24px));
+  border: 1px solid var(--admin-line);
+  border-radius: 13px;
+  background: var(--admin-surface);
+  box-shadow: var(--admin-shadow);
+  padding: 6px;
+}
+.admin-shell .transaction-management__menu-content form {
+  display: block;
+}
+.admin-shell .transaction-management__menu-content button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--admin-ink);
+  text-align: left;
+}
+.admin-shell .transaction-management__menu-content button:hover {
+  background: var(--admin-surface-soft);
+}
+.admin-shell .transaction-management__menu-content .transaction-management__delete {
+  color: var(--admin-danger);
+  border: 0;
+}
+.admin-shell .transaction-management__menu-content .transaction-management__delete:hover {
+  background: var(--admin-danger-surface);
+}
+
+/* A document is one compact unit with one action row, even in the narrow aside. */
+.admin-shell .transaction-flow-documents article {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 3px 10px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+.admin-shell .transaction-flow-documents__mark {
+  grid-row: 1 / 3;
+  width: 36px;
+  height: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  border-radius: 9px;
+}
+.admin-shell .transaction-flow-documents__mark svg {
+  width: 19px;
+  height: 19px;
+}
+.admin-shell .transaction-flow-documents__mark b {
+  font-size: 8px;
+  line-height: 1;
+}
+.admin-shell .transaction-flow-documents__mark:not([data-pdf="true"]) {
+  background: var(--admin-surface-soft);
+  color: var(--admin-muted);
+}
+.admin-shell .transaction-flow-documents article > .transaction-flow-documents__info {
+  grid-column: 2;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.admin-shell .transaction-flow-documents__info > strong {
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+}
+.admin-shell .transaction-flow-documents__info > small {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.admin-shell .transaction-flow-documents__status {
+  grid-column: auto;
+  width: fit-content;
+  font-size: 11px;
+}
+.admin-shell .transaction-flow-documents article > .transaction-flow-documents__actions {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+  margin-top: 3px;
+}
+.admin-shell .transaction-flow-documents__actions > a,
+.admin-shell .transaction-flow-documents__actions .transaction-email-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 0;
+  padding: 6px 10px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.admin-shell .transaction-flow-documents__actions > a {
+  color: var(--admin-blue);
+  font-weight: 700;
+}
+.admin-shell .transaction-flow-documents__actions .transaction-email-trigger {
+  grid-column: auto;
+  justify-self: auto;
+  min-width: 112px;
+  width: auto;
+}
+.admin-shell .transaction-flow-documents article > .transaction-flow-documents__feedback {
+  grid-column: 2;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.admin-shell .transaction-flow-documents__feedback:empty {
+  display: none;
+}
+.admin-shell .transaction-flow-documents__feedback small {
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: break-word;
+}
+.transaction-email-connection {
+  position: fixed;
+  z-index: 160;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  width: min(540px, calc(100vw - 20px));
+  transform: translateX(-50%);
+  border: 1px solid var(--admin-warning);
+  border-radius: 12px;
+  background: var(--admin-warning-surface);
+  color: var(--admin-ink);
+  box-shadow: var(--admin-shadow);
+  padding: 12px 16px;
+  font: 700 13px/1.45 var(--admin-font-ui);
+}
+.transaction-email-actionbar {
+  flex-wrap: wrap;
+  max-height: 36dvh;
+  overflow-y: auto;
+}
+.transaction-email-actionbar__error {
+  flex: 1 0 100%;
+  margin: 0;
+  border-left: 3px solid var(--admin-danger);
+  border-radius: 0 8px 8px 0;
+  background: var(--admin-danger-surface);
+  padding: 9px 11px;
+  color: var(--admin-ink);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.transaction-email-actionbar__error a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--admin-blue);
+  font-weight: 700;
+}
+.admin-shell .transaction-production-guidance {
+  margin: 0;
+  border-left: 3px solid var(--admin-blue);
+  border-radius: 0 10px 10px 0;
+  background: var(--admin-surface-soft);
+  color: var(--admin-ink);
+  padding: 10px 13px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.admin-shell .transaction-production-guidance a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--admin-blue);
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+#production-batches {
+  scroll-margin-top: 90px;
 }
 .admin-shell--portal[data-theme="dark"] .admin-sheet--customer-document {
   --admin-surface: #25222c;

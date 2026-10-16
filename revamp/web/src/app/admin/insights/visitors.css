@@ -110,14 +110,6 @@
   flex-direction: column;
   gap: 8px;
 }
-.admin-shell .visitor-workspace .visitor-stat-row article:nth-child(3) {
-  background: var(--visitor-ice);
-  border-top-color: var(--visitor-chart-forms);
-}
-.admin-shell .visitor-workspace .visitor-stat-row article:nth-child(5) {
-  background: var(--visitor-peach);
-  border-top-color: #b16a21;
-}
 .admin-shell .visitor-workspace .visitor-stat-row span {
   font-size: 14px;
   font-weight: 600;
@@ -950,5 +942,135 @@
 @media (prefers-reduced-motion: reduce) {
   .admin-shell .visitor-workspace :is(button, a) {
     transition: none;
+  }
+}
+
+/* One cohesive data strip keeps four KPIs legible without four cramped cards. */
+.admin-shell .visitor-workspace .visitor-stat-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  padding: 14px 12px 13px;
+  border: 1px solid #4d3b73;
+  border-radius: 18px;
+  background: linear-gradient(115deg, #221936 0%, #30204e 58%, #412562 100%);
+  box-shadow: 0 12px 28px -22px rgba(31, 20, 49, 0.8);
+}
+.admin-shell .visitor-workspace .visitor-stat-row__heading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 5px 10px;
+  color: #f8f5ff;
+}
+.admin-shell .visitor-workspace .visitor-stat-row__heading h2 {
+  margin: 0;
+  color: #f8f5ff;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+.admin-shell .visitor-workspace .visitor-stat-row article,
+.admin-shell .visitor-workspace .visitor-stat-row article:last-child {
+  grid-column: auto;
+  min-width: 0;
+  min-height: 76px;
+  padding: 11px 13px 4px;
+  border: 0;
+  border-right: 1px solid rgba(236, 222, 255, 0.22);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  gap: 4px;
+}
+.admin-shell .visitor-workspace .visitor-stat-row article:last-child {
+  border-right: 0;
+}
+.admin-shell .visitor-workspace .visitor-stat-row span {
+  min-height: 0;
+  color: #e5dbf1;
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.2;
+}
+.admin-shell .visitor-workspace .visitor-stat-row strong {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(25px, 2.5vw, 34px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+.admin-shell .visitor-workspace .visitor-stat-row strong :is(.visitor-kpi-full, .visitor-kpi-compact) {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+.admin-shell .visitor-workspace .visitor-stat-row strong .visitor-kpi-compact {
+  display: none;
+}
+.admin-shell .visitor-workspace .visitor-stat-row small {
+  color: #cdbfdc;
+  font-size: 11px;
+  line-height: 1.25;
+}
+.admin-shell .visitor-workspace .visitor-interaction-detail,
+.admin-shell .visitor-workspace .visitor-source-note {
+  margin: 0;
+  border: 1px solid var(--admin-line);
+  border-radius: 11px;
+  background: var(--admin-surface-soft);
+  color: var(--admin-ink);
+  padding: 11px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.admin-shell .visitor-workspace .visitor-interaction-detail summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  cursor: pointer;
+  font-weight: 700;
+}
+.admin-shell .visitor-workspace .visitor-interaction-detail summary strong {
+  color: var(--admin-blue);
+}
+.admin-shell .visitor-workspace .visitor-interaction-detail p {
+  margin: 4px 0 0;
+  color: var(--admin-muted);
+}
+@media (max-width: 767px) {
+  .admin-shell .visitor-workspace .visitor-stat-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    padding: 13px 7px 12px;
+  }
+  .admin-shell .visitor-workspace .visitor-stat-row article,
+  .admin-shell .visitor-workspace .visitor-stat-row article:last-child {
+    min-height: 65px;
+    padding: 10px 5px 2px;
+    gap: 6px;
+  }
+  .admin-shell .visitor-workspace .visitor-stat-row span {
+    font-size: 11px;
+    overflow-wrap: normal;
+  }
+  .admin-shell .visitor-workspace .visitor-stat-row strong {
+    font-size: clamp(21px, 6vw, 27px);
+  }
+  .admin-shell .visitor-workspace .visitor-stat-row strong .visitor-kpi-full {
+    display: none;
+  }
+  .admin-shell .visitor-workspace .visitor-stat-row strong .visitor-kpi-compact {
+    display: inline;
+  }
+  .admin-shell .visitor-workspace .visitor-stat-row small {
+    display: none;
   }
 }

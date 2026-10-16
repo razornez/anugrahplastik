@@ -16,7 +16,7 @@ test.beforeAll(async () => {
   try {
     await client.query(
       "insert into customers(id,code,legal_name,display_name,email) values($1,$2,'PT Uji Anonim','PT Uji Anonim',$3)",
-      [customerId, reference, "razornez@gmail.com"],
+      [customerId, reference, "qa@example.invalid"],
     );
     await client.query(
       "insert into business_transactions(id,reference_no,customer_id,title,data_class) values($1,$2,$3,'[UJI] Tata letak composer','test')",
@@ -24,7 +24,7 @@ test.beforeAll(async () => {
     );
     await client.query(
       "insert into transaction_documents(id,transaction_id,type,direction,status,version,document_no,storage_path,payload) values($1,$2,'quotation','outbound','ready',1,$3,$4,$5)",
-      [documentId, id, `${reference}-SP`, `qa/${documentId}.pdf`, { isDummy: true }],
+      [documentId, id, `${reference}-SP`, `qa/${documentId}.pdf`, { isDummy: true, renderSource: "local_qa" }],
     );
     created = true;
   } finally {
@@ -50,9 +50,15 @@ test("composer drawer respects viewport, theme and zoom", async ({ page }, testI
   await page.goto(`/admin/transactions/${id}?step=quote`, { waitUntil: "networkidle" });
   const trigger = page.getByRole("button", { name: "Kirim email" }).first();
   test.skip(!(await trigger.count()), "An active quotation email template is required.");
+  await expect(page.getByText("Simulasi lokal · tidak terkirim").first()).toBeVisible();
   await trigger.click();
-  const composer = page.getByRole("dialog", { name: "Kirim email" });
+  const composer = page.getByRole("dialog", { name: "Simulasi email" });
   await expect(composer).toBeVisible();
+  await composer.locator(".transaction-email-template-field button").click();
+  await expect(composer.getByText("Pilih template", { exact: true })).toBeVisible();
+  await composer.getByRole("button", { name: "Gunakan template ini" }).click();
+  await expect(composer.getByLabel("Subjek")).toBeVisible();
+  await expect(composer.getByText("Pilih template", { exact: true })).toHaveCount(0);
   const metrics = await composer.evaluate((element) => {
     const box = element.getBoundingClientRect();
     const footer = element.querySelector("footer")?.getBoundingClientRect();
@@ -85,6 +91,18 @@ test("composer drawer respects viewport, theme and zoom", async ({ page }, testI
   expect(overflow).toBeLessThanOrEqual(1);
 });
 
+test("composer memberi peringatan melayang saat koneksi perangkat putus", async ({ page, context }) => {
+  test.skip(!created, "A local test database is required.");
+  await page.goto(`/admin/transactions/${id}?step=quote`, { waitUntil: "networkidle" });
+  const trigger = page.getByRole("button", { name: "Kirim email" }).first();
+  test.skip(!(await trigger.count()), "An active quotation email template is required.");
+  await trigger.click();
+  await context.setOffline(true);
+  await expect(page.locator(".transaction-email-connection")).toContainText("Perangkat sedang offline");
+  await context.setOffline(false);
+  await expect(page.getByText("Perangkat sedang offline.", { exact: false })).toHaveCount(0);
+});
+
 test("daftar dokumen di sidebar sempit tidak memecah tombol per huruf", async ({ page }, testInfo) => {
   test.skip(!created, "A local test database is required.");
   await page.goto(`/admin/transactions/${id}?step=quote`, { waitUntil: "networkidle" });
@@ -96,5 +114,36 @@ test("daftar dokumen di sidebar sempit tidak memecah tombol per huruf", async ({
   const size = await trigger.boundingBox();
   expect(size!.width).toBeGreaterThanOrEqual(112);
   expect(size!.height).toBeGreaterThanOrEqual(44);
-  await page.screenshot({ path: testInfo.outputPath(`document-sidebar-${testInfo.project.name}.png`) });
+  await expect(aside.locator('.transaction-flow-documents__mark[data-pdf="true"]')).toHaveCount(1);
+  await page.screenshot({ path: testInfo.outputPath(`document-sidebar-${testInfo.project.name}.png`), fullPage: true });
+  await aside.screenshot({
+    path: testInfo.outputPath(`document-sidebar-focused-${testInfo.project.name}.png`),
+    style: ".admin-bottom-nav { visibility: hidden !important; }",
+  });
+});
+
+test("editor judul ringkas dapat dibuka dan ditutup tanpa mengubah transaksi", async ({ page }, testInfo) => {
+  test.skip(!created, "A local test database is required.");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(`/admin/transactions/${id}?step=quote`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Edit judul pekerjaan" }).click();
+  const editor = page.getByRole("dialog", { name: "Edit judul pekerjaan" });
+  const field = (await editor.isVisible().catch(() => false))
+    ? editor.getByRole("textbox", { name: "Judul pekerjaan" })
+    : page.getByRole("textbox", { name: "Judul pekerjaan" });
+  await expect(field).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath(`title-editor-${testInfo.project.name}.png`) });
+  await field.fill("[UJI] Perubahan belum disimpan");
+  await page.getByRole("button", { name: "Batal", exact: true }).last().click();
+  await expect(page.getByRole("heading", { name: "[UJI] Tata letak composer" })).toBeVisible();
+});
+
+test("judul transaksi dapat disimpan dari editor ringkas", async ({ page }) => {
+  test.skip(!created, "A local test database is required.");
+  await page.goto(`/admin/transactions/${id}?step=quote`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Edit judul pekerjaan" }).click();
+  const field = page.getByRole("textbox", { name: "Judul pekerjaan" });
+  await field.fill("[UJI] Judul diperbarui");
+  await page.getByRole("button", { name: "Simpan", exact: true }).last().click();
+  await expect(page.getByRole("heading", { name: "[UJI] Judul diperbarui" })).toBeVisible();
 });

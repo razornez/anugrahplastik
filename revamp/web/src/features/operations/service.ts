@@ -497,7 +497,13 @@ export async function getTransactionPage(
             ),
           ),
         database
-          .select({ transactionId: productionBatches.transactionId, status: productionBatches.status })
+          .select({
+            transactionId: productionBatches.transactionId,
+            status: productionBatches.status,
+            kind: productionBatches.kind,
+            plannedQuantity: productionBatches.plannedQuantity,
+            completedQuantity: productionBatches.completedQuantity,
+          })
           .from(productionBatches)
           .where(inArray(productionBatches.transactionId, ids)),
         database

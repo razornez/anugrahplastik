@@ -11,12 +11,21 @@ type AdminPageHeaderProps = {
   description?: ReactNode;
   back?: BackLink;
   actions?: ReactNode;
+  titleAction?: ReactNode;
   className?: string;
   titleId?: string;
 };
 
 /** A restrained, shared header for every operational page in the admin workspace. */
-export function AdminPageHeader({ title, description, back, actions, className, titleId }: AdminPageHeaderProps) {
+export function AdminPageHeader({
+  title,
+  titleAction,
+  description,
+  back,
+  actions,
+  className,
+  titleId,
+}: AdminPageHeaderProps) {
   return (
     <header className={["admin-page-header", className].filter(Boolean).join(" ")} data-ui-surface="header">
       {back ? (
@@ -25,7 +34,10 @@ export function AdminPageHeader({ title, description, back, actions, className, 
         </Link>
       ) : null}
       <div className="admin-page-header__copy">
-        <h1 id={titleId}>{title}</h1>
+        <div className="admin-page-header__title-row">
+          <h1 id={titleId}>{title}</h1>
+          {titleAction}
+        </div>
         {description ? <p>{description}</p> : null}
       </div>
       {actions ? <div className="admin-page-header__actions">{actions}</div> : null}

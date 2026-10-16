@@ -12,10 +12,22 @@ function databaseIsLocal() {
   }
 }
 
-// A local database is the trust boundary. NODE_ENV may be "production" when the
-// developer runs `next start`, so it must not be used to identify production data.
+function officialOriginConfigured() {
+  try {
+    const origin = new URL(process.env.APP_ORIGIN ?? "");
+    return (
+      origin.protocol === "https:" &&
+      (origin.hostname === "anugrahplastik.com" || origin.hostname.endsWith(".anugrahplastik.com"))
+    );
+  } catch {
+    return false;
+  }
+}
+
+// PostgreSQL also uses loopback on the VPS. NODE_ENV can be "production" on a
+// developer workstation, so neither signal alone identifies the environment.
 export function localQaRendererEnabled() {
-  if (process.env.DOCGEN_RENDER_MODE === "provider") return false;
+  if (process.env.DOCGEN_RENDER_MODE === "provider" || officialOriginConfigured()) return false;
   return databaseIsLocal();
 }
 

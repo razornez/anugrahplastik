@@ -86,6 +86,7 @@ type Snapshot = {
   inReplyTo?: string;
   references?: string[];
   documentSource?: DocumentEmailSource;
+  localQa?: boolean;
   templateSnapshot?: DraftPayload["templateSnapshot"];
   privateDocumentLink?: { id: string; url: string; expiresAt: string };
 };
@@ -455,8 +456,10 @@ export async function prepareDraft(id: string, revision: number, allowUnscanned 
   }
   let documentInfo: { number: string | null; type: string; version: number } | undefined;
   let privateDocumentLink: Snapshot["privateDocumentLink"];
+  let localQa = false;
   if (payload.documentSource) {
     const document = await validateDocumentEmailSource(database, payload.documentSource, recipients, payload.subject);
+    localQa = document.localQa;
     documentInfo = { number: document.documentNo, type: document.type, version: payload.documentSource.version };
     if (document.bytes.length <= maxUploadBytes) {
       attachments.unshift({
@@ -503,6 +506,7 @@ export async function prepareDraft(id: string, revision: number, allowUnscanned 
     text: formatted.text,
     attachments,
     documentSource: payload.documentSource,
+    localQa,
     templateSnapshot: payload.templateSnapshot,
     privateDocumentLink,
     ...(source?.messageId
@@ -569,7 +573,7 @@ export async function prepareDraft(id: string, revision: number, allowUnscanned 
   );
   return {
     attemptId,
-    simulation: process.env.EMAIL_CS_SEND_MODE !== "live",
+    simulation: localQa || process.env.EMAIL_CS_SEND_MODE !== "live",
     html: preview,
     text: snapshot.text,
     recipients,
@@ -599,8 +603,8 @@ export async function sendPreparedDraft(attemptId: string) {
     if (createHash("sha256").update(Buffer.from(file.content, "base64")).digest("hex") !== file.sha256)
       throw new Error("Checksum lampiran pratinjau tidak sesuai. Pengiriman dihentikan.");
   }
-  const simulate = process.env.EMAIL_CS_SEND_MODE !== "live";
-  if (simulate && process.env.NODE_ENV === "production")
+  const simulate = snapshot.localQa === true || process.env.EMAIL_CS_SEND_MODE !== "live";
+  if (simulate && process.env.NODE_ENV === "production" && !snapshot.localQa)
     throw new Error("Pengiriman Email CS belum diaktifkan administrator server.");
   if (!simulate && process.env.NODE_ENV !== "production") {
     const allowed = (process.env.EMAIL_CS_TEST_RECIPIENTS ?? "")
@@ -623,7 +627,14 @@ export async function sendPreparedDraft(attemptId: string) {
       await tx.execute(
         sql`select id from business_transactions where id = ${snapshot.documentSource.transactionId} for update`,
       );
-      await validateDocumentEmailSource(tx, snapshot.documentSource, snapshot.recipients, snapshot.subject);
+      const document = await validateDocumentEmailSource(
+        tx,
+        snapshot.documentSource,
+        snapshot.recipients,
+        snapshot.subject,
+      );
+      if (document.localQa !== (snapshot.localQa === true))
+        throw new Error("Sumber PDF berubah. Buat pratinjau email baru sebelum melanjutkan.");
       await tx
         .update(transactionDocuments)
         .set({

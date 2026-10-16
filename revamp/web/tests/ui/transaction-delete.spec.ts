@@ -69,6 +69,7 @@ test("dokumen belum pasti memblokir penghapusan", async ({ page }) => {
   try {
     await client.query("update transaction_documents set status='needs_review' where id=$1", [documentId]);
     await page.goto(`/admin/transactions/${transactionId}?step=quote`, { waitUntil: "networkidle" });
+    await page.getByLabel("Aksi lainnya untuk transaksi").click();
     await page.getByRole("button", { name: "Hapus permanen…" }).click();
     const dialog = page.getByRole("dialog", { name: `Hapus permanen ${reference}?` });
     await expect(dialog).toContainText("PDF atau email masih berstatus belum pasti");
@@ -83,6 +84,7 @@ test("Admin menghapus transaksi dummy dengan konfirmasi dan audit", async ({ pag
   test.skip(!created, "Database lokal diperlukan.");
   await page.goto(`/admin/transactions/${transactionId}?step=quote`, { waitUntil: "networkidle" });
   page.once("dialog", (dialog) => dialog.accept());
+  await page.getByLabel("Aksi lainnya untuk transaksi").click();
   await page.getByRole("button", { name: "Arsipkan transaksi" }).click();
   await expect(page).toHaveURL(/\/admin\/transactions(?:\?|$)/);
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
@@ -95,9 +97,11 @@ test("Admin menghapus transaksi dummy dengan konfirmasi dan audit", async ({ pag
   }
   await page.goto(`/admin/transactions/${transactionId}?step=quote`, { waitUntil: "networkidle" });
   page.once("dialog", (dialog) => dialog.accept());
+  await page.getByLabel("Aksi lainnya untuk transaksi").click();
   await page.getByRole("button", { name: "Pulihkan transaksi" }).click();
   await expect(page).toHaveURL(/\/admin\/transactions(?:\?|$)/);
   await page.goto(`/admin/transactions/${transactionId}?step=quote`, { waitUntil: "networkidle" });
+  await page.getByLabel("Aksi lainnya untuk transaksi").click();
   await page.getByRole("button", { name: "Hapus permanen…" }).click();
   const dialog = page.getByRole("dialog", { name: `Hapus permanen ${reference}?` });
   await expect(dialog).toBeVisible();

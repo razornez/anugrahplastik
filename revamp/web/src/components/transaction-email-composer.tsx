@@ -3,7 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AdminDialogPortalFrame } from "@/components/admin-dialog-portal-frame";
 import {
@@ -54,6 +54,7 @@ export function TransactionEmailComposer({
   transactionId,
   documentId,
   documentLabel,
+  localQa = false,
   contacts,
   templates,
   ownerName,
@@ -63,6 +64,7 @@ export function TransactionEmailComposer({
   transactionId: string;
   documentId: string;
   documentLabel: string;
+  localQa?: boolean;
   contacts: Array<{ id: string; name: string; email: string; isPrimary: boolean }>;
   templates: TemplateOption[];
   ownerName?: string | null;
@@ -98,7 +100,29 @@ export function TransactionEmailComposer({
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const [simulated, setSimulated] = useState(false);
+  const [sendUncertain, setSendUncertain] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [offline, setOffline] = useState(false);
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const update = () => setOffline(!navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!pending) return;
+    const timer = window.setTimeout(() => setSlow(true), 8000);
+    return () => window.clearTimeout(timer);
+  }, [pending]);
 
   function requestClose() {
     if (pending) return;
@@ -119,7 +143,10 @@ export function TransactionEmailComposer({
   }
 
   function chooseTemplate(id: string) {
-    if (id === selectedId) return;
+    if (id === selectedId) {
+      setCatalogOpen(false);
+      return;
+    }
     if (dirty) {
       setPendingTemplateId(id);
       return;
@@ -129,6 +156,7 @@ export function TransactionEmailComposer({
 
   function prepare() {
     if (!selected) return;
+    setSlow(false);
     setError("");
     startTransition(async () => {
       try {
@@ -149,23 +177,37 @@ export function TransactionEmailComposer({
         setPreview(result as Preview);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "Pratinjau belum dapat dibuat.");
+      } finally {
+        setSlow(false);
       }
     });
   }
 
   function send() {
     if (!preview) return;
+    setSlow(false);
     setError("");
     startTransition(async () => {
-      const result = await confirmEmailDraft(preview.attemptId);
-      if (!result.ok) {
-        setError(result.error);
-        return;
+      try {
+        const result = await confirmEmailDraft(preview.attemptId);
+        if (!result.ok) {
+          setError(result.error);
+          setSendUncertain(true);
+          return;
+        }
+        setSent(true);
+        setSimulated(result.status === "simulated");
+        setDirty(false);
+        setOpen(false);
+        router.refresh();
+      } catch {
+        setError(
+          "Status pengiriman belum pasti. Periksa Email terkirim sebelum mencoba lagi agar tidak terkirim dua kali.",
+        );
+        setSendUncertain(true);
+      } finally {
+        setSlow(false);
       }
-      setSent(true);
-      setDirty(false);
-      setOpen(false);
-      router.refresh();
     });
   }
 
@@ -173,12 +215,19 @@ export function TransactionEmailComposer({
 
   return (
     <>
-      <button className="transaction-email-trigger" onClick={() => setOpen(true)} type="button">
+      <button
+        aria-label={localQa ? "Kirim email (simulasi lokal, tidak terkirim)" : undefined}
+        className="transaction-email-trigger"
+        onClick={() => setOpen(true)}
+        type="button"
+      >
         {lastSend ? "Kirim ulang" : "Kirim email"}
       </button>
+      {localQa ? <small className="transaction-email-local-note">Simulasi lokal · tidak terkirim</small> : null}
       {sent ? (
         <p className="transaction-email-success" role="status">
-          Sudah dikirim. <Link href="/admin/email?folder=sent">Lihat di Email CS</Link>
+          {simulated ? "Simulasi selesai; tidak ada email terkirim." : "Sudah dikirim."}{" "}
+          <Link href="/admin/email?folder=sent">Lihat di Email CS</Link>
         </p>
       ) : null}
       <Dialog.Root open={open} onOpenChange={(next) => (next ? setOpen(true) : requestClose())}>
@@ -189,15 +238,24 @@ export function TransactionEmailComposer({
               <header>
                 <div>
                   <p className="eyebrow">{documentLabel}</p>
-                  <Dialog.Title>Kirim email</Dialog.Title>
+                  <Dialog.Title>{localQa ? "Simulasi email" : "Kirim email"}</Dialog.Title>
                   <Dialog.Description id="transaction-email-description">
-                    Periksa penerima, isi, dan dokumen sebelum dikirim.
+                    {localQa
+                      ? "Periksa penerima, isi, dan PDF lokal. Simulasi ini tidak mengirim email ke siapa pun."
+                      : "Periksa penerima, isi, dan dokumen sebelum dikirim."}
                   </Dialog.Description>
                 </div>
                 <button aria-label="Tutup composer" onClick={requestClose} type="button">
                   ×
                 </button>
               </header>
+              {offline || slow ? (
+                <div className="transaction-email-connection" role="alert">
+                  {offline
+                    ? "Perangkat sedang offline. Perubahan email tetap di editor; sambungkan internet sebelum melanjutkan."
+                    : "Koneksi lambat. Jangan tekan kirim ulang; tunggu hasil atau periksa Email terkirim."}
+                </div>
+              ) : null}
               <div className="transaction-email-segments" role="tablist" aria-label="Tampilan composer">
                 <button
                   aria-selected={!preview && !catalogOpen}
@@ -378,11 +436,6 @@ export function TransactionEmailComposer({
                     />{" "}
                     Izinkan pengiriman bila scanner lampiran sedang tidak tersedia
                   </label>
-                  {error ? (
-                    <p className="integration-alert" role="alert">
-                      {error}
-                    </p>
-                  ) : null}
                 </div>
               ) : (
                 <div className="transaction-email-preview">
@@ -416,23 +469,25 @@ export function TransactionEmailComposer({
                   </div>
                   <iframe referrerPolicy="no-referrer" sandbox="" srcDoc={preview.html} title="Pratinjau email final" />
                   <p className="transaction-email-helper">
-                    Sistem akan mengirim pesan ke server email, tetapi tidak dapat menjamin pesan masuk ke inbox
-                    penerima.
+                    {preview.simulation
+                      ? "Simulasi saja: tidak ada pesan yang dikirim ke server email atau penerima."
+                      : "Sistem akan mengirim pesan ke server email, tetapi tidak dapat menjamin pesan masuk ke inbox penerima."}
                   </p>
                   {allowUnscanned ? (
                     <p className="transaction-email-warning" role="alert">
                       File yang belum dipindai akan tetap dikirim atas konfirmasi Anda.
                     </p>
                   ) : null}
-                  {error ? (
-                    <p className="integration-alert" role="alert">
-                      {error}
-                    </p>
-                  ) : null}
                 </div>
               )}
               {!catalogOpen ? (
                 <footer className="transaction-email-actionbar">
+                  {error ? (
+                    <p className="transaction-email-actionbar__error" role="alert">
+                      {error}{" "}
+                      {sendUncertain ? <Link href="/admin/email?folder=sent">Periksa status di Email CS →</Link> : null}
+                    </p>
+                  ) : null}
                   {preview ? (
                     <>
                       <button disabled={pending} onClick={() => setPreview(null)} type="button">
@@ -441,7 +496,7 @@ export function TransactionEmailComposer({
                       <button
                         aria-busy={pending}
                         className="admin-primary-button"
-                        disabled={pending}
+                        disabled={pending || sendUncertain}
                         onClick={send}
                         type="button"
                       >

@@ -38,7 +38,7 @@ export function VisitorGeographyMap({ buckets, extent, indonesiaHref, worldHref,
       <header className="visitor-panel-heading">
         <div>
           <p className="eyebrow">Sebaran kunjungan</p>
-          <h2 id="visitor-map-title">Perangkat pengunjung</h2>
+          <h2 id="visitor-map-title">Peta asal kunjungan</h2>
         </div>
         <nav className="period-switch" aria-label="Cakupan peta">
           <Link href={indonesiaHref} aria-current={extent === "indonesia" ? "page" : undefined}>
@@ -117,12 +117,10 @@ export function VisitorGeographyMap({ buckets, extent, indonesiaHref, worldHref,
             </svg>
             {!mapped.length ? (
               <div className="visitor-map-no-data">
-                <strong>
-                  {summary.total ? "Lokasi belum dapat ditampilkan di peta" : "Belum ada kunjungan pada periode ini"}
-                </strong>
+                <strong>{summary.total ? "Lokasi belum terukur" : "Belum ada kunjungan pada periode ini"}</strong>
                 <span>
                   {summary.total
-                    ? "Lihat wilayah yang tersedia di daftar, atau pilih cakupan Dunia."
+                    ? `${number(summary.unknown)} kunjungan belum memiliki lokasi. Kunjungan lama tidak dapat dilengkapi dari IP karena IP tidak disimpan.`
                     : "Peta akan terisi setelah ada kunjungan yang tercatat."}
                 </span>
               </div>

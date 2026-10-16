@@ -24,6 +24,12 @@ test_secrets() {
     grep -Eq "^${key}=.+" "$file" || return 1
   done
 }
+test_provider_mode() {
+  local file=/etc/anugrahplastik/web.env
+  [[ -r "$file" ]] || return 1
+  grep -Eq '^DOCGEN_RENDER_MODE="?provider"?$' "$file" || return 1
+  grep -Eq '^APP_ORIGIN="?https://([A-Za-z0-9-]+\.)?anugrahplastik\.com/?"?$' "$file"
+}
 test_admin() {
   local count
   count="$(sudo -u postgres psql -d "$db_name" -Atqc "select count(*) from users where role='admin' and is_active=true and pin_hash is not null" 2>/dev/null)"
@@ -72,6 +78,7 @@ gate 'Ruang cukup untuk artefak, backup, dan rollback' test_space
 gate 'RAM terukur cukup dan swap tidak bertambah' test_memory
 gate 'SSH aktif dan mendengar' sh -c 'systemctl is-active --quiet ssh && ss -ltn | grep -Eq ":22[[:space:]]"'
 gate 'Secret server tersedia' test_secrets
+gate 'Renderer production memakai provider dan origin resmi' test_provider_mode
 gate 'Admin pemulihan siap' test_admin
 gate 'Database dan migrator dapat dibaca' test_migrations
 gate 'Layanan serta landing publik sehat' test_services

@@ -12,7 +12,7 @@ import {
   transactionLines,
   shipments,
 } from "@/lib/database/schema";
-import { assertDocGenEmailAllowed, docGenDummyMode } from "@/features/operations/docgen-policy";
+import { assertDocGenEmailAllowed, docGenDummyMode, localQaRendererEnabled } from "@/features/operations/docgen-policy";
 import { privateFilePath } from "@/features/operations/private-storage";
 import { quotationIsCurrent } from "@/features/operations/transaction-workspace";
 import { invoiceCountsAsIssued } from "@/features/operations/transaction-status";
@@ -60,12 +60,14 @@ export async function validateDocumentEmailSource(
     throw new Error("Dokumen ini tidak dapat dikirim sebagai dokumen keluar.");
   if (!recipients.to.length || recipients.bcc.length || recipients.to.length + recipients.cc.length > 10)
     throw new Error("Isi penerima utama dan gunakan maksimal 10 alamat To serta CC.");
-  if ((document.payload as { renderSource?: string } | null)?.renderSource === "local_qa") {
+  const localQa = (document.payload as { renderSource?: string } | null)?.renderSource === "local_qa";
+  if (localQa && !localQaRendererEnabled()) {
     throw new Error("PDF pratinjau QA lokal tidak boleh dikirim melalui email.");
   }
   const dummy = (document.payload as { isDummy?: boolean } | null)?.isDummy === true;
-  for (const recipient of [...recipients.to, ...recipients.cc])
-    assertDocGenEmailAllowed(record.header.dataClass, recipient, dummy);
+  if (!localQa)
+    for (const recipient of [...recipients.to, ...recipients.cc])
+      assertDocGenEmailAllowed(record.header.dataClass, recipient, dummy);
   if ((docGenDummyMode() || dummy) && !subject.startsWith("[UJI]"))
     throw new Error("Subjek dokumen contoh harus diawali [UJI].");
   if (document.type === "quotation") {
@@ -133,6 +135,7 @@ export async function validateDocumentEmailSource(
     throw new Error("Checksum PDF tidak sesuai. Pengiriman dihentikan.");
   return {
     bytes,
+    localQa,
     filename: basename(document.originalName || "dokumen.pdf")
       .replace(/[\r\n"\\\x00-\x1f]/g, "_")
       .slice(0, 180),

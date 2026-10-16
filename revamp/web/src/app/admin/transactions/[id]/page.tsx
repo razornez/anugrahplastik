@@ -10,7 +10,7 @@ import { TransactionHandoverForm } from "@/components/transaction-handover-form"
 import { TransactionActionFeedback } from "@/components/transaction-action-feedback";
 import { TransactionDesignFiles } from "@/components/transaction-design-files";
 import { UncontrolledRupiahInput } from "@/components/rupiah-input";
-import { TransactionManagement } from "@/components/transaction-management";
+import { TransactionManagement, TransactionTitleEditor } from "@/components/transaction-management";
 import { CustomerDocumentProfileSheet } from "@/components/customer-document-profile-sheet";
 import { TransactionPaymentAttention } from "./transaction-payment-attention";
 import {
@@ -71,7 +71,6 @@ type Document = Transaction["documents"][number];
 type Step = "quote" | "order" | "payment" | "production" | "delivery" | "handover";
 
 function documentEmailAllowed(transaction: Transaction, document: Document) {
-  if ((document.payload as { renderSource?: string } | null)?.renderSource === "local_qa") return false;
   if (document.type === "contract") return false;
   if (
     document.type === "delivery_note" &&
@@ -79,6 +78,8 @@ function documentEmailAllowed(transaction: Transaction, document: Document) {
   ) {
     return false;
   }
+  if ((document.payload as { renderSource?: string } | null)?.renderSource === "local_qa")
+    return localQaRendererEnabled();
   const isDummy = (document.payload as { isDummy?: boolean } | null)?.isDummy === true;
   return (
     (!docGenDummyMode() && !isDummy) ||
@@ -238,15 +239,44 @@ async function DocumentList({
     <div className="transaction-flow-documents">
       {documents.map((document) => (
         <article key={document.id}>
-          <span className="transaction-flow-documents__mark" aria-hidden="true">
-            PDF
+          <span
+            className="transaction-flow-documents__mark"
+            aria-hidden="true"
+            data-pdf={Boolean(
+              document.storagePath &&
+              (document.direction === "outbound" ||
+                /\.pdf$/i.test(document.originalName ?? "") ||
+                /\.pdf$/i.test(document.storagePath)),
+            )}
+          >
+            <svg fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24">
+              <path d="M6 2.5h8l4 4V21H6a2 2 0 0 1-2-2V4.5a2 2 0 0 1 2-2Z" />
+              <path d="M14 2.5v5h5M7 15h10" />
+            </svg>
+            {document.storagePath &&
+            (document.direction === "outbound" ||
+              /\.pdf$/i.test(document.originalName ?? "") ||
+              /\.pdf$/i.test(document.storagePath)) ? (
+              <b>PDF</b>
+            ) : null}
           </span>
-          <div>
+          <div className="transaction-flow-documents__info">
             <strong>
               {documentLabels[document.type] ?? "Dokumen"}
               {document.direction === "outbound" && document.type !== "contract" ? ` · versi ${document.version}` : ""}
             </strong>
             <small>{document.documentNo ?? document.originalName ?? "Tanpa nomor"}</small>
+            <span className="transaction-flow-documents__status">
+              {document.status === "ready"
+                ? "Siap"
+                : document.status === "received"
+                  ? "Diterima"
+                  : document.status === "generating"
+                    ? "Sedang dibuat"
+                    : document.status === "needs_review"
+                      ? "Perlu diperiksa"
+                      : document.status}
+            </span>
             {document.status === "needs_review" ? (
               <div className="transaction-document-review" role="status">
                 <strong>PDF versi {document.version} belum siap</strong>
@@ -276,119 +306,113 @@ async function DocumentList({
               </form>
             ) : null}
           </div>
-          <span className="transaction-flow-documents__status">
-            {document.status === "ready"
-              ? "Siap"
-              : document.status === "received"
-                ? "Diterima"
-                : document.status === "generating"
-                  ? "Sedang dibuat"
-                  : document.status === "needs_review"
-                    ? "Perlu diperiksa"
-                    : document.status}
-          </span>
-          {document.storagePath ? (
-            <Link href={`/api/admin/transactions/${transaction.header.id}/documents/${document.id}`} target="_blank">
-              Lihat
-            </Link>
-          ) : null}
-          {document.type === "purchase_order" && (document.payload as { emailId?: string } | null)?.emailId ? (
-            <Link href={`/admin/email?folder=inbox&email=${(document.payload as { emailId: string }).emailId}`}>
-              Lihat email
-            </Link>
-          ) : null}
-          {document.storagePath &&
-          document.direction === "outbound" &&
-          document.type !== "contract" &&
-          document.type !== "bast_signed" &&
-          documentEmailAllowed(transaction, document) &&
-          !["pending", "uncertain"].includes((document.payload as { sendState?: string } | null)?.sendState ?? "") ? (
-            <TransactionEmailComposer
-              contacts={[
-                ...(transaction.header.customerEmail
-                  ? [
-                      {
-                        id: "primary",
-                        name: transaction.header.customerName,
-                        email: transaction.header.customerEmail,
-                        isPrimary: true,
-                      },
-                    ]
-                  : []),
-                ...transaction.contacts
-                  .filter((contact) => Boolean(contact.email) && contact.email !== transaction.header.customerEmail)
-                  .map((contact) => ({
-                    id: contact.id,
-                    name: contact.name,
-                    email: contact.email!,
-                    isPrimary: contact.isPrimary,
-                  })),
-              ]}
-              documentId={document.id}
-              documentLabel={documentLabels[document.type] ?? "Dokumen"}
-              lastSend={
-                document.sentMessageId
-                  ? {
-                      recipient: document.recipient,
-                      at: (document.payload as { lastEmailSentAt?: string } | null)?.lastEmailSentAt ?? null,
-                      by: (document.payload as { lastEmailSenderName?: string } | null)?.lastEmailSenderName ?? null,
-                    }
-                  : undefined
-              }
-              ownerName={transaction.header.ownerName}
-              requiresPicConfirmation={Boolean(
-                currentUser?.role === "sales" &&
-                transaction.header.ownerId &&
-                transaction.header.ownerId !== currentUser.id,
-              )}
-              templates={(document.type === "quotation"
-                ? quotationTemplates
-                : document.type.startsWith("invoice")
-                  ? invoiceTemplates
-                  : document.type === "delivery_note"
-                    ? deliveryTemplates
-                    : handoverTemplates
-              ).map((template) => {
-                const variables = {
-                  customerName: transaction.header.customerName,
-                  transactionNo: transaction.header.referenceNo,
-                  documentName: documentLabels[document.type]?.toLowerCase() ?? "dokumen",
-                  senderName: currentUser?.name ?? "Tim Anugrah Plastik",
-                };
-                return {
-                  ...template,
-                  subject: `${docGenDummyMode() || (document.payload as { isDummy?: boolean } | null)?.isDummy ? "[UJI] " : ""}${fillEmailSubject(template.subject, variables)}`,
-                  content: fillEmailTemplate(template.content, variables),
-                };
-              })}
-              transactionId={transaction.header.id}
-            />
-          ) : null}
-          {(document.payload as { sendState?: string } | null)?.sendState === "uncertain" ? (
-            <small>Pengiriman email perlu diperiksa di Email terkirim. Jangan kirim ulang sebelum dipastikan.</small>
-          ) : null}
-          {(document.payload as { sendState?: string } | null)?.sendState === "pending" ? (
-            <small>Permintaan email sedang diproses. Periksa Email terkirim jika tidak berubah.</small>
-          ) : null}
-          {(document.payload as { lastEmailState?: string } | null)?.lastEmailState === "bounced" ? (
-            <small className="transaction-flow-documents__email-error">
-              Gagal diterima. Periksa alamat penerima lalu kirim ulang.
-            </small>
-          ) : document.sentMessageId ? (
-            <small>Sudah diserahkan ke server email untuk dikirim.</small>
-          ) : null}
-          {(document.payload as { lastEmailState?: string } | null)?.lastEmailState === "simulated" ? (
-            <small>Simulasi selesai. Tidak ada email yang dikirim.</small>
-          ) : null}
-          {(document.payload as { lastEmailAttemptId?: string } | null)?.lastEmailAttemptId ? (
-            <small>
-              <Link
-                href={`/admin/email?folder=sent&email=outbox:${encodeURIComponent((document.payload as { lastEmailAttemptId: string }).lastEmailAttemptId)}`}
-              >
-                Lihat status email di Email CS
+          <div className="transaction-flow-documents__actions">
+            {document.storagePath ? (
+              <Link href={`/api/admin/transactions/${transaction.header.id}/documents/${document.id}`} target="_blank">
+                Lihat
               </Link>
-            </small>
-          ) : null}
+            ) : null}
+            {document.type === "purchase_order" && (document.payload as { emailId?: string } | null)?.emailId ? (
+              <Link href={`/admin/email?folder=inbox&email=${(document.payload as { emailId: string }).emailId}`}>
+                Lihat email
+              </Link>
+            ) : null}
+            {document.storagePath &&
+            document.direction === "outbound" &&
+            document.type !== "contract" &&
+            document.type !== "bast_signed" &&
+            documentEmailAllowed(transaction, document) &&
+            !["pending", "uncertain"].includes((document.payload as { sendState?: string } | null)?.sendState ?? "") ? (
+              <TransactionEmailComposer
+                localQa={(document.payload as { renderSource?: string } | null)?.renderSource === "local_qa"}
+                contacts={[
+                  ...(transaction.header.customerEmail
+                    ? [
+                        {
+                          id: "primary",
+                          name: transaction.header.customerName,
+                          email: transaction.header.customerEmail,
+                          isPrimary: true,
+                        },
+                      ]
+                    : []),
+                  ...transaction.contacts
+                    .filter((contact) => Boolean(contact.email) && contact.email !== transaction.header.customerEmail)
+                    .map((contact) => ({
+                      id: contact.id,
+                      name: contact.name,
+                      email: contact.email!,
+                      isPrimary: contact.isPrimary,
+                    })),
+                ]}
+                documentId={document.id}
+                documentLabel={documentLabels[document.type] ?? "Dokumen"}
+                lastSend={
+                  document.sentMessageId
+                    ? {
+                        recipient: document.recipient,
+                        at: (document.payload as { lastEmailSentAt?: string } | null)?.lastEmailSentAt ?? null,
+                        by: (document.payload as { lastEmailSenderName?: string } | null)?.lastEmailSenderName ?? null,
+                      }
+                    : undefined
+                }
+                ownerName={transaction.header.ownerName}
+                requiresPicConfirmation={Boolean(
+                  currentUser?.role === "sales" &&
+                  transaction.header.ownerId &&
+                  transaction.header.ownerId !== currentUser.id,
+                )}
+                templates={(document.type === "quotation"
+                  ? quotationTemplates
+                  : document.type.startsWith("invoice")
+                    ? invoiceTemplates
+                    : document.type === "delivery_note"
+                      ? deliveryTemplates
+                      : handoverTemplates
+                ).map((template) => {
+                  const variables = {
+                    customerName: transaction.header.customerName,
+                    transactionNo: transaction.header.referenceNo,
+                    documentName: documentLabels[document.type]?.toLowerCase() ?? "dokumen",
+                    senderName: currentUser?.name ?? "Tim Anugrah Plastik",
+                  };
+                  return {
+                    ...template,
+                    subject: `${docGenDummyMode() || (document.payload as { isDummy?: boolean } | null)?.isDummy ? "[UJI] " : ""}${fillEmailSubject(template.subject, variables)}`,
+                    content: fillEmailTemplate(template.content, variables),
+                  };
+                })}
+                transactionId={transaction.header.id}
+              />
+            ) : null}
+          </div>
+          <div className="transaction-flow-documents__feedback">
+            {(document.payload as { sendState?: string } | null)?.sendState === "uncertain" ? (
+              <small>Pengiriman email perlu diperiksa di Email terkirim. Jangan kirim ulang sebelum dipastikan.</small>
+            ) : null}
+            {(document.payload as { sendState?: string } | null)?.sendState === "pending" ? (
+              <small>Permintaan email sedang diproses. Periksa Email terkirim jika tidak berubah.</small>
+            ) : null}
+            {(document.payload as { lastEmailState?: string } | null)?.lastEmailState === "bounced" ? (
+              <small className="transaction-flow-documents__email-error">
+                Gagal diterima. Periksa alamat penerima lalu kirim ulang.
+              </small>
+            ) : document.sentMessageId ? (
+              <small>Sudah diserahkan ke server email untuk dikirim.</small>
+            ) : null}
+            {(document.payload as { lastEmailState?: string } | null)?.lastEmailState === "simulated" ? (
+              <small>Simulasi selesai. Tidak ada email yang dikirim.</small>
+            ) : null}
+            {(document.payload as { lastEmailAttemptId?: string } | null)?.lastEmailAttemptId ? (
+              <small>
+                <Link
+                  href={`/admin/email?folder=sent&email=outbox:${encodeURIComponent((document.payload as { lastEmailAttemptId: string }).lastEmailAttemptId)}`}
+                >
+                  Lihat status email di Email CS
+                </Link>
+              </small>
+            ) : null}
+          </div>
         </article>
       ))}
     </div>
@@ -921,6 +945,7 @@ function PaymentStep({
 
 function ProductionStep({ transaction, isAdmin }: { transaction: Transaction; isAdmin: boolean }) {
   const released = transaction.header.fulfilmentStatus !== "not_released";
+  const productionStatus = transactionStepStates(transaction, transaction.workspace).production;
   const checks = [
     { id: "customer", label: "Pelanggan tercatat", ready: Boolean(transaction.header.customerName) },
     {
@@ -1007,7 +1032,12 @@ function ProductionStep({ transaction, isAdmin }: { transaction: Transaction; is
           </form>
         ) : null}
       </section>
-      <section className="transaction-flow-card">
+      {released && productionStatus.kind !== "complete" ? (
+        <p className="transaction-production-guidance" role="status">
+          {productionStatus.label}. <a href="#production-batches">Periksa batch dan jumlah yang belum selesai</a>.
+        </p>
+      ) : null}
+      <section className="transaction-flow-card" id="production-batches">
         <div className="transaction-flow-card__head">
           <div>
             <span className="eyebrow">02 · Pekerjaan produksi</span>
@@ -1019,7 +1049,13 @@ function ProductionStep({ transaction, isAdmin }: { transaction: Transaction; is
             <strong>{batch.batchNo}</strong>
             <span>
               {batch.kind === "sample" ? "Sampel" : "Produksi"} ·{" "}
-              {batch.status === "completed" ? "Selesai" : "Direncanakan"}
+              {batch.status === "completed"
+                ? "Selesai"
+                : batch.status === "cancelled"
+                  ? "Dibatalkan"
+                  : batch.status === "in_progress"
+                    ? "Berjalan"
+                    : "Direncanakan"}
             </span>
             <small>
               {transaction.lines.find((line) => line.id === batch.transactionLineId)?.description ??
@@ -1573,33 +1609,34 @@ export default async function TransactionDetailPage({
       />
       <AdminPageHeader
         title={transaction.header.title}
+        titleAction={!readonly ? <TransactionTitleEditor id={id} title={transaction.header.title} /> : null}
         description={`${transaction.header.referenceNo} · ${transaction.header.customerName} · Penanggung jawab: ${transaction.header.ownerName ?? "Belum ditentukan"}`}
         back={{ href: returnTo, label: "Kembali ke semua transaksi" }}
         actions={
-          <span
-            className={styles.fulfilmentBadge}
-            data-tone={
-              transaction.header.fulfilmentStatus === "completed"
-                ? "success"
-                : transaction.header.fulfilmentStatus === "not_released"
-                  ? "neutral"
-                  : "active"
-            }
-          >
-            {transaction.header.fulfilmentStatus === "completed"
-              ? "Selesai"
-              : transactionStatusLabel("fulfilment", transaction.header.fulfilmentStatus)}
-          </span>
+          <>
+            <span
+              className={styles.fulfilmentBadge}
+              data-tone={
+                transaction.header.fulfilmentStatus === "completed"
+                  ? "success"
+                  : transaction.header.fulfilmentStatus === "not_released"
+                    ? "neutral"
+                    : "active"
+              }
+            >
+              {transaction.header.fulfilmentStatus === "completed"
+                ? "Selesai"
+                : transactionStatusLabel("fulfilment", transaction.header.fulfilmentStatus)}
+            </span>
+            <TransactionManagement
+              id={id}
+              referenceNo={transaction.header.referenceNo}
+              isAdmin={user.role === "admin"}
+              archived={Boolean(transaction.header.archivedAt)}
+              deletionImpact={deletionImpact}
+            />
+          </>
         }
-      />
-      <TransactionManagement
-        id={id}
-        referenceNo={transaction.header.referenceNo}
-        title={transaction.header.title}
-        step={active}
-        isAdmin={user.role === "admin"}
-        archived={Boolean(transaction.header.archivedAt)}
-        deletionImpact={deletionImpact}
       />
       {transaction.header.dataClass !== "production" ? (
         <p className="transaction-flow-notice">Transaksi uji atau contoh, bukan pelanggan nyata.</p>

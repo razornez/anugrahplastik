@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AdminPageHeader } from "@/components/admin-page-header";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { actionLabel, eventLabel, sectionLabel } from "@/features/analytics/display-labels";
 import {
   createEmptyAnalyticsReport,
@@ -16,6 +17,7 @@ import { VisitorGeographyMap } from "@/components/visitor-geography-map";
 import { VisitorDailyChart } from "@/components/visitor-daily-chart";
 import { geographyBuckets, geographySummary, visitorQuery } from "@/features/analytics/visitor-report-model";
 import { jakartaReportStart } from "@/features/analytics/report-period";
+import { geoIpHealth } from "@/features/analytics/request-context";
 import "./visitors.css";
 
 export const instant = false;
@@ -48,6 +50,24 @@ function deviceLabel(device: string) {
   return "Perangkat tidak diketahui";
 }
 
+function KpiValue({ value, available }: { value: number; available: boolean }) {
+  const display = available ? value.toLocaleString("id-ID") : "Gagal";
+  const compact = available
+    ? new Intl.NumberFormat("id-ID", { notation: "compact", maximumFractionDigits: 1 }).format(value)
+    : "Gagal";
+  return (
+    <strong title={available ? display : undefined}>
+      <span className="admin-sr-only">{available ? display : "Data belum tersedia"}</span>
+      <span aria-hidden="true" className="visitor-kpi-full">
+        {display}
+      </span>
+      <span aria-hidden="true" className="visitor-kpi-compact">
+        {compact}
+      </span>
+    </strong>
+  );
+}
+
 function outcomeLabel(outcome: string) {
   return outcome === "Form terkirim" ? "Mengirim formulir" : outcome;
 }
@@ -77,6 +97,9 @@ export default async function InsightsPage({
 }) {
   const user = await getSession();
   if (!user || (user.role !== "admin" && user.role !== "sales")) redirect("/admin");
+  const host = (await headers()).get("host")?.toLowerCase() ?? "";
+  const local = host.startsWith("localhost") || host.startsWith("127.0.0.1");
+  const geoIp = await geoIpHealth();
 
   const query = await searchParams;
   const filters: ReportFilters = {
@@ -98,11 +121,11 @@ export default async function InsightsPage({
     report = await getAnalyticsReport(
       filters,
       { cursor: query.cursor, direction: query.direction === "previous" ? "previous" : "next" },
-      "public",
+      local ? "internal" : "public",
       now,
     );
     if (query.session && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query.session))
-      selected = await getAnalyticsJourney(query.session, "public", filters, now);
+      selected = await getAnalyticsJourney(query.session, local ? "internal" : "public", filters, now);
   } catch {
     report = { ...createEmptyAnalyticsReport(filters, now), available: false };
   }
@@ -163,9 +186,17 @@ export default async function InsightsPage({
       />
       <MarketingWorkspaceNav current="/admin/insights" />
       <div className="visitor-period-context">
-        <span>{periodLabel} · WIB</span>
+        <span>
+          <strong>{local ? "Data lokal" : "Data production"}</strong> · {periodLabel} · WIB
+        </span>
         <span>Termasuk hari ini; data hari ini belum lengkap.</span>
       </div>
+      {local ? (
+        <p className="visitor-source-note" role="status">
+          Laporan ini hanya menghitung kunjungan localhost yang tercatat. Trafik iklan production tidak disalin ke
+          perangkat ini.
+        </p>
+      ) : null}
       {!report.available ? (
         <aside className="visitor-data-quality" role="alert">
           <strong>Laporan belum berhasil dimuat.</strong>
@@ -174,33 +205,45 @@ export default async function InsightsPage({
         </aside>
       ) : null}
 
-      <div className="visitor-stat-row">
+      <section className="visitor-stat-row" aria-labelledby="visitor-kpi-heading">
+        <div className="visitor-stat-row__heading">
+          <h2 id="visitor-kpi-heading">Aktivitas website</h2>
+        </div>
         <article>
-          <span>Kunjungan website</span>
-          <strong>{report.available ? report.totals.sessions.toLocaleString("id-ID") : "Belum tersedia"}</strong>
+          <KpiValue available={report.available} value={report.totals.sessions} />
+          <span>Kunjungan</span>
           <small>Sesi selama periode ini</small>
         </article>
         <article>
-          <span>Percobaan kirim formulir</span>
-          <strong>{report.available ? report.totals.formEvents.toLocaleString("id-ID") : "Belum tersedia"}</strong>
+          <KpiValue available={report.available} value={report.totals.formEvents} />
+          <span>Kirim form</span>
           <small>Kunjungan yang mengirim form</small>
         </article>
         <article>
-          <span>Permintaan valid tersimpan</span>
-          <strong>{report.available ? report.totals.forms.toLocaleString("id-ID") : "Belum tersedia"}</strong>
+          <KpiValue available={report.available} value={report.totals.forms} />
+          <span>Valid</span>
           <small>Sudah cocok dengan data tersimpan</small>
         </article>
         <article>
-          <span>Klik tombol bertanya</span>
-          <strong>{report.available ? report.totals.ctaClicks.toLocaleString("id-ID") : "Belum tersedia"}</strong>
+          <KpiValue available={report.available} value={report.totals.ctaClicks} />
+          <span>Klik tanya</span>
           <small>Kunjungan yang menekan tombol</small>
         </article>
-        <article>
-          <span>Klik WhatsApp</span>
-          <strong>{report.available ? report.totals.whatsappClicks.toLocaleString("id-ID") : "Belum tersedia"}</strong>
-          <small>Kunjungan yang membuka WhatsApp</small>
-        </article>
-      </div>
+      </section>
+      <details className="visitor-interaction-detail">
+        <summary>
+          Interaksi lain{" "}
+          <strong>
+            {report.available
+              ? `${report.totals.whatsappClicks.toLocaleString("id-ID")} klik WhatsApp`
+              : "Belum tersedia"}
+          </strong>
+        </summary>
+        <p>
+          Klik WhatsApp adalah jumlah kunjungan yang membuka tautan WhatsApp dari website; tidak sama dengan pesan yang
+          benar-benar terkirim.
+        </p>
+      </details>
       <VisitorFilterPanel
         days={filters.days}
         device={filters.device}
@@ -234,6 +277,21 @@ export default async function InsightsPage({
         Percobaan kirim formulir dicatat oleh browser; permintaan valid hanya dihitung jika berhasil diverifikasi. Data
         pada laporan ini hanya berasal dari aktivitas website yang tercatat.
       </p>
+      {report.available && report.totals.sessions === 0 ? (
+        <p className="visitor-source-note" role="status">
+          Belum ada kunjungan yang tercatat untuk periode dan filter ini.
+        </p>
+      ) : null}
+      {report.available && summary.unknown > 0 ? (
+        <aside className="visitor-data-quality" role="status">
+          <strong>Lokasi belum terukur pada {summary.unknown.toLocaleString("id-ID")} kunjungan.</strong>
+          <span>
+            {geoIp.ready
+              ? "Sebagian jaringan tidak dapat dikenali oleh katalog wilayah."
+              : `${geoIp.reason} Lokasi baru muncul untuk kunjungan baru setelah konfigurasi diperbaiki.`}
+          </span>
+        </aside>
+      ) : null}
       {report.totals.formEvents > report.totals.forms ? (
         <aside className="visitor-data-quality" role="status">
           <strong>Ada pengiriman formulir yang belum terverifikasi.</strong>

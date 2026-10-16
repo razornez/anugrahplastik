@@ -6,7 +6,7 @@ import { jakartaReportStart } from "./report-period";
 import { locationAliases, type GeographyRow } from "./visitor-report-model";
 
 export type ReportPeriod = 1 | 7 | 30;
-export type ReportTrafficClass = "public" | "demo";
+export type ReportTrafficClass = "public" | "demo" | "internal";
 export type DeviceFilter = "all" | "mobile" | "desktop" | "tablet" | "unknown";
 export type ReportFilters = {
   days: ReportPeriod;

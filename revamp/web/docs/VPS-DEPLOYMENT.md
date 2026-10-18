@@ -78,6 +78,30 @@ dan perubahan DNS tetap merupakan gate terpisah.
 8. Pasang Nginx, lakukan smoke melalui host override, lalu ubah apex/`www`
    pada jendela rilis. Uji HTTPS, redirect, cookie login, upload media privat,
    dan halaman publik dari jaringan luar.
+9. Setelah release production sehat dan rollback masih tersedia, jalankan
+   `scripts/release/finalize-production-artifacts.ps1` dari komputer operator
+   dengan SHA lengkap release/rollback dan ID workflow kemasannya. Skrip
+   membaca symlink VPS, memeriksa web/worker, health loopback, landing publik,
+   dan artefak release sebelum otomatis meminta job `cleanup` di workflow
+   **Package Anugrah Plastik VPS release**. Tunggu job itu selesai dengan
+   sukses sebelum menutup rilis. Job hanya menghapus artefak Anugrah Plastik
+   yang lebih lama dari release aktif; artefak aktif, rollback, kandidat yang
+   lebih baru, serta artefak proyek lain dipertahankan. Jangan jalankan tahap
+   ini ketika canary/cutover atau verifikasi pascarilis gagal.
+
+   Contoh (ganti SHA dan ID dengan nilai rilis sebenarnya):
+
+   ```powershell
+   .\scripts\release\finalize-production-artifacts.ps1 `
+     -ReleaseSha <sha-aktif-40-karakter> -PackageRunId <id-workflow-aktif> `
+     -RollbackSha <sha-rollback-40-karakter> -RollbackRunId <id-workflow-rollback> `
+     -WorkflowRef <branch-workflow>
+   ```
+
+   Artefak kemasan baru juga memiliki batas retensi tiga hari sebagai
+   pengaman kapasitas. Unduh dan verifikasi artefak sebelum kedaluwarsa;
+   jika jadwal rilis mundur lebih lama, jalankan ulang workflow kemasan pada
+   SHA yang sama. Tidak perlu menaikkan anggaran GitHub Actions.
 
 ## Scheduler integrasi
 

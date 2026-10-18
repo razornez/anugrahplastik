@@ -8,17 +8,33 @@ on:
         required: true
         default: main
         type: string
-
-permissions:
-  contents: read
+      operation:
+        description: Package a candidate, or prune old artifacts after verified production cutover
+        required: true
+        default: package
+        type: choice
+        options:
+          - package
+          - cleanup
+      rollback_sha:
+        description: Full SHA of the retained rollback release (cleanup only)
+        required: false
+        type: string
+      package_run_id:
+        description: Successful packaging run ID for the live release (cleanup only)
+        required: false
+        type: string
 
 concurrency:
-  group: anugrahplastik-vps-release-${{ inputs.ref }}
+  group: anugrahplastik-vps-release-${{ inputs.operation }}-${{ inputs.ref }}
   cancel-in-progress: false
 
 jobs:
   package:
+    if: inputs.operation == 'package'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: revamp/web
@@ -26,6 +42,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.ref }}
+      - name: Record checked-out commit
+        id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@v4
         with:
           version: 9.12.0
@@ -39,16 +58,43 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - run: node --test scripts/release/prune-actions-artifacts.test.cjs
       - run: pnpm build
       - name: Package allowlisted Linux release
-        run: bash scripts/release/package-linux.sh "$RUNNER_TEMP/anugrahplastik-release-${GITHUB_SHA}.tar.gz"
+        run: bash scripts/release/package-linux.sh "$RUNNER_TEMP/anugrahplastik-release-${{ steps.revision.outputs.sha }}.tar.gz"
       - name: Write artifact checksum
-        run: cd "$RUNNER_TEMP" && sha256sum "anugrahplastik-release-${GITHUB_SHA}.tar.gz" > "anugrahplastik-release-${GITHUB_SHA}.tar.gz.sha256"
+        run: cd "$RUNNER_TEMP" && sha256sum "anugrahplastik-release-${{ steps.revision.outputs.sha }}.tar.gz" > "anugrahplastik-release-${{ steps.revision.outputs.sha }}.tar.gz.sha256"
       - uses: actions/upload-artifact@v4
         with:
-          name: anugrahplastik-vps-release-${{ github.sha }}
+          name: anugrahplastik-vps-release-${{ steps.revision.outputs.sha }}
           path: |
-            ${{ runner.temp }}/anugrahplastik-release-${{ github.sha }}.tar.gz
-            ${{ runner.temp }}/anugrahplastik-release-${{ github.sha }}.tar.gz.sha256
+            ${{ runner.temp }}/anugrahplastik-release-${{ steps.revision.outputs.sha }}.tar.gz
+            ${{ runner.temp }}/anugrahplastik-release-${{ steps.revision.outputs.sha }}.tar.gz.sha256
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
+
+  cleanup:
+    if: inputs.operation == 'cleanup'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Remove obsolete packages after verified cutover
+        uses: actions/github-script@v8
+        env:
+          RELEASE_SHA: ${{ inputs.ref }}
+          ROLLBACK_SHA: ${{ inputs.rollback_sha }}
+          PACKAGE_RUN_ID: ${{ inputs.package_run_id }}
+        with:
+          script: |
+            const prune = require('./revamp/web/scripts/release/prune-actions-artifacts.cjs');
+            await prune({
+              github,
+              context,
+              core,
+              releaseSha: process.env.RELEASE_SHA,
+              rollbackSha: process.env.ROLLBACK_SHA,
+              packageRunId: process.env.PACKAGE_RUN_ID,
+            });

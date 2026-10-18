@@ -52,9 +52,18 @@ if ($LASTEXITCODE -ne 0 -or -not @($releaseArtifacts | Where-Object { $_.name -e
   throw 'The active release artifact is missing or expired.'
 }
 
-gh workflow run release-anugrahplastik.yml --repo $repository --ref $WorkflowRef -f "ref=$ReleaseSha" -f 'operation=cleanup' -f "rollback_sha=$RollbackSha" -f "package_run_id=$PackageRunId"
+$dispatchOutput = gh workflow run release-anugrahplastik.yml --repo $repository --ref $WorkflowRef -f "ref=$ReleaseSha" -f 'operation=cleanup' -f "rollback_sha=$RollbackSha" -f "package_run_id=$PackageRunId"
 if ($LASTEXITCODE -ne 0) {
   throw 'Production is healthy, but GitHub artifact cleanup could not be queued.'
 }
+$cleanupRunId = [regex]::Match(($dispatchOutput | Out-String), '/actions/runs/([0-9]+)').Groups[1].Value
+if (-not $cleanupRunId) {
+  throw 'Cleanup was queued, but its workflow run ID could not be read. Inspect GitHub Actions before closing the release.'
+}
 
-Write-Output "Production verified at $ReleaseSha. Artifact cleanup queued; inspect the workflow result before closing the release."
+gh run watch $cleanupRunId --repo $repository --exit-status
+if ($LASTEXITCODE -ne 0) {
+  throw "Artifact cleanup workflow $cleanupRunId failed; inspect GitHub Actions before closing the release."
+}
+
+Write-Output "Production verified at $ReleaseSha. Artifact cleanup workflow $cleanupRunId succeeded."

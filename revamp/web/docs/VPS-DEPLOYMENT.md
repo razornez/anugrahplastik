@@ -83,8 +83,8 @@ dan perubahan DNS tetap merupakan gate terpisah.
    dengan SHA lengkap release/rollback dan ID workflow kemasannya. Skrip
    membaca symlink VPS, memeriksa web/worker, health loopback, landing publik,
    dan artefak release sebelum otomatis meminta job `cleanup` di workflow
-   **Package Anugrah Plastik VPS release**. Tunggu job itu selesai dengan
-   sukses sebelum menutup rilis. Job hanya menghapus artefak Anugrah Plastik
+   **Package Anugrah Plastik VPS release**. Skrip menunggu job selesai dan
+   menggagalkan finalisasi jika pembersihan gagal. Job hanya menghapus artefak Anugrah Plastik
    yang lebih lama dari release aktif; artefak aktif, rollback, kandidat yang
    lebih baru, serta artefak proyek lain dipertahankan. Jangan jalankan tahap
    ini ketika canary/cutover atau verifikasi pascarilis gagal.

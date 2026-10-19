@@ -4,12 +4,14 @@ import { getDatabase } from "@/lib/database/client";
 import { clientAddress, takeRateLimit } from "@/lib/security/rate-limit";
 import { analyticsBatchSchema } from "@/features/analytics/schema";
 import { deviceContext, locationContext } from "@/features/analytics/request-context";
+import { trafficSource } from "@/features/analytics/source";
 
-function referrerPath(value: string | null) {
+function referrerPath(value: string | null, currentHost: string) {
   if (!value) return null;
 
   try {
     const parsed = new URL(value);
+    if (!["http:", "https:"].includes(parsed.protocol) || parsed.host.toLowerCase() === currentHost) return null;
     return `${parsed.origin}${parsed.pathname}`.slice(0, 1000);
   } catch {
     return null;
@@ -34,6 +36,9 @@ export async function POST(request: Request) {
     ]);
     const batch = parsed.data;
     const host = request.headers.get("host")?.toLowerCase() ?? "";
+    const entry = batch.entry;
+    const referrer = referrerPath(entry?.referrer ?? null, host);
+    const attribution = entry?.attribution ?? {};
     const trafficClass = host.startsWith("127.0.0.1") || host.startsWith("localhost") ? "internal" : "public";
     const priority = batch.events.some((event) => ["form_submit", "whatsapp_click", "cta_click"].includes(event.name))
       ? 1
@@ -43,8 +48,11 @@ export async function POST(request: Request) {
       payload: {
         ...batch,
         request: {
-          landingPath: batch.events[0].path,
-          referrer: referrerPath(request.headers.get("referer")),
+          landingPath: entry?.landingPath ?? batch.events[0].path,
+          referrer,
+          sourceName: trafficSource(referrer, attribution),
+          attribution: { ...attribution, landing_variant: entry?.landingVariant ?? "control" },
+          entryAnchor: entry?.entryAnchor ?? null,
           trafficClass,
           device,
           location,

@@ -19,16 +19,18 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function Home() {
+export default async function Home({ searchParams }: { searchParams: Promise<{ ap_variant?: string }> }) {
   // Konten halaman utama diterbitkan dari back office. Menunggu request
   // menghindari HTML publik yang dibekukan saat build, tanpa menonaktifkan
   // Cache Components untuk seluruh aplikasi.
   await connection();
   const content = await getPublishedLandingContent();
+  // Explicit preview URLs only. Normal visits and current ad links remain the control layout.
+  const variant = (await searchParams).ap_variant === "proof" ? "proof" : "control";
   return (
     <>
       <LandingStructuredData content={content} />
-      <NativeLandingTemplate content={content} />
+      <NativeLandingTemplate content={content} variant={variant} />
     </>
   );
 }

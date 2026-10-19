@@ -5652,9 +5652,16 @@
                   Kirim permintaan penawaran
                 </h3>
                 <p style="font-size: 14px; color: #5c6b7e; margin: 0 0 22px">
-                  Isi form di bawah. Pesan akan diteruskan ke WhatsApp kami.
+                  Simpan kebutuhan Anda, lalu lanjutkan percakapan di WhatsApp.
                 </p>
                 <form id="ap-form" style="display: flex; flex-direction: column; gap: 14px">
+                  <div
+                    data-form-summary
+                    hidden
+                    tabindex="-1"
+                    role="alert"
+                    style="padding: 12px 14px; border: 1px solid #c93434; border-radius: 10px; background: #fff3f1; color: #8e1d1d; font-size: 14px; line-height: 1.5"
+                  ></div>
                   <div>
                     <label for="ap-lead-name" style="display: block; font-size: 13px; font-weight: 700; color: #46566a; margin-bottom: 6px"
                       >Nama</label
@@ -5664,6 +5671,7 @@
                       id="ap-lead-name"
                       required
                       autocomplete="name"
+                      aria-describedby="ap-lead-name-error"
                       placeholder="Nama Anda / perusahaan"
                       style="
                         width: 100%;
@@ -5675,6 +5683,7 @@
                         background: #f7f9fc;
                       "
                     />
+                    <p id="ap-lead-name-error" data-error-for="name" hidden role="alert" style="margin: 6px 0 0; color: #a42424; font-size: 13px"></p>
                   </div>
                   <div>
                     <label for="ap-lead-phone" style="display: block; font-size: 13px; font-weight: 700; color: #46566a; margin-bottom: 6px"
@@ -5687,6 +5696,7 @@
                       inputmode="tel"
                       required
                       autocomplete="tel"
+                      aria-describedby="ap-lead-phone-error"
                       placeholder="08xx xxxx xxxx"
                       style="
                         width: 100%;
@@ -5698,6 +5708,7 @@
                         background: #f7f9fc;
                       "
                     />
+                    <p id="ap-lead-phone-error" data-error-for="phone" hidden role="alert" style="margin: 6px 0 0; color: #a42424; font-size: 13px"></p>
                   </div>
                   <div>
                     <label for="ap-lead-need" style="display: block; font-size: 13px; font-weight: 700; color: #46566a; margin-bottom: 6px"
@@ -5734,6 +5745,7 @@
                       id="ap-lead-message"
                       rows="3"
                       required
+                      aria-describedby="ap-lead-message-help ap-lead-message-error"
                       placeholder="Jelaskan kebutuhan Anda (bahan, jumlah, dimensi, dll)"
                       style="
                         width: 100%;
@@ -5747,6 +5759,8 @@
                         font-family: inherit;
                       "
                     ></textarea>
+                    <p id="ap-lead-message-help" style="margin: 6px 0 0; color: #46566a; font-size: 13px">Minimal 10 karakter. Sebutkan barang atau fungsi yang dibutuhkan.</p>
+                    <p id="ap-lead-message-error" data-error-for="message" hidden role="alert" style="margin: 6px 0 0; color: #a42424; font-size: 13px"></p>
                   </div>
                   <button
                     type="submit"
@@ -5773,7 +5787,7 @@
                         d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zM223.9 438.7c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6z"
                       />
                     </svg>
-                    Kirim via WhatsApp
+                    Simpan dan lanjut ke WhatsApp
                   </button>
                   <p
                     data-form-status
@@ -5781,6 +5795,15 @@
                     aria-live="polite"
                     style="margin: 0; font-size: 13px; line-height: 1.5; color: #46566a"
                   ></p>
+                  <a
+                    data-form-whatsapp
+                    data-wa
+                    hidden
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style="min-height: 44px; align-items: center; justify-content: center; padding: 10px 16px; border-radius: 11px; background: #075d36; color: #fff; font-weight: 700; text-decoration: none"
+                    >Lanjutkan di WhatsApp →</a
+                  >
                 </form>
               </div>
               <!-- info + map -->

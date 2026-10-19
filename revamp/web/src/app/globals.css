@@ -838,6 +838,19 @@ body {
 
 .native-template-shell {
   width: 100%;
+  overflow-x: clip;
+}
+
+@media (max-width: 900px) {
+  .native-template-shell #ap-faq .ap-split {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 24px !important;
+  }
+
+  .native-template-shell #ap-faq .ap-faq-intro {
+    position: relative !important;
+    top: auto !important;
+  }
 }
 
 .category-detail {

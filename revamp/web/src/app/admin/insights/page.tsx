@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AdminPageHeader } from "@/components/admin-page-header";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { actionLabel, eventLabel, sectionLabel } from "@/features/analytics/display-labels";
+import { eventDetail, eventLabel, sectionLabel } from "@/features/analytics/display-labels";
 import {
   createEmptyAnalyticsReport,
   getAnalyticsJourney,
@@ -70,12 +70,6 @@ function KpiValue({ value, available }: { value: number; available: boolean }) {
 
 function outcomeLabel(outcome: string) {
   return outcome === "Form terkirim" ? "Mengirim formulir" : outcome;
-}
-
-function eventDetail(event: { sectionKey: string | null; elementKey: string | null }) {
-  if (event.elementKey) return actionLabel(event.elementKey);
-  if (event.sectionKey) return sectionLabel(event.sectionKey);
-  return "Halaman utama";
 }
 
 export default async function InsightsPage({
@@ -197,6 +191,11 @@ export default async function InsightsPage({
           perangkat ini.
         </p>
       ) : null}
+      <p className="visitor-source-note" role="note">
+        Sumber kunjungan sebelum perbaikan atribusi mungkin tercatat sebagai domain sendiri. Data lama tidak ditebak
+        ulang; klik WhatsApp bukan bukti percakapan. Permintaan valid berbeda dari prospek layak yang ditinjau di{" "}
+        <Link href="/admin/marketing#marketing-lead-funnel-title">laporan kualitas lead</Link>.
+      </p>
       {!report.available ? (
         <aside className="visitor-data-quality" role="alert">
           <strong>Laporan belum berhasil dimuat.</strong>

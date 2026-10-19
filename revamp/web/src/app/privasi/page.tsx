@@ -16,15 +16,17 @@ export default function PrivacyPage() {
       <section>
         <h2>Yang dicatat secara anonim</h2>
         <p>
-          Jenis perangkat, browser, sumber kunjungan, lokasi kota/kabupaten perkiraan, bagian halaman yang dibuka,
-          kedalaman scroll, dan tombol yang dipilih.
+          Jenis perangkat, browser, sumber kunjungan awal, parameter kampanye dan ID klik iklan bila ada, lokasi
+          kota/kabupaten perkiraan, bagian halaman yang dibuka, posisi scroll, dan tombol yang dipilih. Parameter lain
+          pada URL serta isi pencarian dari situs perujuk tidak dicatat dalam analitik.
         </p>
       </section>
       <section>
         <h2>Yang tidak kami gabungkan</h2>
         <p>
-          Data analitik tidak digabung dengan nama, nomor WhatsApp, isi formulir, atau identitas lain. Alamat IP hanya
-          dipakai sesaat untuk memperkirakan lokasi lalu tidak disimpan.
+          Perjalanan kunjungan tidak menyimpan nama, nomor WhatsApp, atau isi formulir. Pengiriman formulir memakai ID
+          acak untuk memverifikasi bahwa permintaan benar-benar tersimpan, tanpa menampilkan isi permintaan pada laporan
+          perjalanan. Alamat IP hanya dipakai sesaat untuk memperkirakan lokasi lalu tidak disimpan.
         </p>
       </section>
       <section>

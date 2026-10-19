@@ -23,6 +23,7 @@ type EventRecord = {
   name: string;
   sectionKey: string | null;
   elementKey: string | null;
+  metadata: unknown;
   sequence: number;
   occurredAt: Date;
 };
@@ -385,6 +386,7 @@ export async function getAnalyticsJourney(
       name: analyticsEvents.name,
       sectionKey: analyticsEvents.sectionKey,
       elementKey: analyticsEvents.elementKey,
+      metadata: analyticsEvents.metadata,
       sequence: analyticsEvents.sequence,
       occurredAt: analyticsEvents.occurredAt,
     })

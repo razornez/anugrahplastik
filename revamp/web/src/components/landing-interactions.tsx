@@ -1,7 +1,9 @@
 "use client";
 
 import { useLayoutEffect } from "react";
-import { campaignAttributionKeys } from "@/features/leads/attribution";
+import { campaignAttribution, type AnalyticsEntry } from "@/features/analytics/entry";
+import { analyticsConsent } from "./analytics-consent";
+import { leadFormSchema } from "@/features/leads/schema";
 
 const whatsappNumber = "628122339587";
 
@@ -13,6 +15,14 @@ export function LandingInteractions() {
   useLayoutEffect(() => {
     const root = document.getElementById("ap-root");
     if (!root) return;
+
+    // The page markup is inserted by React; native hash navigation can run before it exists.
+    if (window.location.hash === "#ap-contact") {
+      const previous = document.documentElement.style.scrollBehavior;
+      document.documentElement.style.scrollBehavior = "auto";
+      document.getElementById("ap-contact")?.scrollIntoView({ behavior: "auto" });
+      document.documentElement.style.scrollBehavior = previous;
+    }
 
     const waMessage = "Halo Anugrah Plastik, saya ingin bertanya atau meminta penawaran cetak plastik custom.";
     root.querySelectorAll<HTMLAnchorElement>("[data-wa]").forEach((link) => {
@@ -186,21 +196,142 @@ export function LandingInteractions() {
     });
 
     const form = document.getElementById("ap-form") as HTMLFormElement | null;
+    if (form) form.noValidate = true;
+    const fieldIds = { name: "ap-lead-name", phone: "ap-lead-phone", message: "ap-lead-message" } as const;
+    type FieldName = keyof typeof fieldIds;
+    const summary = form?.querySelector<HTMLElement>("[data-form-summary]");
+    const whatsappLink = form?.querySelector<HTMLAnchorElement>("[data-form-whatsapp]");
+    const submit = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const status = form?.querySelector<HTMLElement>("[data-form-status]");
+    const editableFields = Array.from(
+      form?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select") ??
+        [],
+    );
+    const buttonLabel = submit?.textContent?.trim() ?? "Simpan dan lanjut ke WhatsApp";
+    let submitting = false;
+
+    const trackForm = (name: "form_submit_attempt" | "form_error", field?: FieldName) => {
+      window.dispatchEvent(
+        new CustomEvent("ap:analytics-track", {
+          detail: {
+            name,
+            sectionKey: "ap-contact",
+            elementKey: "request-form",
+            ...(field ? { metadata: { field } } : {}),
+          },
+        }),
+      );
+    };
+    const showErrors = (errors: Partial<Record<FieldName, string>>) => {
+      const entries = Object.entries(errors) as Array<[FieldName, string]>;
+      for (const field of Object.keys(fieldIds) as FieldName[]) {
+        const input = document.getElementById(fieldIds[field]);
+        const error = form?.querySelector<HTMLElement>(`[data-error-for="${field}"]`);
+        if (input) input.setAttribute("aria-invalid", errors[field] ? "true" : "false");
+        if (error) {
+          error.textContent = errors[field] ?? "";
+          error.hidden = !errors[field];
+        }
+      }
+      if (!summary) return;
+      summary.replaceChildren();
+      summary.hidden = entries.length === 0;
+      if (!entries.length) return;
+      const heading = document.createElement("strong");
+      heading.textContent = "Periksa isian berikut:";
+      summary.append(heading);
+      const list = document.createElement("ul");
+      list.style.margin = "6px 0 0";
+      list.style.paddingLeft = "20px";
+      for (const [field, message] of entries) {
+        const item = document.createElement("li");
+        const link = document.createElement("a");
+        link.href = `#${fieldIds[field]}`;
+        link.textContent = message;
+        item.append(link);
+        list.append(item);
+        trackForm("form_error", field);
+      }
+      summary.append(list);
+      summary.focus();
+    };
+    const onFormInput = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || !form) return;
+      const field = (Object.keys(fieldIds) as FieldName[]).find((key) => fieldIds[key] === target.id);
+      if (field) {
+        target.setAttribute("aria-invalid", "false");
+        const error = form.querySelector<HTMLElement>(`[data-error-for="${field}"]`);
+        if (error) error.hidden = true;
+      }
+      if (summary) summary.hidden = true;
+      if (form.dataset.submitted === "true") {
+        form.dataset.submitted = "false";
+        if (submit) {
+          submit.disabled = false;
+          submit.textContent = buttonLabel;
+        }
+        if (whatsappLink) {
+          whatsappLink.hidden = true;
+          whatsappLink.style.display = "";
+        }
+        if (status) status.hidden = true;
+      }
+    };
+    form?.addEventListener("input", onFormInput);
+    form?.addEventListener("change", onFormInput);
     const submitForm = async (event: Event) => {
       event.preventDefault();
-      if (!form) return;
+      if (!form || submitting || form.dataset.submitted === "true") return;
       const data = new FormData(form);
       const name = String(data.get("nama") || "").trim();
       const phone = String(data.get("kontak") || "").trim();
       const need = String(data.get("kebutuhan") || "").trim();
       const inquiry = String(data.get("pesan") || "").trim();
-      if (!name || !phone || !inquiry) {
-        form.reportValidity();
+      const message = `${need ? `${need}: ` : ""}${inquiry}`;
+      const whatsappMessage = [
+        "Halo Anugrah Plastik, saya ingin minta penawaran.",
+        "",
+        `Nama: ${name}`,
+        `Kontak: ${phone}`,
+        `Kebutuhan: ${need || "-"}`,
+        `Pesan: ${inquiry}`,
+      ].join("\n");
+      let storedEntry: AnalyticsEntry | null = null;
+      if (analyticsConsent()) {
+        try {
+          storedEntry = JSON.parse(
+            window.sessionStorage.getItem("ap-analytics-entry-v1") ?? "null",
+          ) as AnalyticsEntry | null;
+        } catch {
+          // A malformed browser value must not block a customer's request.
+        }
+      }
+      const attribution = storedEntry?.attribution ?? campaignAttribution(window.location.search);
+      const validation = leadFormSchema.safeParse({
+        name,
+        phone,
+        message,
+        landingPath: window.location.pathname,
+        website: "",
+        attribution,
+      });
+      const errors: Partial<Record<FieldName, string>> = {};
+      if (!validation.success) {
+        for (const issue of validation.error.issues) {
+          const field = issue.path[0] as FieldName;
+          if (field in fieldIds && !errors[field]) errors[field] = issue.message;
+        }
+      }
+      if (inquiry.length < 10) errors.message = "Ceritakan kebutuhan Anda minimal 10 karakter.";
+      if (Object.keys(errors).length) {
+        showErrors(errors);
         return;
       }
-      const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
-      const status = form.querySelector<HTMLElement>("[data-form-status]");
-      const originalLabel = submit?.textContent;
+      showErrors({});
+      trackForm("form_submit_attempt");
+      submitting = true;
+      editableFields.forEach((field) => (field.disabled = true));
       if (submit) {
         submit.disabled = true;
         submit.textContent = "Menyimpan permintaan…";
@@ -208,28 +339,43 @@ export function LandingInteractions() {
       if (status) {
         status.hidden = false;
         status.dataset.state = "pending";
+        status.removeAttribute("role");
         status.textContent = "Menyimpan permintaan Anda terlebih dahulu.";
       }
-      const query = new URLSearchParams(window.location.search);
-      const attribution = Object.fromEntries(
-        campaignAttributionKeys.map((key) => [key, query.get(key)]).filter(([, value]) => Boolean(value)),
-      );
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 12_000);
       try {
         const response = await fetch("/api/leads", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
           body: JSON.stringify({
             name,
             phone,
-            message: `${need ? `${need}: ` : ""}${inquiry}`,
-            landingPath: `${window.location.pathname}${window.location.search}`,
+            message,
+            landingPath: window.location.pathname,
             website: "",
             attribution,
+            referrer: storedEntry?.referrer ?? null,
           }),
         });
-        if (!response.ok) throw new Error("Lead tidak tersimpan");
-        const payload = (await response.json()) as { conversionId?: string };
-        if (!payload.conversionId) throw new Error("Konversi belum dapat dicatat");
+        const payload = (await response.json().catch(() => ({}))) as {
+          conversionId?: string;
+          message?: string;
+          fieldErrors?: Partial<Record<FieldName, string>>;
+        };
+        if (!response.ok) {
+          if (payload.fieldErrors) showErrors(payload.fieldErrors);
+          throw new Error(
+            response.status >= 500
+              ? "Server belum memberi kepastian penyimpanan. Jangan langsung mengirim ulang; Anda dapat menghubungi kami lewat WhatsApp."
+              : payload.message || "Permintaan belum tersimpan. Coba lagi setelah memeriksa isian.",
+          );
+        }
+        if (!payload.conversionId)
+          throw new Error(
+            "Server belum memberi kepastian penyimpanan. Jangan langsung mengirim ulang; Anda dapat menghubungi kami lewat WhatsApp.",
+          );
         window.dispatchEvent(
           new CustomEvent("ap:analytics-track", {
             detail: {
@@ -241,38 +387,58 @@ export function LandingInteractions() {
           }),
         );
         window.dispatchEvent(new CustomEvent("ap:google-ads-lead", { detail: { conversionId: payload.conversionId } }));
-      } catch {
+      } catch (error) {
         form.dataset.submitError = "true";
         if (status) {
           status.hidden = false;
           status.dataset.state = "error";
-          status.textContent = "Permintaan belum tersimpan. Periksa koneksi lalu coba lagi.";
+          status.setAttribute("role", "alert");
+          status.textContent =
+            error instanceof DOMException && error.name === "AbortError"
+              ? "Koneksi terlalu lambat. Status penyimpanan belum pasti; jangan langsung mengirim ulang. Anda dapat menghubungi kami lewat WhatsApp."
+              : error instanceof TypeError
+                ? "Koneksi terputus. Status penyimpanan belum pasti; jangan langsung mengirim ulang. Anda dapat menghubungi kami lewat WhatsApp."
+                : error instanceof Error
+                  ? error.message
+                  : "Permintaan belum dapat diproses. Periksa koneksi lalu coba lagi.";
         }
         if (submit) {
           submit.disabled = false;
-          submit.textContent = originalLabel ?? "Kirim permintaan";
+          submit.textContent = buttonLabel;
         }
+        if (whatsappLink) {
+          whatsappLink.href = whatsappUrl(whatsappMessage);
+          whatsappLink.textContent = "Hubungi WhatsApp langsung →";
+          whatsappLink.hidden = false;
+          whatsappLink.style.display = "inline-flex";
+        }
+        editableFields.forEach((field) => (field.disabled = false));
+        submitting = false;
         return;
+      } finally {
+        window.clearTimeout(timeout);
       }
       form.dataset.submitError = "false";
       if (status) {
         status.hidden = false;
         status.dataset.state = "success";
-        status.textContent = "Permintaan tersimpan. WhatsApp akan terbuka untuk melanjutkan percakapan.";
+        status.removeAttribute("role");
+        status.textContent = "Permintaan tersimpan. Tekan tombol di bawah untuk melanjutkan percakapan di WhatsApp.";
       }
       if (submit) {
-        submit.disabled = false;
-        submit.textContent = originalLabel ?? "Kirim permintaan";
+        submit.disabled = true;
+        submit.textContent = "Permintaan tersimpan";
       }
-      const message = [
-        "Halo Anugrah Plastik, saya ingin minta penawaran.",
-        "",
-        `Nama: ${name}`,
-        `Kontak: ${phone}`,
-        `Kebutuhan: ${need || "-"}`,
-        `Pesan: ${inquiry}`,
-      ].join("\n");
-      window.open(whatsappUrl(message), "_blank", "noopener,noreferrer");
+      form.dataset.submitted = "true";
+      editableFields.forEach((field) => (field.disabled = false));
+      if (whatsappLink) {
+        whatsappLink.href = whatsappUrl(whatsappMessage);
+        whatsappLink.textContent = "Lanjutkan di WhatsApp →";
+        whatsappLink.hidden = false;
+        whatsappLink.style.display = "inline-flex";
+        whatsappLink.focus();
+      }
+      submitting = false;
     };
     form?.addEventListener("submit", submitForm);
 
@@ -290,6 +456,8 @@ export function LandingInteractions() {
       marqueeToggle?.removeEventListener("click", toggleMarquee);
       faqHandlers.forEach(({ question, handler }) => question.removeEventListener("click", handler));
       form?.removeEventListener("submit", submitForm);
+      form?.removeEventListener("input", onFormInput);
+      form?.removeEventListener("change", onFormInput);
     };
   }, []);
 

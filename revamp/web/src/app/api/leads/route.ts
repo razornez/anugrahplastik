@@ -17,7 +17,15 @@ export async function POST(request: Request) {
 
   const body: unknown = await request.json().catch(() => null);
   const parsed = leadFormSchema.safeParse(body);
-  if (!parsed.success || parsed.data.website) {
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      const field = String(issue.path[0] ?? "");
+      if (["name", "phone", "message"].includes(field) && !fieldErrors[field]) fieldErrors[field] = issue.message;
+    }
+    return NextResponse.json({ message: "Periksa isian yang ditandai.", fieldErrors }, { status: 400 });
+  }
+  if (parsed.data.website) {
     return NextResponse.json({ message: "Data belum dapat diproses." }, { status: 400 });
   }
 
@@ -27,6 +35,18 @@ export async function POST(request: Request) {
   }
 
   try {
+    const referrer = (() => {
+      if (!parsed.data.referrer) return null;
+      try {
+        const url = new URL(parsed.data.referrer);
+        return ["http:", "https:"].includes(url.protocol) &&
+          url.host.toLowerCase() !== request.headers.get("host")?.toLowerCase()
+          ? `${url.origin}${url.pathname}`.slice(0, 1000)
+          : null;
+      } catch {
+        return null;
+      }
+    })();
     const [lead] = await database
       .insert(leads)
       .values({
@@ -34,7 +54,7 @@ export async function POST(request: Request) {
         phone: parsed.data.phone,
         message: parsed.data.message,
         landingPath: parsed.data.landingPath || null,
-        referrer: request.headers.get("referer"),
+        referrer,
         attribution: parsed.data.attribution ?? null,
         source: campaignLeadSource(parsed.data.attribution),
       })

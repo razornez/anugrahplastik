@@ -3,10 +3,12 @@
 import { useEffect } from "react";
 import { analyticsConsent } from "./analytics-consent";
 import type { AnalyticsBatch, AnalyticsEvent, AnalyticsEventName } from "@/features/analytics/schema";
+import { firstTouchEntry, type AnalyticsEntry } from "@/features/analytics/entry";
 
 const anonymousKey = "ap-analytics-anonymous-id-v1";
 const sessionKey = "ap-analytics-session-id-v1";
 const sessionLastActiveKey = "ap-analytics-session-active-v1";
+const entryKey = "ap-analytics-entry-v1";
 const sessionTimeoutMs = 30 * 60 * 1_000;
 const idleTimeoutMs = 60 * 1_000;
 const scrollMilestones = [25, 50, 75, 90] as const;
@@ -39,13 +41,34 @@ function currentPath() {
   return window.location.pathname;
 }
 
+function currentEntry(sessionKey: string): AnalyticsEntry {
+  let existing: AnalyticsEntry | null = null;
+  try {
+    existing = JSON.parse(window.sessionStorage.getItem(entryKey) ?? "null") as AnalyticsEntry | null;
+  } catch {
+    // Ignore stale or malformed browser storage and capture the current entry instead.
+  }
+  const entry = firstTouchEntry(sessionKey, new URL(window.location.href), document.referrer, existing);
+  window.sessionStorage.setItem(entryKey, JSON.stringify(entry));
+  return entry;
+}
+
 function sendBatch(events: AnalyticsEvent[], useBeacon = false) {
   if (!analyticsConsent() || events.length === 0) return;
+  const sessionKey = currentSessionId();
+  const entry = currentEntry(sessionKey);
   const payload: AnalyticsBatch = {
     anonymousId: anonymousId(),
-    sessionKey: currentSessionId(),
+    sessionKey,
     events,
     consentVersion: "v1",
+    entry: {
+      landingPath: entry.landingPath,
+      referrer: entry.referrer,
+      attribution: entry.attribution,
+      landingVariant: entry.landingVariant,
+      entryAnchor: entry.entryAnchor,
+    },
   };
   const body = JSON.stringify(payload);
 
@@ -70,7 +93,7 @@ function describeClick(
   const nav = target.closest<HTMLElement>("[data-nav]");
   if (nav) return { name: "menu_click", sectionKey, elementKey: nav.dataset.nav ?? "menu" };
 
-  const whatsapp = target.closest<HTMLElement>("[data-wa]");
+  const whatsapp = target.closest<HTMLElement>("[data-wa], [data-wa2]");
   if (whatsapp) return { name: "whatsapp_click", sectionKey, elementKey: whatsapp.className || "whatsapp" };
 
   const faq = target.closest<HTMLElement>(".ap-faq-q");
@@ -98,6 +121,7 @@ export function AnalyticsTracker() {
     const start = () => {
       const root = document.getElementById("ap-root");
       if (!root) return;
+      if (analyticsConsent()) currentEntry(currentSessionId());
 
       let formStarted = false;
       let formSubmitted = false;
@@ -108,6 +132,17 @@ export function AnalyticsTracker() {
       const observedSections = new Set<string>();
       const sectionTimers = new Map<string, number>();
       const reachedMilestones = new Set<number>();
+      const entryAnchor = window.location.hash.slice(1, 161);
+      let initialAnchorPhase = entryAnchor === "ap-contact";
+      const anchorTimer = window.setTimeout(() => {
+        initialAnchorPhase = false;
+      }, 1_500);
+      const onUserScrollIntent = () => {
+        initialAnchorPhase = false;
+      };
+      window.addEventListener("wheel", onUserScrollIntent, { passive: true });
+      window.addEventListener("touchmove", onUserScrollIntent, { passive: true });
+      window.addEventListener("keydown", onUserScrollIntent);
       const queue: AnalyticsEvent[] = [];
       const flush = (useBeacon = false) => {
         const outgoing = queue.splice(0, 25);
@@ -144,7 +179,7 @@ export function AnalyticsTracker() {
         if (document.visibilityState === "visible" && visibleStartedAt === null) visibleStartedAt = now;
       };
 
-      track("page_view");
+      track("page_view", entryAnchor ? { metadata: { entry_anchor: entryAnchor } } : {});
 
       const sectionObserver = new IntersectionObserver(
         (entries) => {
@@ -181,7 +216,9 @@ export function AnalyticsTracker() {
         scrollMilestones.forEach((milestone) => {
           if (depth < milestone || reachedMilestones.has(milestone)) return;
           reachedMilestones.add(milestone);
-          track("scroll_depth", { metadata: { percent: milestone } });
+          track("scroll_depth", {
+            metadata: { percent: milestone, cause: initialAnchorPhase ? "initial_anchor" : "scroll" },
+          });
         });
       };
 
@@ -246,6 +283,10 @@ export function AnalyticsTracker() {
         window.removeEventListener("pagehide", onPageHide);
         document.removeEventListener("visibilitychange", onVisibility);
         sectionTimers.forEach((timer) => window.clearTimeout(timer));
+        window.clearTimeout(anchorTimer);
+        window.removeEventListener("wheel", onUserScrollIntent);
+        window.removeEventListener("touchmove", onUserScrollIntent);
+        window.removeEventListener("keydown", onUserScrollIntent);
         sectionObserver.disconnect();
         window.clearInterval(interval);
         flush();

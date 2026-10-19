@@ -93,9 +93,9 @@ async function processBatch(client, batch) {
   const sessionKey = payload.sessionKey ?? batch.anonymous_id;
   const sessionResult = await client.query(
     `INSERT INTO analytics_sessions (
-       anonymous_id, session_key, traffic_class, landing_path, referrer, source_name, outcome, device_category, browser_name, operating_system,
+       anonymous_id, session_key, traffic_class, landing_path, referrer, source_name, attribution, outcome, device_category, browser_name, operating_system,
        country_name, region_name, city_name, consent_version, consented_at, last_seen_at, created_at
-     ) VALUES ($1, $2, $3, $4, $5, $6, 'Melihat halaman', $7, $8, $9, $10, $11, $12, 'v1', $13, $13, $13)
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'Melihat halaman', $8, $9, $10, $11, $12, $13, 'v1', $14, $14, $14)
      ON CONFLICT (session_key) DO UPDATE SET last_seen_at = GREATEST(analytics_sessions.last_seen_at, EXCLUDED.last_seen_at)
      RETURNING id, created_at, event_sequence, duration_seconds`,
     [
@@ -104,7 +104,8 @@ async function processBatch(client, batch) {
       request.trafficClass === "internal" ? "internal" : "public",
       request.landingPath ?? first.path,
       request.referrer ?? null,
-      trafficSource(request.referrer ?? null),
+      request.sourceName ?? trafficSource(request.referrer ?? null),
+      request.attribution ?? null,
       context.deviceCategory ?? "unknown",
       context.browserName ?? null,
       context.operatingSystem ?? null,

@@ -4,8 +4,16 @@ import { AnalyticsTracker } from "./analytics-tracker";
 import { GoogleAdsConversionTracker } from "./google-ads-conversion-tracker";
 import { LandingInteractions } from "./landing-interactions";
 
-export function NativeLandingTemplate({ content, preview = false }: { content: LandingContent; preview?: boolean }) {
-  const markup = renderLandingTemplate(content);
+export function NativeLandingTemplate({
+  content,
+  preview = false,
+  variant = "control",
+}: {
+  content: LandingContent;
+  preview?: boolean;
+  variant?: "control" | "proof";
+}) {
+  const markup = renderLandingTemplate(content, variant);
 
   return (
     <main className="native-template-shell">

@@ -12,6 +12,7 @@ export const leadFormSchema = z.object({
     .min(10, "Ceritakan kebutuhan Anda sedikit lebih lengkap.")
     .max(2000, "Pesan terlalu panjang."),
   landingPath: z.string().max(500).optional(),
+  referrer: z.string().url().max(1000).nullable().optional(),
   website: z.string().max(0).optional(),
   attribution: z
     .object(

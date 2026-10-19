@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { campaignAttributionKeys } from "@/features/leads/attribution";
 
 export const analyticsEventNames = [
   "page_view",
@@ -10,6 +11,8 @@ export const analyticsEventNames = [
   "portfolio_open",
   "faq_open",
   "form_start",
+  "form_submit_attempt",
+  "form_error",
   "form_abandon",
   "form_submit",
   "whatsapp_click",
@@ -36,6 +39,17 @@ export const analyticsBatchSchema = z.object({
   sessionKey: z.string().uuid(),
   events: z.array(analyticsEventSchema).min(1).max(25),
   consentVersion: z.literal("v1"),
+  entry: z
+    .object({
+      landingPath: z.string().startsWith("/").max(500),
+      referrer: z.string().url().max(1000).nullable(),
+      attribution: z.object(
+        Object.fromEntries(campaignAttributionKeys.map((key) => [key, z.string().trim().min(1).max(512).optional()])),
+      ),
+      landingVariant: z.enum(["control", "proof"]),
+      entryAnchor: z.string().max(160).nullable(),
+    })
+    .optional(),
 });
 
 export type AnalyticsBatch = z.infer<typeof analyticsBatchSchema>;

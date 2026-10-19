@@ -58,6 +58,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm test:landing
       - run: node --test scripts/release/prune-actions-artifacts.test.cjs
       - run: pnpm build
       - name: Package allowlisted Linux release

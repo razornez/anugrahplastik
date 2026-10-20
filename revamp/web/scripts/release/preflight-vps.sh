@@ -39,11 +39,11 @@ test_provider_mode() {
 test_admin() {
   local count
   count="$(sudo -u postgres psql -d "$db_name" -Atqc "select count(*) from users where role='admin' and is_active=true and pin_hash is not null" 2>/dev/null)"
-  [[ "$count" =~ ^[0-9]+$ && "$count" -ge 1 ]]
+  [[ "$count" =~ ^[0-9]+$ && "$count" -ge 1 ]] || return 1
   test -s /srv/anugrahplastik/current/app/scripts/admin-auth-cli.mjs
 }
 test_migrations() {
-  sudo -u postgres psql -d "$db_name" -Atqc "select count(*) from drizzle.__drizzle_migrations" 2>/dev/null | grep -Eq '^[1-9][0-9]*$'
+  sudo -u postgres psql -d "$db_name" -Atqc "select count(*) from drizzle.__drizzle_migrations" 2>/dev/null | grep -Eq '^[1-9][0-9]*$' || return 1
   [[ -s /srv/anugrahplastik/current/app/scripts/release/migrate-production.mjs ]]
 }
 test_space() {
@@ -73,13 +73,13 @@ test_memory() {
   (( minimum > peak_extra_mib && after <= before ))
 }
 test_services() {
-  systemctl is-active --quiet anugrahplastik-web nginx postgresql
-  curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3050/api/health | grep -E '"status"[[:space:]]*:[[:space:]]*"(ok|healthy)"' >/dev/null
+  systemctl is-active --quiet anugrahplastik-web nginx postgresql || return 1
+  curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3050/api/health | grep -E '"status"[[:space:]]*:[[:space:]]*"(ok|healthy)"' >/dev/null || return 1
   curl --fail --silent --show-error --max-time 8 https://anugrahplastik.com/ | grep -i 'Anugrah Plastik' >/dev/null
 }
 test_integrations() {
-  systemctl is-active --quiet anugrahplastik-integrations-mail.timer anugrahplastik-integrations-ads.timer
-  [[ "$(sudo -u postgres psql -d "$db_name" -Atqc "select count(*) from integrations where key='cs-mail' and last_error is null and last_sync_at > now() - interval '15 minutes'" 2>/dev/null)" == "1" ]]
+  systemctl is-active --quiet anugrahplastik-integrations-mail.timer anugrahplastik-integrations-ads.timer || return 1
+  [[ "$(sudo -u postgres psql -d "$db_name" -Atqc "select count(*) from integrations where key='cs-mail' and last_error is null and last_sync_at > now() - interval '15 minutes'" 2>/dev/null)" == "1" ]] || return 1
   [[ "$(sudo -u postgres psql -d "$db_name" -Atqc "select count(*) from integrations where key='google-ads' and last_error is null and last_sync_at > now() - interval '36 hours'" 2>/dev/null)" == "1" ]]
 }
 

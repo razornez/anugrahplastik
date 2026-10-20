@@ -24,6 +24,12 @@ test_secrets() {
     grep -Eq "^${key}=.+" "$file" || return 1
   done
 }
+test_ads_conversion() {
+  local file=/etc/anugrahplastik/web.env
+  [[ -r "$file" ]] || return 1
+  grep -Eq '^GOOGLE_ADS_TAG_ID="?AW-[0-9]{6,15}"?$' "$file" || return 1
+  grep -Eq '^GOOGLE_ADS_LEAD_CONVERSION_LABEL="?[A-Za-z0-9_-]{8,128}"?$' "$file"
+}
 test_provider_mode() {
   local file=/etc/anugrahplastik/web.env
   [[ -r "$file" ]] || return 1
@@ -71,6 +77,11 @@ test_services() {
   curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3050/api/health | grep -E '"status"[[:space:]]*:[[:space:]]*"(ok|healthy)"' >/dev/null
   curl --fail --silent --show-error --max-time 8 https://anugrahplastik.com/ | grep -i 'Anugrah Plastik' >/dev/null
 }
+test_integrations() {
+  systemctl is-active --quiet anugrahplastik-integrations-mail.timer anugrahplastik-integrations-ads.timer
+  [[ "$(sudo -u postgres psql -d "$db_name" -Atqc "select count(*) from integrations where key='cs-mail' and last_error is null and last_sync_at > now() - interval '15 minutes'" 2>/dev/null)" == "1" ]]
+  [[ "$(sudo -u postgres psql -d "$db_name" -Atqc "select count(*) from integrations where key='google-ads' and last_error is null and last_sync_at > now() - interval '36 hours'" 2>/dev/null)" == "1" ]]
+}
 
 gate 'Artefak rilis dapat dibaca' test_artifact
 gate 'Backup dan bukti uji restore baru tersedia' test_backup
@@ -78,9 +89,11 @@ gate 'Ruang cukup untuk artefak, backup, dan rollback' test_space
 gate 'RAM terukur cukup dan swap tidak bertambah' test_memory
 gate 'SSH aktif dan mendengar' sh -c 'systemctl is-active --quiet ssh && ss -ltn | grep -Eq ":22[[:space:]]"'
 gate 'Secret server tersedia' test_secrets
+gate 'Tag dan label konversi Google Ads tersedia' test_ads_conversion
 gate 'Renderer production memakai provider dan origin resmi' test_provider_mode
 gate 'Admin pemulihan siap' test_admin
 gate 'Database dan migrator dapat dibaca' test_migrations
 gate 'Layanan serta landing publik sehat' test_services
+gate 'Email CS dan laporan Google Ads baru saja sehat' test_integrations
 printf 'Preflight: %s belum siap. Tidak mengubah VPS.\n' "$failures"
 (( failures == 0 ))

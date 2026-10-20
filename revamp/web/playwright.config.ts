@@ -97,10 +97,14 @@ export default defineConfig({
   webServer:
     process.env.PLAYWRIGHT_START_SERVER === "true"
       ? {
-          command: "pnpm start -- -p 3100",
+          command: "pnpm exec next start -p 3100",
           url: baseURL,
           reuseExistingServer: true,
           timeout: 120_000,
+          env: {
+            GOOGLE_ADS_TAG_ID: "AW-111111111",
+            GOOGLE_ADS_LEAD_CONVERSION_LABEL: "PlaywrightLeadTest123",
+          },
         }
       : undefined,
 });

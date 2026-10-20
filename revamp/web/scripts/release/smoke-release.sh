@@ -3,6 +3,8 @@ set -euo pipefail
 
 base_url="${1:-http://127.0.0.1:3050}"
 require_health="${REQUIRE_HEALTH:-1}"
+require_ads_tag="${REQUIRE_ADS_TAG:-1}"
+ads_env_file="${ADS_ENV_FILE:-/etc/anugrahplastik/web.env}"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/anugrah-release-smoke.XXXXXX")"
 
 cleanup() {
@@ -44,6 +46,19 @@ grep -qi 'Anugrah Plastik' "$work_dir/landing.html" || {
 if grep -Eqi 'Runtime Error|Failed query|DrizzleQueryError|Application error|Internal Server Error' "$work_dir/landing.html"; then
   printf 'Smoke failed: landing contains a runtime-error fingerprint.\n' >&2
   exit 1
+fi
+if [[ "$require_ads_tag" == "1" ]]; then
+  [[ -r "$ads_env_file" ]] || { printf 'Smoke failed: Ads environment is unreadable.\n' >&2; exit 1; }
+  ads_tag="$(sed -n 's/^GOOGLE_ADS_TAG_ID=//p' "$ads_env_file" | tr -d '"' | head -n 1)"
+  ads_label="$(sed -n 's/^GOOGLE_ADS_LEAD_CONVERSION_LABEL=//p' "$ads_env_file" | tr -d '"' | head -n 1)"
+  [[ "$ads_tag" =~ ^AW-[0-9]{6,15}$ && "$ads_label" =~ ^[A-Za-z0-9_-]{8,128}$ ]] || {
+    printf 'Smoke failed: Ads conversion configuration is invalid.\n' >&2
+    exit 1
+  }
+  grep -Fq "$ads_tag" "$work_dir/landing.html" && grep -Fq "$ads_label" "$work_dir/landing.html" || {
+    printf 'Smoke failed: landing does not contain the configured Ads conversion.\n' >&2
+    exit 1
+  }
 fi
 
 fetch "/admin/login" "$work_dir/login.html"

@@ -19,7 +19,7 @@ function installTag(tagId: string) {
   window.gtag =
     window.gtag ??
     function gtag() {
-      // eslint-disable-next-line prefer-rest-params -- Google gtag.js ignores rest-parameter arrays.
+      // eslint-disable-next-line prefer-rest-params
       window.dataLayer?.push(arguments);
     };
   window.gtag("js", new Date());

@@ -26,7 +26,9 @@ test("Google Ads receives one event only after the lead is saved", async ({ page
   await page.locator('#ap-form button[type="submit"]').click();
   await expect(page.locator("[data-form-whatsapp]")).toBeVisible();
   const events = await page.evaluate(() =>
-    (window.dataLayer ?? []).filter((entry): entry is unknown[] => Array.isArray(entry) && entry[0] === "event"),
+    (window.dataLayer ?? [])
+      .map((entry) => Array.from(entry as ArrayLike<unknown>))
+      .filter((entry) => entry[0] === "event"),
   );
   expect(requests).toBe(1);
   expect(events).toHaveLength(1);
@@ -54,7 +56,11 @@ test("failed save and analytics opt-out do not send a conversion", async ({ page
   await page.locator('#ap-form button[type="submit"]').click();
   await expect(page.locator("[data-form-status]")).toContainText("belum memberi kepastian");
   expect(
-    await page.evaluate(() => (window.dataLayer ?? []).filter((entry) => Array.isArray(entry) && entry[0] === "event")),
+    await page.evaluate(() =>
+      (window.dataLayer ?? [])
+        .map((entry) => Array.from(entry as ArrayLike<unknown>))
+        .filter((entry) => entry[0] === "event"),
+    ),
   ).toHaveLength(0);
 
   await page.addInitScript(() => window.localStorage.setItem("ap-analytics-opt-out-v1", "true"));

@@ -54,7 +54,9 @@ function fixture(t, initiallyAllowed = true) {
     storage,
     dispatch: (name, detail) => listeners.get(name)?.({ detail }),
     allow: () => (allowed = true),
-    events: () => global.window.dataLayer?.filter((entry) => entry[0] === "event") ?? [],
+    commands: () => global.window.dataLayer ?? [],
+    events: () =>
+      global.window.dataLayer?.filter((entry) => entry[0] === "event").map((entry) => Array.from(entry)) ?? [],
   };
 }
 
@@ -65,6 +67,10 @@ test("a saved lead sends one Google Ads event with a backend ID and no contact d
   const id = "b21c4e43-cb6e-4d80-8a2d-4b9fd7539843";
   page.dispatch("ap:google-ads-lead", { conversionId: id });
   page.dispatch("ap:google-ads-lead", { conversionId: id });
+  assert.deepEqual(
+    page.commands().map((entry) => Object.prototype.toString.call(entry)),
+    ["[object Arguments]", "[object Arguments]", "[object Arguments]"],
+  );
   assert.deepEqual(page.events(), [
     [
       "event",

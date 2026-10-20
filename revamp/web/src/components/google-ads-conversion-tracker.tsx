@@ -15,7 +15,13 @@ type LeadConversionDetail = { conversionId: string };
 function installTag(tagId: string) {
   if (document.querySelector(`script[data-google-ads-tag="${tagId}"]`)) return;
   window.dataLayer = window.dataLayer ?? [];
-  window.gtag = window.gtag ?? ((...args: unknown[]) => window.dataLayer?.push(args));
+  // gtag.js expects the standard Arguments objects, not rest-parameter arrays.
+  window.gtag =
+    window.gtag ??
+    function gtag() {
+      // eslint-disable-next-line prefer-rest-params -- Google gtag.js ignores rest-parameter arrays.
+      window.dataLayer?.push(arguments);
+    };
   window.gtag("js", new Date());
   window.gtag("config", tagId);
 
